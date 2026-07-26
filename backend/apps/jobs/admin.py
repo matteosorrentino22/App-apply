@@ -5,8 +5,18 @@ from .models import DailyQuota, Job, RunLog
 
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
-    list_display = ("title", "company", "user", "source", "origin", "status", "score", "is_archived")
-    list_filter = ("origin", "status", "is_archived", "source")
+    list_display = (
+        "title",
+        "company",
+        "user",
+        "source",
+        "origin",
+        "status",
+        "score",
+        "is_archived",
+        "discarded_by_cap",
+    )
+    list_filter = ("origin", "status", "is_archived", "source", "discarded_by_cap")
     search_fields = ("title", "company", "location", "external_id")
 
 

@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "django_celery_beat",
     "apps.accounts",
     "apps.common",
     "apps.profiles",
@@ -151,6 +152,10 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+# Pianificazione persistita in DB (gestibile da Django Admin), non nel codice:
+# coerente con l'amministrazione via Admin già scelta per piani/credito/voucher
+# (02-specifiche-tecniche-v3.md §9) e verificabile senza un deploy.
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # API Anthropic (Claude) — scoring, generazione CV, parsing del CV caricato
 # (02-specifiche-tecniche-v3.md §3.5). Modello per lo step di strutturazione
@@ -164,3 +169,7 @@ ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claud
 # economica per lo scoring ad alto volume, una più capace per il CV") — resta
 # comunque un parametro di configurazione, non un vincolo architetturale.
 ANTHROPIC_SCORING_MODEL = os.environ.get("ANTHROPIC_SCORING_MODEL", "claude-haiku-4-5")
+
+# Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
+# configurazione sicura, mai cablato nell'URL come nel prototipo.
+APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
