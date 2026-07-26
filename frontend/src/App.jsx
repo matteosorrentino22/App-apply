@@ -31,7 +31,7 @@ export default function App() {
       <AuthProvider>
         <AccountLanguageSync />
         <BrowserRouter>
-          <div className="app-topbar">
+          <div className="mx-auto flex max-w-2xl justify-end px-4 pt-4">
             <LanguageSwitcher />
           </div>
           <Routes>

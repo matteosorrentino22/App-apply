@@ -1,155 +1,131 @@
+@import "tailwindcss";
+
+/* Token del design system (beige/sabbia + accento bruno caldo), condivisi
+   fra le utility Tailwind e i componenti shadcn/ui. Nomi shadcn canonici
+   (background/foreground/primary/...) più le varianti "soft" (badge, score
+   chip, focus ring) usate dai componenti custom. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-score-1: var(--score-1);
+  --color-score-1-soft: var(--score-1-soft);
+  --color-score-2: var(--score-2);
+  --color-score-2-soft: var(--score-2-soft);
+  --color-score-3: var(--score-3);
+  --color-score-3-soft: var(--score-3-soft);
+  --color-score-4: var(--score-4);
+  --color-score-4-soft: var(--score-4-soft);
+  --color-score-5: var(--score-5);
+  --color-score-5-soft: var(--score-5-soft);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --accent: #1d4ed8;
-  --error: #b91c1c;
+  --radius: 0.625rem;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --background: #fbf8f2;
+  --foreground: #2b2317;
+  --card: #fbf8f2;
+  --card-foreground: #2b2317;
 
-  font: 16px/145% var(--sans);
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --primary: #6b4a2e;
+  --primary-foreground: #ffffff;
+  --primary-soft: #f1e1c8;
+
+  --secondary: #f3ecdf;
+  --secondary-foreground: #2b2317;
+  --muted: #f3ecdf;
+  --muted-foreground: #7c6f58;
+  --accent: #ece2d0;
+  --accent-foreground: #2b2317;
+
+  --destructive: #b3473c;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #fbeeea;
+  --success: #3e7a52;
+  --success-soft: #e7f1e9;
+
+  --border: #e2d5be;
+  --input: #cbb58c;
+  --ring: #6b4a2e;
+
+  --score-1: #b3473c; --score-1-soft: #fbeeea;
+  --score-2: #bd7a3c; --score-2-soft: #fbf1e6;
+  --score-3: #a88a2e; --score-3-soft: #f7f1de;
+  --score-4: #7a8f3c; --score-4-soft: #f0f3e2;
+  --score-5: #3e7a52; --score-5-soft: #e7f1e9;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --accent: #93c5fd;
-    --error: #f87171;
+    --background: #17130e;
+    --foreground: #f2e9d8;
+    --card: #17130e;
+    --card-foreground: #f2e9d8;
+
+    --primary: #c08a54;
+    --primary-foreground: #1c1409;
+    --primary-soft: #35281a;
+
+    --secondary: #211b12;
+    --secondary-foreground: #f2e9d8;
+    --muted: #211b12;
+    --muted-foreground: #b7a98c;
+    --accent: #2b2318;
+    --accent-foreground: #f2e9d8;
+
+    --destructive: #e08171;
+    --destructive-foreground: #1c1409;
+    --destructive-soft: #3a211c;
+    --success: #6fae84;
+    --success-soft: #1e3226;
+
+    --border: #382d1d;
+    --input: #4e4029;
+    --ring: #c08a54;
+
+    --score-1: #e08171; --score-1-soft: #3a211c;
+    --score-2: #dfa36e; --score-2-soft: #3a2a1c;
+    --score-3: #d8c06e; --score-3-soft: #3a331c;
+    --score-4: #a8c06e; --score-4-soft: #2e331c;
+    --score-5: #6fae84; --score-5-soft: #1e3226;
   }
 }
 
-body {
-  margin: 0;
-}
-
-#root {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
-  box-sizing: border-box;
-}
-
-h1,
-h2 {
-  color: var(--text-h);
-}
-
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-}
-
-fieldset {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  text-align: left;
-}
-
-input,
-textarea,
-button {
-  font: inherit;
-}
-
-input[type='text'],
-input[type='email'],
-input[type='password'],
-input[type='file'],
-textarea {
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-}
-
-button {
-  padding: 8px 16px;
-  border-radius: 4px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  width: fit-content;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.google-button {
-  display: inline-block;
-  margin-top: 8px;
-  text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px 16px;
-  color: inherit;
-}
-
-.form-error {
-  color: var(--error);
-}
-
-.onboarding-steps {
-  display: flex;
-  gap: 16px;
-  list-style: none;
-  padding: 0;
-}
-
-.onboarding-steps li[aria-current='step'] {
-  font-weight: bold;
-  color: var(--text-h);
-}
-
-.list-section-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: flex-end;
-  margin-bottom: 8px;
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-loading {
-  text-align: center;
-  margin-top: 64px;
-}
-
-.app-topbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.language-switcher {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Segoe UI Variable", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root {
+    min-height: 100svh;
+  }
 }

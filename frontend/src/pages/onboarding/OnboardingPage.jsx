@@ -7,17 +7,52 @@ import { updateProfile, importCv, createSectionItem } from '../../api/profile'
 import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
+import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
 
-const SECTION_KEYS = ['experiences', 'educations', 'skills', 'certifications', 'languages']
+const SECTION_KEYS = ['educations', 'skills', 'certifications', 'languages']
+
+let nextGroupKey = 0
+function makeGroupKey() {
+  nextGroupKey += 1
+  return `group-${nextGroupKey}`
+}
 
 function importedListToRows(items, fields) {
   return (items || []).map((item) => {
     const row = emptyRow(fields)
     for (const field of fields) {
-      row[field.name] = item[field.name] ?? (field.type === 'lines' ? [] : '')
+      row[field.name] = item[field.name] ?? ''
     }
     return row
   })
+}
+
+function groupExperiencesByCompany(items) {
+  const groups = []
+  const byName = new Map()
+  for (const item of items || []) {
+    const companyName = item.company || ''
+    let group = byName.get(companyName)
+    if (!group) {
+      group = { _key: makeGroupKey(), company: companyName, roles: [] }
+      byName.set(companyName, group)
+      groups.push(group)
+    }
+    group.roles.push({
+      _key: makeGroupKey(),
+      role: item.role || '',
+      location: item.location || '',
+      bullets: item.bullets || [],
+    })
+  }
+  return groups
 }
 
 export default function OnboardingPage() {
@@ -45,12 +80,6 @@ export default function OnboardingPage() {
   const [photoFile, setPhotoFile] = useState(null)
   const [cvNotice, setCvNotice] = useState('')
 
-  const EXPERIENCE_FIELDS = [
-    { name: 'company', label: t('onboarding.company') },
-    { name: 'role', label: t('onboarding.role') },
-    { name: 'location', label: t('onboarding.location') },
-    { name: 'bullets', label: t('onboarding.bullets'), type: 'lines' },
-  ]
   const EDUCATION_FIELDS = [
     { name: 'institution', label: t('onboarding.institution') },
     { name: 'title', label: t('onboarding.titleField') },
@@ -66,15 +95,14 @@ export default function OnboardingPage() {
   ]
 
   const SECTION_CONFIG = {
-    experiences: { fields: EXPERIENCE_FIELDS, title: t('onboarding.experiences'), addLabel: t('onboarding.addExperience') },
     educations: { fields: EDUCATION_FIELDS, title: t('onboarding.educations'), addLabel: t('onboarding.addEducation') },
     skills: { fields: SKILL_FIELDS, title: t('onboarding.skills'), addLabel: t('onboarding.addSkill') },
     certifications: { fields: CERTIFICATION_FIELDS, title: t('onboarding.certifications'), addLabel: t('onboarding.addCertification') },
     languages: { fields: LANGUAGE_FIELDS, title: t('onboarding.languages'), addLabel: t('onboarding.addLanguage') },
   }
 
+  const [companies, setCompanies] = useState([])
   const [sections, setSections] = useState({
-    experiences: [],
     educations: [],
     skills: [],
     certifications: [],
@@ -113,8 +141,8 @@ export default function OnboardingPage() {
         city: '',
         linkedin_url: '',
       })
+      setCompanies(groupExperiencesByCompany(structured.experiences))
       setSections({
-        experiences: importedListToRows(structured.experiences, EXPERIENCE_FIELDS),
         educations: importedListToRows(structured.educations, EDUCATION_FIELDS),
         skills: importedListToRows(structured.skills, SKILL_FIELDS),
         certifications: importedListToRows(structured.certifications, CERTIFICATION_FIELDS),
@@ -143,6 +171,17 @@ export default function OnboardingPage() {
         await updateProfile(formData, { isMultipart: true })
       } else {
         await updateProfile(profileFields)
+      }
+
+      for (const companyGroup of companies) {
+        for (const role of companyGroup.roles) {
+          await createSectionItem('experiences', {
+            company: companyGroup.company,
+            role: role.role,
+            location: role.location,
+            bullets: role.bullets,
+          })
+        }
       }
 
       for (const sectionKey of SECTION_KEYS) {
@@ -176,133 +215,174 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="onboarding-page">
-      <h1>{t('onboarding.title')}</h1>
-      <ol className="onboarding-steps">
-        <li aria-current={step === 1 ? 'step' : undefined}>{t('onboarding.stepPreferences')}</li>
-        <li aria-current={step === 2 ? 'step' : undefined}>{t('onboarding.stepProfile')}</li>
-        <li aria-current={step === 3 ? 'step' : undefined}>{t('onboarding.stepSearch')}</li>
-      </ol>
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-balance">{t('onboarding.title')}</h1>
+        <ol className="mt-4 flex gap-5 border-b border-border pb-4 text-sm font-medium text-muted-foreground">
+          {[
+            ['stepPreferences', 1],
+            ['stepProfile', 2],
+            ['stepSearch', 3],
+          ].map(([key, n]) => (
+            <li
+              key={key}
+              aria-current={step === n ? 'step' : undefined}
+              className={
+                step === n
+                  ? 'relative pb-3 text-foreground after:absolute after:bottom-[-1px] after:left-0 after:h-0.5 after:w-full after:rounded-full after:bg-primary'
+                  : ''
+              }
+            >
+              {t(`onboarding.${key}`)}
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {error && (
-        <p className="form-error" role="alert">
+        <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
 
       {step === 1 && (
-        <form onSubmit={handlePreferencesSubmit}>
-          <label>
-            {t('onboarding.objectiveLabel')}
-            <textarea
-              placeholder={t('onboarding.objectivePlaceholder')}
-              value={preferences.objective_statement}
-              onChange={(event) =>
-                setPreferences({ ...preferences, objective_statement: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            {t('onboarding.cvTemplateLabel')}
-            <input type="text" value={t('onboarding.cvTemplateValue')} disabled readOnly />
-          </label>
-          <fieldset>
-            <legend>{t('onboarding.cvLanguageLabel')}</legend>
-            <label>
-              <input
-                type="radio"
-                name="cv_language_mode"
-                checked={preferences.cv_language_mode === 'job_language'}
-                onChange={() => setPreferences({ ...preferences, cv_language_mode: 'job_language' })}
-              />
-              {t('onboarding.cvLanguageJob')}
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="cv_language_mode"
-                checked={preferences.cv_language_mode === 'english'}
-                onChange={() => setPreferences({ ...preferences, cv_language_mode: 'english' })}
-              />
-              {t('onboarding.cvLanguageEnglish')}
-            </label>
-          </fieldset>
-          <label>
-            <input
-              type="checkbox"
-              checked={preferences.cv_include_photo}
-              onChange={(event) =>
-                setPreferences({ ...preferences, cv_include_photo: event.target.checked })
-              }
-            />
-            {t('onboarding.cvIncludePhotoLabel')}
-          </label>
-          <button type="submit" disabled={saving}>
-            {t('onboarding.next')}
-          </button>
-        </form>
+        <Card>
+          <form onSubmit={handlePreferencesSubmit}>
+            <CardContent className="flex flex-col gap-5 pt-6">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="objective">{t('onboarding.objectiveLabel')}</Label>
+                <Textarea
+                  id="objective"
+                  placeholder={t('onboarding.objectivePlaceholder')}
+                  value={preferences.objective_statement}
+                  onChange={(event) =>
+                    setPreferences({ ...preferences, objective_statement: event.target.value })
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cv-template">{t('onboarding.cvTemplateLabel')}</Label>
+                <Input id="cv-template" value={t('onboarding.cvTemplateValue')} disabled readOnly />
+              </div>
+              <fieldset className="flex flex-col gap-2.5">
+                <legend className="mb-1 text-sm font-medium text-foreground">
+                  {t('onboarding.cvLanguageLabel')}
+                </legend>
+                <RadioGroup
+                  value={preferences.cv_language_mode}
+                  onValueChange={(value) => setPreferences({ ...preferences, cv_language_mode: value })}
+                >
+                  <label className="flex items-center gap-2.5 text-sm">
+                    <RadioGroupItem value="job_language" />
+                    {t('onboarding.cvLanguageJob')}
+                  </label>
+                  <label className="flex items-center gap-2.5 text-sm">
+                    <RadioGroupItem value="english" />
+                    {t('onboarding.cvLanguageEnglish')}
+                  </label>
+                </RadioGroup>
+              </fieldset>
+              <label className="flex items-center gap-2.5 text-sm">
+                <Checkbox
+                  checked={preferences.cv_include_photo}
+                  onCheckedChange={(checked) =>
+                    setPreferences({ ...preferences, cv_include_photo: checked === true })
+                  }
+                />
+                {t('onboarding.cvIncludePhotoLabel')}
+              </label>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" disabled={saving}>
+                {t('onboarding.next')}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
       )}
 
       {step === 2 && (
         <>
-          <section className="cv-upload">
-            <h2>{t('onboarding.uploadCvTitle')}</h2>
-            <p>{t('onboarding.uploadCvHint')}</p>
-            <input type="file" accept=".pdf,.docx" onChange={handleCvUpload} disabled={saving} />
-            {cvNotice && <p role="status">{cvNotice}</p>}
-          </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('onboarding.uploadCvTitle')}</CardTitle>
+              <CardDescription>{t('onboarding.uploadCvHint')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Input type="file" accept=".pdf,.docx" onChange={handleCvUpload} disabled={saving} />
+              {cvNotice && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {cvNotice}
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
-          <form onSubmit={handleProfileSubmit}>
-            <label>
-              {t('onboarding.profileSummary')}
-              <textarea
-                value={profileFields.summary}
-                onChange={(event) => setProfileFields({ ...profileFields, summary: event.target.value })}
-              />
-            </label>
-            <label>
-              {t('onboarding.profileAchievements')}
-              <textarea
-                value={profileFields.key_achievements}
-                onChange={(event) =>
-                  setProfileFields({ ...profileFields, key_achievements: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              {t('onboarding.profilePhone')}
-              <input
-                type="text"
-                value={profileFields.phone}
-                onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
-              />
-            </label>
-            <label>
-              {t('onboarding.profileCity')}
-              <input
-                type="text"
-                value={profileFields.city}
-                onChange={(event) => setProfileFields({ ...profileFields, city: event.target.value })}
-              />
-            </label>
-            <label>
-              {t('onboarding.profileLinkedin')}
-              <input
-                type="text"
-                value={profileFields.linkedin_url}
-                onChange={(event) =>
-                  setProfileFields({ ...profileFields, linkedin_url: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              {t('onboarding.profilePhoto')}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) => setPhotoFile(event.target.files[0] || null)}
-              />
-            </label>
+          <form onSubmit={handleProfileSubmit} className="flex flex-col gap-6">
+            <Card>
+              <CardContent className="flex flex-col gap-5 pt-6">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="summary">{t('onboarding.profileSummary')}</Label>
+                  <Textarea
+                    id="summary"
+                    value={profileFields.summary}
+                    onChange={(event) => setProfileFields({ ...profileFields, summary: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="achievements">{t('onboarding.profileAchievements')}</Label>
+                  <Textarea
+                    id="achievements"
+                    value={profileFields.key_achievements}
+                    onChange={(event) =>
+                      setProfileFields({ ...profileFields, key_achievements: event.target.value })
+                    }
+                  />
+                </div>
+                <div className="flex flex-wrap gap-5">
+                  <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                    <Label htmlFor="phone">{t('onboarding.profilePhone')}</Label>
+                    <Input
+                      id="phone"
+                      type="text"
+                      value={profileFields.phone}
+                      onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
+                    />
+                  </div>
+                  <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                    <Label htmlFor="city">{t('onboarding.profileCity')}</Label>
+                    <Input
+                      id="city"
+                      type="text"
+                      value={profileFields.city}
+                      onChange={(event) => setProfileFields({ ...profileFields, city: event.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="linkedin">{t('onboarding.profileLinkedin')}</Label>
+                  <Input
+                    id="linkedin"
+                    type="text"
+                    value={profileFields.linkedin_url}
+                    onChange={(event) =>
+                      setProfileFields({ ...profileFields, linkedin_url: event.target.value })
+                    }
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="photo">{t('onboarding.profilePhoto')}</Label>
+                  <Input
+                    id="photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => setPhotoFile(event.target.files[0] || null)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <ExperienceGroupEditor companies={companies} onChange={setCompanies} t={t} />
 
             {SECTION_KEYS.map((sectionKey) => (
               <ListSectionEditor
@@ -316,48 +396,59 @@ export default function OnboardingPage() {
               />
             ))}
 
-            <button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="w-fit">
               {t('onboarding.saveProfile')}
-            </button>
+            </Button>
           </form>
         </>
       )}
 
       {step === 3 && (
-        <form onSubmit={handleSearchSubmit}>
-          <h2>{t('onboarding.firstSearchTitle')}</h2>
-          <p>{t('onboarding.firstSearchHint')}</p>
-          <label>
-            {t('onboarding.searchName')}
-            <input
-              type="text"
-              value={search.name}
-              onChange={(event) => setSearch({ ...search, name: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            {t('onboarding.searchKeywords')}
-            <input
-              type="text"
-              value={search.keywords}
-              onChange={(event) => setSearch({ ...search, keywords: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            {t('onboarding.searchLocation')}
-            <input
-              type="text"
-              value={search.location}
-              onChange={(event) => setSearch({ ...search, location: event.target.value })}
-              required
-            />
-          </label>
-          <button type="submit" disabled={saving}>
-            {t('onboarding.finish')}
-          </button>
-        </form>
+        <Card>
+          <form onSubmit={handleSearchSubmit}>
+            <CardHeader>
+              <CardTitle>{t('onboarding.firstSearchTitle')}</CardTitle>
+              <CardDescription>{t('onboarding.firstSearchHint')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="search-name">{t('onboarding.searchName')}</Label>
+                <Input
+                  id="search-name"
+                  type="text"
+                  value={search.name}
+                  onChange={(event) => setSearch({ ...search, name: event.target.value })}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="search-keywords">{t('onboarding.searchKeywords')}</Label>
+                <Input
+                  id="search-keywords"
+                  type="text"
+                  value={search.keywords}
+                  onChange={(event) => setSearch({ ...search, keywords: event.target.value })}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="search-location">{t('onboarding.searchLocation')}</Label>
+                <Input
+                  id="search-location"
+                  type="text"
+                  value={search.location}
+                  onChange={(event) => setSearch({ ...search, location: event.target.value })}
+                  required
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" disabled={saving}>
+                {t('onboarding.finish')}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
       )}
     </div>
   )

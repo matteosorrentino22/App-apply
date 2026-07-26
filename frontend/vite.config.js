@@ -1,13 +1,21 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const backendTarget = process.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 // https://vite.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
@@ -19,8 +27,8 @@ export default defineConfig({
         name: 'App-apply',
         short_name: 'App-apply',
         description: 'Centralizza e automatizza la ricerca di lavoro',
-        theme_color: '#1d4ed8',
-        background_color: '#ffffff',
+        theme_color: '#6b4a2e',
+        background_color: '#fbf8f2',
         display: 'standalone',
         start_url: '/',
         icons: [

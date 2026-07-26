@@ -4,6 +4,10 @@ import { useAuth } from '../auth/AuthContext'
 import { googleLoginUrl } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 
 export default function LoginPage() {
   const { t } = useLanguage()
@@ -33,43 +37,61 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-page">
-      <h1>{t('login.title')}</h1>
-      <form onSubmit={handleSubmit} noValidate>
-        <label>
-          {t('login.email')}
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            autoComplete="email"
-          />
-        </label>
-        <label>
-          {t('login.password')}
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            autoComplete="current-password"
-          />
-        </label>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={submitting}>
-          {t('login.submit')}
-        </button>
-      </form>
-      <a className="google-button" href={googleLoginUrl()}>
-        {t('login.googleButton')}
-      </a>
-      <p>
-        {t('login.noAccount')} <Link to="/register">{t('login.registerLink')}</Link>
+    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-4 py-10">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('login.title')}</CardTitle>
+        </CardHeader>
+        <form onSubmit={handleSubmit} noValidate>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">{t('login.email')}</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">{t('login.password')}</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter className="flex-col items-stretch gap-3">
+            <Button type="submit" disabled={submitting} className="w-full">
+              {t('login.submit')}
+            </Button>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              {t('common.or')}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button variant="secondary" asChild className="w-full">
+              <a href={googleLoginUrl()}>{t('login.googleButton')}</a>
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        {t('login.noAccount')}{' '}
+        <Link to="/register" className="font-medium text-primary hover:underline">
+          {t('login.registerLink')}
+        </Link>
       </p>
     </div>
   )
