@@ -34,6 +34,12 @@ export default defineConfig({
     }),
   ],
   server: {
+    // Il dev server non è esposto direttamente a Internet (raggiungibile
+    // solo da Caddy dentro la rete Docker interna, nessuna porta pubblicata
+    // in docker-compose.yml): l'allowlist host di Vite va quindi disattivata,
+    // altrimenti rifiuta le richieste proxate con l'header Host originale
+    // (dominio/IP del VPS) non presente nella whitelist di default.
+    allowedHosts: true,
     proxy: {
       '/api': { target: backendTarget, changeOrigin: true },
       '/accounts': { target: backendTarget, changeOrigin: true },
