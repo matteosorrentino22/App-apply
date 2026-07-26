@@ -11,6 +11,7 @@ from apps.cv.manual_generation import (
 )
 from apps.cv.serializers import CvEnrichmentSerializer
 
+from .application import ApplicationMarkRejected, mark_application_done
 from .import_service import (
     ImportDuplicate,
     ImportNotAllowed,
@@ -176,4 +177,21 @@ class UnarchiveJobView(APIView):
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         unarchive_job(job)
+        return Response(JobSerializer(job).data)
+
+
+class MarkApplicationDoneView(APIView):
+    """Marca un Job come "candidatura fatta" (Sprint 16, 01-specifiche
+    -funzionali-v4.md §4.10)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+
+        try:
+            job = mark_application_done(job)
+        except ApplicationMarkRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
         return Response(JobSerializer(job).data)

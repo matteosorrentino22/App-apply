@@ -6,6 +6,7 @@ from .views import (
     GenerateCvView,
     ImportJobView,
     JobListView,
+    MarkApplicationDoneView,
     UnarchiveJobView,
 )
 
@@ -20,4 +21,9 @@ urlpatterns = [
     ),
     path("jobs/<int:pk>/archive/", ArchiveJobView.as_view(), name="job-archive"),
     path("jobs/<int:pk>/unarchive/", UnarchiveJobView.as_view(), name="job-unarchive"),
+    path(
+        "jobs/<int:pk>/mark-application-done/",
+        MarkApplicationDoneView.as_view(),
+        name="job-mark-application-done",
+    ),
 ]

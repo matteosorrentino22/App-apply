@@ -15,6 +15,7 @@ from apps.cv.models import CVDocument
 from apps.profiles.models import Profile
 from apps.searches.models import SavedSearch
 
+from .application import ApplicationMarkRejected, mark_application_done
 from .collection import collect_jobs_for_user
 from .import_service import (
     ImportDuplicate,
@@ -788,3 +789,95 @@ class ArchiveJobApiTests(APITestCase):
         self.job.refresh_from_db()
         self.assertFalse(self.job.is_archived)
         self.assertEqual(self.job.status, Job.Status.CV_GENERATED)
+
+
+class MarkApplicationDoneTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="apply@example.com",
+            email="apply@example.com",
+            password="pw-Apply-12345!",
+        )
+        self.user.last_activity_reset = timezone.now() - timedelta(days=5)
+        self.user.save(update_fields=["last_activity_reset"])
+
+    def _make_job(self, status):
+        return Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            status=status,
+        )
+
+    def test_marking_a_cv_generated_job_succeeds(self):
+        job = self._make_job(Job.Status.CV_GENERATED)
+
+        result = mark_application_done(job)
+
+        self.assertEqual(result.status, Job.Status.APPLICATION_DONE)
+        self.assertIsNotNone(result.date_application_done)
+
+    def test_marking_a_new_job_without_cv_is_rejected(self):
+        job = self._make_job(Job.Status.NEW)
+
+        with self.assertRaises(ApplicationMarkRejected):
+            mark_application_done(job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertIsNone(job.date_application_done)
+
+    def test_marking_resets_user_inactivity_timer(self):
+        job = self._make_job(Job.Status.CV_GENERATED)
+        previous_reset = self.user.last_activity_reset
+
+        mark_application_done(job)
+
+        self.user.refresh_from_db()
+        self.assertGreater(self.user.last_activity_reset, previous_reset)
+
+
+class MarkApplicationDoneApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="applyapi@example.com",
+            email="applyapi@example.com",
+            password="pw-ApplyApi-12345!",
+        )
+        self.client.force_authenticate(self.user)
+
+    def _make_job(self, status):
+        return Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            status=status,
+        )
+
+    def test_endpoint_marks_job_done(self):
+        job = self._make_job(Job.Status.CV_GENERATED)
+
+        response = self.client.post(f"/api/jobs/{job.pk}/mark-application-done/")
+
+        self.assertEqual(response.status_code, 200)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.APPLICATION_DONE)
+
+    def test_endpoint_rejects_job_without_cv(self):
+        job = self._make_job(Job.Status.NEW)
+
+        response = self.client.post(f"/api/jobs/{job.pk}/mark-application-done/")
+
+        self.assertEqual(response.status_code, 409)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.NEW)
