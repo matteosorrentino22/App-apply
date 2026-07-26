@@ -158,3 +158,7 @@ CELERY_TIMEZONE = TIME_ZONE
 # necessariamente lo stesso modello usato per scoring/generazione CV.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claude-opus-5")
+
+# Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
+# configurazione sicura, mai cablato nell'URL come nel prototipo.
+APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
