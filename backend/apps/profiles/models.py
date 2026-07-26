@@ -9,6 +9,13 @@ class Profile(models.Model):
     summary = models.TextField(blank=True, default="")
     photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
     key_achievements = models.TextField(blank=True, default="")
+    # Dati di contatto per l'intestazione del CV generato (Sprint 10): non
+    # coperti dai campi esistenti di Profile/User, ma richiesti esplicitamente
+    # da 02-specifiche-tecniche-v3.md §6.3 ("nome, contatti, città, link
+    # LinkedIn stanno in User/Profile e vengono iniettati nell'HTML").
+    phone = models.CharField(max_length=50, blank=True, default="")
+    city = models.CharField(max_length=255, blank=True, default="")
+    linkedin_url = models.URLField(max_length=500, blank=True, default="")
 
     def __str__(self):
         return f"Profile({self.user})"

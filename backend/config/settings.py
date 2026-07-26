@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,6 +29,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "django_celery_beat",
     "apps.accounts",
     "apps.common",
     "apps.profiles",
@@ -37,6 +45,8 @@ INSTALLED_APPS = [
     "apps.notifications",
 ]
 
+SITE_ID = 1
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -45,6 +55,12 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
+]
+
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -103,8 +119,31 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
+}
+
+# Login via email+password (nativo Django) — nessun username scelto dall'utente
+# (02-specifiche-tecniche-v3.md §3.7, §4.1: l'identificativo è l'email).
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_UNIQUE_EMAIL = True
+
+# Credenziali OAuth Google lette da env, mai hardcoded (CLAUDE.md "Config/segreti");
+# vuote in dev finché non si caricano credenziali di test in .env (Sprint 03).
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APPS": [
+            {
+                "client_id": os.environ.get("GOOGLE_OAUTH_CLIENT_ID", ""),
+                "secret": os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", ""),
+                "key": "",
+            }
+        ],
+        "SCOPE": ["profile", "email"],
+    }
 }
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
@@ -114,3 +153,40 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+# Pianificazione persistita in DB (gestibile da Django Admin), non nel codice:
+# coerente con l'amministrazione via Admin già scelta per piani/credito/voucher
+# (02-specifiche-tecniche-v3.md §9) e verificabile senza un deploy.
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# API Anthropic (Claude) — scoring, generazione CV, parsing del CV caricato
+# (02-specifiche-tecniche-v3.md §3.5). Modello per lo step di strutturazione
+# del parsing CV configurabile a parte: dominio a basso volume, non richiede
+# necessariamente lo stesso modello usato per scoring/generazione CV.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claude-opus-5")
+# Scoring gira ogni notte su tutti i job raccolti di tutti gli utenti (alto
+# volume): famiglia di modello più economica di default, come indicato
+# esplicitamente da 02-specifiche-tecniche-v3.md §3.5 ("una famiglia più
+# economica per lo scoring ad alto volume, una più capace per il CV") — resta
+# comunque un parametro di configurazione, non un vincolo architetturale.
+ANTHROPIC_SCORING_MODEL = os.environ.get("ANTHROPIC_SCORING_MODEL", "claude-haiku-4-5")
+# Generazione contenuti CV: dominio a basso volume (max 15 job/utente/notte
+# tenuti dal cap, più le generazioni manuali) rispetto allo scoring — famiglia
+# più capace di default, come indicato da 02-specifiche-tecniche-v3.md §3.5.
+ANTHROPIC_CV_GENERATION_MODEL = os.environ.get("ANTHROPIC_CV_GENERATION_MODEL", "claude-opus-5")
+
+# Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
+# configurazione sicura, mai cablato nell'URL come nel prototipo.
+APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
+
+# Listino prezzi unitari per le azioni oltre massimale, scalate da
+# User.extra_credit (02-specifiche-tecniche-v3.md §4.6, §11: "valori da
+# definire" — placeholder di configurazione, da fissare prima del rilascio).
+PRICE_MANUAL_CV_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_CV_EXTRA", "1.50"))
+PRICE_IMPORT_EXTRA = Decimal(os.environ.get("PRICE_IMPORT_EXTRA", "0.50"))
+
+# Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
+# l'autenticazione standard del protocollo, nessun servizio a pagamento.
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "admin@example.com")

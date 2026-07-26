@@ -34,6 +34,13 @@ class Job(models.Model):
     # Stato transitorio "CV in generazione": non un valore di status, ma un flag
     # a parte che funge anche da guardia di concorrenza (§4.6, §5.2 tecniche).
     cv_generation_in_progress = models.BooleanField(default=False)
+    # Scartato definitivamente dal cap di intake giornaliero (15 job/utente/
+    # giorno, §4.4 funzionali): dimensione ortogonale allo status, come
+    # is_archived — non è uno dei tre stati stabili, serve solo a escludere il
+    # job da vista lista e generazione automatica senza cancellare la riga
+    # (la riga resta per far valere la deduplica per (user, source,
+    # external_id) anche sui job scartati). Introdotto in Sprint 09.
+    discarded_by_cap = models.BooleanField(default=False)
 
     score = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
