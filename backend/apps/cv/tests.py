@@ -1,4 +1,5 @@
 import tempfile
+from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
 
@@ -8,10 +9,15 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 
-from apps.jobs.models import Job
+from apps.jobs.models import DailyQuota, Job
 from apps.profiles.models import Education, Experience, Profile, Skill
 
 from .generation import generate_cv
+from .manual_generation import (
+    ManualGenerationFailed,
+    ManualGenerationRejected,
+    request_manual_cv_generation,
+)
 from .models import CVDocument
 
 User = get_user_model()
@@ -204,3 +210,160 @@ class GenerateCvTests(TestCase):
         self.assertEqual(cv_document.job, self.job)
         self.assertEqual(cv_document.user, self.user)
         self.assertEqual(cv_document.generation_type, CVDocument.GenerationType.MANUAL)
+
+
+@override_settings(PRICE_MANUAL_CV_EXTRA=Decimal("1.50"))
+class ManualCvGenerationTests(TestCase):
+    def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
+        return User.objects.create_user(
+            username=f"manual-{plan}-{extra_credit}@example.com",
+            email=f"manual-{plan}-{extra_credit}@example.com",
+            password="pw-Manual-12345!",
+            plan=plan,
+            extra_credit=extra_credit,
+        )
+
+    def _make_job(self, user, external_id="ext-1", score=None, status=Job.Status.NEW):
+        return Job.objects.create(
+            user=user,
+            source=Job.Source.LINKEDIN,
+            external_id=external_id,
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            score=score,
+            status=status,
+        )
+
+    def test_free_user_first_manual_generation_consumes_quota(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+
+        with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
+            mock_generate_cv.return_value = "cv-doc"
+            request_manual_cv_generation(job)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.CV_GENERATED)
+        self.assertFalse(job.cv_generation_in_progress)
+        self.assertIsNotNone(job.date_cv_generated)
+
+    def test_free_user_second_generation_rejected_without_enough_credit(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("0.50"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job_1)
+
+        with self.assertRaises(ManualGenerationRejected):
+            request_manual_cv_generation(job_2)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 1)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("0.50"))
+
+    def test_free_user_second_generation_proceeds_on_credit_and_scales_price(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("5.00"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job_1)
+            request_manual_cv_generation(job_2)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 1)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("3.50"))
+        job_2.refresh_from_db()
+        self.assertEqual(job_2.status, Job.Status.CV_GENERATED)
+
+    def test_pro_user_first_ten_consume_quota_eleventh_without_credit_is_rejected(self):
+        user = self._make_user(plan=User.Plan.PRO)
+        jobs = [self._make_job(user, external_id=f"ext-{i}") for i in range(11)]
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            for job in jobs[:10]:
+                request_manual_cv_generation(job)
+
+            with self.assertRaises(ManualGenerationRejected):
+                request_manual_cv_generation(jobs[10])
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 10)
+
+    def test_concurrent_request_on_same_job_is_rejected_without_consuming_quota(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+        job.cv_generation_in_progress = True
+        job.save(update_fields=["cv_generation_in_progress"])
+
+        with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
+            with self.assertRaises(ManualGenerationRejected):
+                request_manual_cv_generation(job)
+            mock_generate_cv.assert_not_called()
+
+        self.assertFalse(DailyQuota.objects.filter(user=user).exists())
+
+    def test_failed_generation_refunds_quota_and_resets_job_to_new(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+
+        with patch(
+            "apps.cv.manual_generation.generate_cv", side_effect=RuntimeError("errore simulato")
+        ):
+            with self.assertRaises(ManualGenerationFailed):
+                request_manual_cv_generation(job)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 0)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertFalse(job.cv_generation_in_progress)
+
+    def test_failed_generation_refunds_credit_when_charged_to_credit(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("5.00"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job_1)
+
+        with patch(
+            "apps.cv.manual_generation.generate_cv", side_effect=RuntimeError("errore simulato")
+        ):
+            with self.assertRaises(ManualGenerationFailed):
+                request_manual_cv_generation(job_2)
+
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("5.00"))
+
+    def test_retry_after_automatic_failure_uses_same_manual_counter(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user, score=5, status=Job.Status.NEW)
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_cv_count, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.CV_GENERATED)
+
+    def test_successful_generation_removes_job_from_archive(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+        job.is_archived = True
+        job.save(update_fields=["is_archived"])
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job)
+
+        job.refresh_from_db()
+        self.assertFalse(job.is_archived)

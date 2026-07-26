@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -177,3 +178,8 @@ ANTHROPIC_CV_GENERATION_MODEL = os.environ.get("ANTHROPIC_CV_GENERATION_MODEL", 
 # Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
 # configurazione sicura, mai cablato nell'URL come nel prototipo.
 APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
+
+# Listino prezzi unitari per le azioni oltre massimale, scalate da
+# User.extra_credit (02-specifiche-tecniche-v3.md §4.6, §11: "valori da
+# definire" — placeholder di configurazione, da fissare prima del rilascio).
+PRICE_MANUAL_CV_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_CV_EXTRA", "1.50"))
