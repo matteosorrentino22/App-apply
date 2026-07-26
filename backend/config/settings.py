@@ -151,3 +151,10 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+
+# API Anthropic (Claude) — scoring, generazione CV, parsing del CV caricato
+# (02-specifiche-tecniche-v3.md §3.5). Modello per lo step di strutturazione
+# del parsing CV configurabile a parte: dominio a basso volume, non richiede
+# necessariamente lo stesso modello usato per scoring/generazione CV.
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claude-opus-5")

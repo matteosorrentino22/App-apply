@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from . import views
@@ -10,4 +11,6 @@ router.register("skills", views.SkillViewSet, basename="skill")
 router.register("certifications", views.CertificationViewSet, basename="certification")
 router.register("languages", views.LanguageViewSet, basename="language")
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("profile/import-cv/", views.CVImportView.as_view(), name="cv-import"),
+]
