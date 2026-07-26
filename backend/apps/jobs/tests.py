@@ -7,11 +7,12 @@ from django.test import TestCase
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 
+from apps.cv.models import CVDocument
 from apps.searches.models import SavedSearch
 
 from .collection import collect_jobs_for_user
 from .intake import INTAKE_CAP, apply_intake_cap
-from .models import Job, RunLog
+from .models import DailyQuota, Job, RunLog
 from .scoring import score_job, score_jobs
 from .tasks import run_nightly_cycle_for_user
 
@@ -271,6 +272,87 @@ class RunNightlyCycleForUserTests(TestCase):
         self.assertEqual(run_log.status, RunLog.Status.SUCCESS)
         self.assertIn("raccolti=20", run_log.message)
         self.assertIn("scartati_cap=5", run_log.message)
+
+
+class AutomaticCvGenerationInNightlyCycleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="autocv@example.com", email="autocv@example.com", password="pw-Auto-12345!"
+        )
+        SavedSearch.objects.create(
+            user=self.user, name="Ricerca", keywords="PM", location="Roma", is_active=True
+        )
+
+    def _run_cycle_with_scores(self, scores):
+        offers = [_offer(f"ext-{i}") for i in range(len(scores))]
+        score_cycle = iter(scores)
+
+        def fake_score(job, profile):
+            score = next(score_cycle)
+            return {**FAKE_SCORE_RESULT, "score": score}
+
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", side_effect=fake_score
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            summary = run_nightly_cycle_for_user(self.user)
+        return summary
+
+    def test_high_score_jobs_get_automatic_cv_and_cv_generated_status(self):
+        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
+            mock_generate_cv.return_value = MagicMock()
+            summary = self._run_cycle_with_scores([5, 4, 3, 2, 1])
+
+        self.assertEqual(summary["cv_generated"], 2)
+        high_score_jobs = Job.objects.filter(user=self.user, score__gte=4)
+        low_score_jobs = Job.objects.filter(user=self.user, score__lte=3)
+        self.assertEqual(high_score_jobs.count(), 2)
+        self.assertTrue(all(job.status == Job.Status.CV_GENERATED for job in high_score_jobs))
+        self.assertTrue(all(job.date_cv_generated is not None for job in high_score_jobs))
+        self.assertEqual(low_score_jobs.count(), 3)
+        self.assertTrue(all(job.status == Job.Status.NEW for job in low_score_jobs))
+        self.assertEqual(mock_generate_cv.call_count, 2)
+        for call in mock_generate_cv.call_args_list:
+            self.assertEqual(call.args[1], CVDocument.GenerationType.AUTOMATIC)
+
+    def test_low_score_jobs_have_no_cv_document(self):
+        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
+            self._run_cycle_with_scores([2, 1])
+
+        mock_generate_cv.assert_not_called()
+
+    def test_failed_generation_leaves_job_new_without_blocking_others(self):
+        job_scores = [5, 5]
+
+        def fake_generate(job, generation_type):
+            if job.score == 5 and job.external_id == "ext-0":
+                raise RuntimeError("errore simulato di generazione")
+            return MagicMock()
+
+        with patch(
+            "apps.jobs.tasks.generate_cv", side_effect=fake_generate
+        ) as mock_generate_cv:
+            summary = self._run_cycle_with_scores(job_scores)
+
+        self.assertEqual(mock_generate_cv.call_count, 2)
+        self.assertEqual(summary["cv_generated"], 1)
+        failed_job = Job.objects.get(user=self.user, external_id="ext-0")
+        succeeded_job = Job.objects.get(user=self.user, external_id="ext-1")
+        self.assertEqual(failed_job.status, Job.Status.NEW)
+        self.assertIsNone(failed_job.date_cv_generated)
+        self.assertEqual(succeeded_job.status, Job.Status.CV_GENERATED)
+
+        run_log = RunLog.objects.get(
+            user=self.user, job=failed_job, task_type=RunLog.TaskType.CV_GENERATION
+        )
+        self.assertEqual(run_log.status, RunLog.Status.FAILURE)
+
+    def test_automatic_generation_does_not_consume_daily_quota(self):
+        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
+            mock_generate_cv.return_value = MagicMock()
+            self._run_cycle_with_scores([5, 4])
+
+        self.assertFalse(DailyQuota.objects.filter(user=self.user).exists())
 
 
 class NightlyCycleScheduleTests(TestCase):
