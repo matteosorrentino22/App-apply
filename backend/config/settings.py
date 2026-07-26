@@ -183,3 +183,4 @@ APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
 # User.extra_credit (02-specifiche-tecniche-v3.md §4.6, §11: "valori da
 # definire" — placeholder di configurazione, da fissare prima del rilascio).
 PRICE_MANUAL_CV_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_CV_EXTRA", "1.50"))
+PRICE_IMPORT_EXTRA = Decimal(os.environ.get("PRICE_IMPORT_EXTRA", "0.50"))

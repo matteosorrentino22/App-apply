@@ -1,6 +1,7 @@
 import random
 import tempfile
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -9,11 +10,18 @@ from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 from rest_framework.test import APITestCase
 
+from apps.cv.manual_generation import request_manual_cv_generation
 from apps.cv.models import CVDocument
 from apps.profiles.models import Profile
 from apps.searches.models import SavedSearch
 
 from .collection import collect_jobs_for_user
+from .import_service import (
+    ImportDuplicate,
+    ImportNotAllowed,
+    ImportRejected,
+    import_job_from_url,
+)
 from .intake import INTAKE_CAP, apply_intake_cap
 from .models import DailyQuota, Job, RunLog
 from .scoring import score_job, score_jobs
@@ -433,3 +441,158 @@ class EnrichAndGenerateCvApiTests(APITestCase):
         self.assertFalse(
             any(exp["company"] == "Kuwait Petroleum" for exp in experiences)
         )
+
+
+VALID_LINKEDIN_URL = "https://www.linkedin.com/jobs/view/1234567890"
+
+
+def _import_offer(**overrides):
+    offer = {
+        "external_id": "1234567890",
+        "title": "Site Supervisor",
+        "company": "Kuwait Petroleum",
+        "location": "Kuwait City",
+        "description": "Descrizione della posizione importata.",
+        "apply_url": VALID_LINKEDIN_URL,
+        "published_at": None,
+        "salary": "",
+    }
+    offer.update(overrides)
+    return offer
+
+
+@override_settings(PRICE_IMPORT_EXTRA=Decimal("0.50"))
+class ImportJobTests(TestCase):
+    def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
+        return User.objects.create_user(
+            username=f"import-{plan}-{extra_credit}@example.com",
+            email=f"import-{plan}-{extra_credit}@example.com",
+            password="pw-Import-12345!",
+            plan=plan,
+            extra_credit=extra_credit,
+        )
+
+    def test_pro_user_imports_valid_link_scored_without_automatic_cv(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(
+                fetch_by_url=MagicMock(return_value=_import_offer())
+            )
+            job = import_job_from_url(user, VALID_LINKEDIN_URL)
+
+        self.assertEqual(job.origin, Job.Origin.IMPORTED)
+        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertEqual(job.score, FAKE_SCORE_RESULT["score"])
+        self.assertFalse(CVDocument.objects.filter(job=job).exists())
+
+    def test_free_user_cannot_import_even_with_credit(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("100"))
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source:
+            with self.assertRaises(ImportNotAllowed):
+                import_job_from_url(user, VALID_LINKEDIN_URL)
+            mock_get_source.assert_not_called()
+
+        self.assertEqual(Job.objects.filter(user=user).count(), 0)
+        self.assertFalse(DailyQuota.objects.filter(user=user).exists())
+
+    def test_invalid_link_is_rejected_without_creating_a_job(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with self.assertRaises(ImportRejected):
+            import_job_from_url(user, "https://example.com/not-a-linkedin-job")
+
+        self.assertEqual(Job.objects.filter(user=user).count(), 0)
+
+    def test_importing_an_already_present_job_is_flagged_as_duplicate(self):
+        user = self._make_user(plan=User.Plan.PRO)
+        Job.objects.create(
+            user=user,
+            source=Job.Source.LINKEDIN,
+            external_id="1234567890",
+            title="Site Supervisor",
+            company="Kuwait Petroleum",
+            location="Kuwait City",
+            description="Già presente.",
+            apply_url=VALID_LINKEDIN_URL,
+        )
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source:
+            with self.assertRaises(ImportDuplicate):
+                import_job_from_url(user, VALID_LINKEDIN_URL)
+            mock_get_source.assert_not_called()
+
+        self.assertEqual(Job.objects.filter(user=user).count(), 1)
+        self.assertFalse(DailyQuota.objects.filter(user=user).exists())
+
+    def _import_n(self, user, count, start=1000):
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            for i in range(count):
+                mock_get_source.return_value = MagicMock(
+                    fetch_by_url=MagicMock(
+                        return_value=_import_offer(
+                            external_id=f"ext-{start + i}",
+                            apply_url=f"{VALID_LINKEDIN_URL}-{start + i}",
+                        )
+                    )
+                )
+                import_job_from_url(user, f"https://www.linkedin.com/jobs/view/{start + i}")
+
+    def test_fourth_import_without_credit_is_rejected(self):
+        user = self._make_user(plan=User.Plan.PRO, extra_credit=Decimal("0"))
+        self._import_n(user, 3)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.import_count, 3)
+
+        with self.assertRaises(ImportRejected):
+            import_job_from_url(user, "https://www.linkedin.com/jobs/view/2000")
+
+        quota.refresh_from_db()
+        self.assertEqual(quota.import_count, 3)
+
+    def test_fourth_import_with_enough_credit_proceeds_and_scales_price(self):
+        user = self._make_user(plan=User.Plan.PRO, extra_credit=Decimal("5.00"))
+        self._import_n(user, 3)
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(
+                fetch_by_url=MagicMock(
+                    return_value=_import_offer(external_id="ext-2000", apply_url=f"{VALID_LINKEDIN_URL}-2000")
+                )
+            )
+            import_job_from_url(user, "https://www.linkedin.com/jobs/view/2000")
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.import_count, 3)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("4.50"))
+
+    def test_import_and_manual_cv_generation_consume_separate_counters(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(
+                fetch_by_url=MagicMock(return_value=_import_offer())
+            )
+            job = import_job_from_url(user, VALID_LINKEDIN_URL)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.import_count, 1)
+        self.assertEqual(quota.manual_cv_count, 0)
+
+        with patch("apps.cv.manual_generation.generate_cv"):
+            request_manual_cv_generation(job)
+
+        quota.refresh_from_db()
+        self.assertEqual(quota.import_count, 1)
+        self.assertEqual(quota.manual_cv_count, 1)

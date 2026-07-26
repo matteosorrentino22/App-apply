@@ -11,6 +11,12 @@ from apps.cv.manual_generation import (
 )
 from apps.cv.serializers import CvEnrichmentSerializer
 
+from .import_service import (
+    ImportDuplicate,
+    ImportNotAllowed,
+    ImportRejected,
+    import_job_from_url,
+)
 from .models import Job
 
 
@@ -33,6 +39,30 @@ class GenerateCvView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+
+
+class ImportJobView(APIView):
+    """Import manuale di un job da link LinkedIn, riservato al piano Pro
+    (Sprint 14, 01-specifiche-funzionali-v4.md §4.9)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        url = request.data.get("url", "")
+
+        try:
+            job = import_job_from_url(request.user, url)
+        except ImportNotAllowed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except ImportDuplicate as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ImportRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {"job_id": job.pk, "status": job.status, "score": job.score},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class EnrichAndGenerateCvView(APIView):

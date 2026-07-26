@@ -37,6 +37,20 @@ class ApifyLinkedInSource:
             items.extend(response.json())
         return [self._normalize_item(item) for item in items]
 
+    def fetch_by_url(self, url):
+        """Recupera i dettagli di una singola offerta a partire dal suo link
+        (import manuale, Sprint 14). Ritorna `None` se non viene restituito
+        alcun risultato."""
+        response = requests.post(
+            APIFY_RUN_SYNC_URL,
+            headers={"Authorization": f"Bearer {settings.APIFY_API_TOKEN}"},
+            json={"startUrls": [{"url": url}], "rows": 1},
+            timeout=60,
+        )
+        response.raise_for_status()
+        items = response.json()
+        return self._normalize_item(items[0]) if items else None
+
     def _normalize_item(self, item):
         return {
             "external_id": str(item.get("id") or item.get("jobId") or ""),
