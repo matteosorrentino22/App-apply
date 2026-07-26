@@ -184,3 +184,9 @@ APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
 # definire" — placeholder di configurazione, da fissare prima del rilascio).
 PRICE_MANUAL_CV_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_CV_EXTRA", "1.50"))
 PRICE_IMPORT_EXTRA = Decimal(os.environ.get("PRICE_IMPORT_EXTRA", "0.50"))
+
+# Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
+# l'autenticazione standard del protocollo, nessun servizio a pagamento.
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "admin@example.com")

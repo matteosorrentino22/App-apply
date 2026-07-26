@@ -34,6 +34,13 @@ class User(AbstractUser):
     # a parte, l'inattività/notifica partono dalla creazione dell'utente (§4.1, §4.12 funzionali).
     last_activity_reset = models.DateTimeField(null=True, blank=True)
     last_notified_at = models.DateTimeField(null=True, blank=True)
+    # Guardia anti-spam per il promemoria di inattività (Sprint 17): senza
+    # questo timestamp, il task (che gira ogni ~15 minuti) rinvierebbe la
+    # notifica a ogni giro per tutta la durata dell'inattività, non solo una
+    # volta. Si azzera implicitamente perché confrontato con
+    # last_activity_reset: dopo una nuova "candidatura fatta" (che aggiorna
+    # last_activity_reset), il promemoria può ripartire da capo.
+    last_inactivity_notified_at = models.DateTimeField(null=True, blank=True)
     extra_credit = models.DecimalField(max_digits=8, decimal_places=2, default=0)
 
     def save(self, *args, **kwargs):
