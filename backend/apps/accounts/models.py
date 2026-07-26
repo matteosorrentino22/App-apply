@@ -16,6 +16,9 @@ class User(AbstractUser):
         ENGLISH = "english", "English"
         JOB_LANGUAGE = "job_language", "Lingua dell'offerta"
 
+    # L'email è l'identificativo di accesso (§3.7, §4.1 tecniche); lo username
+    # nativo resta valorizzato uguale all'email in fase di registrazione (§5 vista).
+    email = models.EmailField("email address", unique=True)
     plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
     timezone = models.CharField(max_length=50, default="Europe/Rome")
     interface_language = models.CharField(
