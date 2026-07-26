@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="{{ html_lang }}">
+<head>
+<meta charset="utf-8">
+<title>CV — {{ full_name }}</title>
+<style>
+    @page {
+        size: A4;
+        margin: {{ page_margin }};
+    }
+    body {
+        font-family: "Helvetica", "Arial", sans-serif;
+        font-size: {{ base_font_size }}pt;
+        line-height: {{ line_height }};
+        color: #1a1a1a;
+    }
+    h1 {
+        font-size: {{ base_font_size|add:8 }}pt;
+        margin: 0 0 2pt 0;
+    }
+    .contact {
+        font-size: {{ base_font_size|add:-1 }}pt;
+        color: #444;
+        margin: 0 0 {{ section_gap }} 0;
+    }
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    .header-text {
+        flex: 1;
+    }
+    .photo {
+        width: {{ photo_size }};
+        height: {{ photo_size }};
+        object-fit: cover;
+        border-radius: 4pt;
+        margin-left: 12pt;
+    }
+    section {
+        margin-bottom: {{ section_gap }};
+    }
+    h2 {
+        font-size: {{ base_font_size|add:2 }}pt;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+        border-bottom: 1pt solid #999;
+        margin: 0 0 {{ heading_gap }} 0;
+        padding-bottom: 2pt;
+    }
+    .experience, .education-item {
+        margin-bottom: {{ item_gap }};
+    }
+    .experience-title, .education-title {
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+    }
+    .experience-meta, .education-meta {
+        font-style: italic;
+        color: #555;
+        font-size: {{ base_font_size|add:-1 }}pt;
+    }
+    ul.bullets {
+        margin: 2pt 0 0 0;
+        padding-left: 12pt;
+    }
+    ul.bullets li {
+        margin-bottom: 1pt;
+    }
+    .skills-list, .languages-list, .certifications-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .skills-list li, .languages-list li, .certifications-list li {
+        display: inline-block;
+        margin: 0 8pt 2pt 0;
+    }
+</style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-text">
+            <h1>{{ full_name }}</h1>
+            <p class="contact">{{ contact_line }}</p>
+        </div>
+        {% if photo_url %}
+        <img class="photo" src="{{ photo_url }}" alt="">
+        {% endif %}
+    </div>
+
+    {% if summary %}
+    <section>
+        <h2>Profilo</h2>
+        <p>{{ summary }}</p>
+    </section>
+    {% endif %}
+
+    {% if key_achievements %}
+    <section>
+        <h2>Risultati chiave</h2>
+        <ul class="bullets">
+            {% for achievement in key_achievements %}
+            <li>{{ achievement }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if experiences %}
+    <section>
+        <h2>Esperienza</h2>
+        {% for exp in experiences %}
+        <div class="experience">
+            <div class="experience-title">
+                <span>{{ exp.role }} — {{ exp.company }}</span>
+                <span>{{ exp.dates }}</span>
+            </div>
+            <div class="experience-meta">{{ exp.location }}</div>
+            {% if exp.bullets %}
+            <ul class="bullets">
+                {% for bullet in exp.bullets %}
+                <li>{{ bullet }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if educations %}
+    <section>
+        <h2>Istruzione</h2>
+        {% for edu in educations %}
+        <div class="education-item">
+            <div class="education-title">
+                <span>{{ edu.title }} — {{ edu.institution }}</span>
+                <span>{{ edu.dates }}</span>
+            </div>
+            {% if edu.location %}<div class="education-meta">{{ edu.location }}</div>{% endif %}
+            {% if edu.notes %}<p>{{ edu.notes }}</p>{% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if skills %}
+    <section>
+        <h2>Competenze</h2>
+        <ul class="skills-list">
+            {% for skill in skills %}
+            <li>{{ skill }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if certifications %}
+    <section>
+        <h2>Certificazioni</h2>
+        <ul class="certifications-list">
+            {% for cert in certifications %}
+            <li>{{ cert }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if languages %}
+    <section>
+        <h2>Lingue</h2>
+        <ul class="languages-list">
+            {% for lang in languages %}
+            <li>{{ lang.language }}{% if lang.level %} ({{ lang.level }}){% endif %}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+</body>
+</html>

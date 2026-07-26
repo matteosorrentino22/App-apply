@@ -169,6 +169,10 @@ ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claud
 # economica per lo scoring ad alto volume, una più capace per il CV") — resta
 # comunque un parametro di configurazione, non un vincolo architetturale.
 ANTHROPIC_SCORING_MODEL = os.environ.get("ANTHROPIC_SCORING_MODEL", "claude-haiku-4-5")
+# Generazione contenuti CV: dominio a basso volume (max 15 job/utente/notte
+# tenuti dal cap, più le generazioni manuali) rispetto allo scoring — famiglia
+# più capace di default, come indicato da 02-specifiche-tecniche-v3.md §3.5.
+ANTHROPIC_CV_GENERATION_MODEL = os.environ.get("ANTHROPIC_CV_GENERATION_MODEL", "claude-opus-5")
 
 # Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
 # configurazione sicura, mai cablato nell'URL come nel prototipo.
