@@ -23,6 +23,7 @@ from .import_service import (
     import_job_from_url,
 )
 from .intake import INTAKE_CAP, apply_intake_cap
+from .list_service import list_jobs
 from .models import DailyQuota, Job, RunLog
 from .scoring import score_job, score_jobs
 from .tasks import run_nightly_cycle_for_user
@@ -596,3 +597,194 @@ class ImportJobTests(TestCase):
         quota.refresh_from_db()
         self.assertEqual(quota.import_count, 1)
         self.assertEqual(quota.manual_cv_count, 1)
+
+
+class JobListTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="list@example.com",
+            email="list@example.com",
+            password="pw-List-12345!",
+            timezone="Europe/Rome",
+        )
+
+    def _make_job(
+        self,
+        external_id,
+        origin=Job.Origin.COLLECTED,
+        is_archived=False,
+        status=Job.Status.NEW,
+        score=None,
+        days_ago=0,
+        title="Project Manager",
+        company="Acme S.p.A.",
+        location="Roma",
+    ):
+        job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id=external_id,
+            title=title,
+            company=company,
+            location=location,
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            origin=origin,
+            is_archived=is_archived,
+            status=status,
+            score=score,
+        )
+        if days_ago:
+            Job.objects.filter(pk=job.pk).update(
+                date_collected=timezone.now() - timedelta(days=days_ago)
+            )
+            job.refresh_from_db()
+        return job
+
+    def test_sections_return_exactly_the_expected_jobs(self):
+        main_job = self._make_job("main-1", origin=Job.Origin.COLLECTED, is_archived=False)
+        imported_job = self._make_job("imported-1", origin=Job.Origin.IMPORTED, is_archived=False)
+        archived_collected = self._make_job(
+            "archived-collected-1", origin=Job.Origin.COLLECTED, is_archived=True
+        )
+        archived_imported = self._make_job(
+            "archived-imported-1", origin=Job.Origin.IMPORTED, is_archived=True
+        )
+
+        main_ids = {job.pk for job in list_jobs(self.user, "main", period="all")}
+        imported_ids = {job.pk for job in list_jobs(self.user, "imported", period="all")}
+        archived_ids = {job.pk for job in list_jobs(self.user, "archived", period="all")}
+
+        self.assertEqual(main_ids, {main_job.pk})
+        self.assertEqual(imported_ids, {imported_job.pk})
+        self.assertEqual(archived_ids, {archived_collected.pk, archived_imported.pk})
+
+    def test_today_filter_returns_only_jobs_collected_today(self):
+        today_job = self._make_job("today-1", days_ago=0)
+        old_job = self._make_job("old-1", days_ago=2)
+
+        results = list_jobs(self.user, "main", period="today")
+
+        result_ids = {job.pk for job in results}
+        self.assertIn(today_job.pk, result_ids)
+        self.assertNotIn(old_job.pk, result_ids)
+
+    def test_all_filter_returns_entire_history(self):
+        today_job = self._make_job("today-2", days_ago=0)
+        old_job = self._make_job("old-2", days_ago=60)
+
+        results = list_jobs(self.user, "main", period="all")
+
+        result_ids = {job.pk for job in results}
+        self.assertEqual(result_ids, {today_job.pk, old_job.pk})
+
+    def test_score_and_status_filters_intersect_correctly_in_every_section(self):
+        sections = [
+            ("main", {"origin": Job.Origin.COLLECTED, "is_archived": False}),
+            ("imported", {"origin": Job.Origin.IMPORTED, "is_archived": False}),
+            ("archived", {"origin": Job.Origin.COLLECTED, "is_archived": True}),
+        ]
+        for section, section_kwargs in sections:
+            match = self._make_job(
+                f"{section}-match", score=5, status=Job.Status.NEW, **section_kwargs
+            )
+            self._make_job(
+                f"{section}-wrong-score", score=3, status=Job.Status.NEW, **section_kwargs
+            )
+            self._make_job(
+                f"{section}-wrong-status",
+                score=5,
+                status=Job.Status.CV_GENERATED,
+                **section_kwargs,
+            )
+
+            results = list_jobs(
+                self.user, section, period="all", scores=[4, 5], statuses=[Job.Status.NEW]
+            )
+            self.assertEqual({job.pk for job in results}, {match.pk})
+
+    def test_results_are_always_ordered_by_score_descending(self):
+        low = self._make_job("order-low", score=2)
+        high = self._make_job("order-high", score=5)
+        mid = self._make_job("order-mid", score=3)
+
+        results = list(list_jobs(self.user, "main", period="today"))
+
+        self.assertEqual([job.pk for job in results], [high.pk, mid.pk, low.pk])
+
+    def test_search_is_confined_to_current_section_and_ignores_other_filters(self):
+        main_match = self._make_job(
+            "search-main", origin=Job.Origin.COLLECTED, is_archived=False, title="Rare Keyword Match"
+        )
+        self._make_job(
+            "search-archived",
+            origin=Job.Origin.COLLECTED,
+            is_archived=True,
+            title="Rare Keyword Match",
+        )
+        self._make_job(
+            "search-imported",
+            origin=Job.Origin.IMPORTED,
+            is_archived=False,
+            title="Rare Keyword Match",
+        )
+
+        # Filtri palesemente contraddittori (score/stato impossibili da
+        # soddisfare insieme al titolo): devono essere ignorati quando la
+        # ricerca testuale è attiva.
+        results = list_jobs(
+            self.user,
+            "main",
+            period="today",
+            scores=[1],
+            statuses=[Job.Status.APPLICATION_DONE],
+            query="Rare Keyword",
+        )
+
+        self.assertEqual({job.pk for job in results}, {main_match.pk})
+
+
+class ArchiveJobApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="archive@example.com", email="archive@example.com", password="pw-Archive-12345!"
+        )
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            status=Job.Status.CV_GENERATED,
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_archive_sets_is_archived_true(self):
+        response = self.client.post(f"/api/jobs/{self.job.pk}/archive/")
+
+        self.assertEqual(response.status_code, 200)
+        self.job.refresh_from_db()
+        self.assertTrue(self.job.is_archived)
+
+    def test_unarchive_undoes_an_archive_swipe(self):
+        self.client.post(f"/api/jobs/{self.job.pk}/archive/")
+
+        response = self.client.post(f"/api/jobs/{self.job.pk}/unarchive/")
+
+        self.assertEqual(response.status_code, 200)
+        self.job.refresh_from_db()
+        self.assertFalse(self.job.is_archived)
+
+    def test_unarchive_from_archive_section_keeps_previous_status(self):
+        self.job.is_archived = True
+        self.job.save(update_fields=["is_archived"])
+
+        response = self.client.post(f"/api/jobs/{self.job.pk}/unarchive/")
+
+        self.assertEqual(response.status_code, 200)
+        self.job.refresh_from_db()
+        self.assertFalse(self.job.is_archived)
+        self.assertEqual(self.job.status, Job.Status.CV_GENERATED)
