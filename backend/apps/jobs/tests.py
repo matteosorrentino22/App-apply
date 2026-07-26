@@ -6,7 +6,8 @@ from django.test import TestCase
 from apps.searches.models import SavedSearch
 
 from .collection import collect_jobs_for_user
-from .models import Job
+from .models import Job, RunLog
+from .scoring import score_job, score_jobs
 
 User = get_user_model()
 
@@ -99,3 +100,77 @@ class CollectJobsForUserTests(TestCase):
             created = collect_jobs_for_user(self.free_user)
         mock_get_source.assert_not_called()
         self.assertEqual(created, [])
+
+
+FAKE_SCORE_RESULT = {
+    "score": 4,
+    "score_match": ["Esperienza di project management"],
+    "score_gaps": ["Nessuna certificazione PMP"],
+    "score_reasoning": "Buona affinità con il ruolo richiesto.",
+}
+
+
+class ScoreJobTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="score@example.com", email="score@example.com", password="pw-Score-12345!"
+        )
+
+    def _make_job(self, external_id):
+        return Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id=external_id,
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione della posizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+        )
+
+    def test_successful_scoring_populates_all_fields(self):
+        job = self._make_job("ext-1")
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            result = score_job(job)
+
+        self.assertTrue(result)
+        job.refresh_from_db()
+        self.assertEqual(job.score, 4)
+        self.assertEqual(job.score_match, FAKE_SCORE_RESULT["score_match"])
+        self.assertEqual(job.score_gaps, FAKE_SCORE_RESULT["score_gaps"])
+        self.assertEqual(job.score_reasoning, FAKE_SCORE_RESULT["score_reasoning"])
+        self.assertIsNotNone(job.date_scored)
+
+    def test_failed_scoring_leaves_job_unscored_and_logs_run_log(self):
+        job = self._make_job("ext-2")
+        with patch(
+            "apps.jobs.scoring.score_job_with_claude", side_effect=TimeoutError("timeout")
+        ):
+            result = score_job(job)
+
+        self.assertFalse(result)
+        job.refresh_from_db()
+        self.assertIsNone(job.score)
+
+        run_logs = RunLog.objects.filter(job=job, task_type=RunLog.TaskType.SCORING)
+        self.assertEqual(run_logs.count(), 1)
+        self.assertEqual(run_logs.first().status, RunLog.Status.FAILURE)
+
+    def test_batch_scoring_isolates_single_job_failure(self):
+        job_ok_1 = self._make_job("ext-3")
+        job_fail = self._make_job("ext-4")
+        job_ok_2 = self._make_job("ext-5")
+
+        def fake_score(job, profile):
+            if job.pk == job_fail.pk:
+                raise RuntimeError("errore simulato")
+            return FAKE_SCORE_RESULT
+
+        with patch("apps.jobs.scoring.score_job_with_claude", side_effect=fake_score):
+            scored = score_jobs([job_ok_1, job_fail, job_ok_2])
+
+        self.assertEqual({job.pk for job in scored}, {job_ok_1.pk, job_ok_2.pk})
+        job_fail.refresh_from_db()
+        self.assertIsNone(job_fail.score)
+        job_ok_1.refresh_from_db()
+        self.assertEqual(job_ok_1.score, 4)

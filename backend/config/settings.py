@@ -158,7 +158,9 @@ CELERY_TIMEZONE = TIME_ZONE
 # necessariamente lo stesso modello usato per scoring/generazione CV.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claude-opus-5")
-
-# Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
-# configurazione sicura, mai cablato nell'URL come nel prototipo.
-APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
+# Scoring gira ogni notte su tutti i job raccolti di tutti gli utenti (alto
+# volume): famiglia di modello più economica di default, come indicato
+# esplicitamente da 02-specifiche-tecniche-v3.md §3.5 ("una famiglia più
+# economica per lo scoring ad alto volume, una più capace per il CV") — resta
+# comunque un parametro di configurazione, non un vincolo architetturale.
+ANTHROPIC_SCORING_MODEL = os.environ.get("ANTHROPIC_SCORING_MODEL", "claude-haiku-4-5")
