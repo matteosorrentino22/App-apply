@@ -60,6 +60,17 @@ services:
       redis:
         condition: service_healthy
 
+  frontend:
+    build: ./frontend
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_BACKEND_URL: http://web:8000
+    depends_on:
+      - web
+
   caddy:
     image: caddy:2-alpine
     ports:
@@ -68,6 +79,7 @@ services:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - web
+      - frontend
 
 volumes:
   postgres_data:
