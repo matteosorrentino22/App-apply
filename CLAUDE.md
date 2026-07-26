@@ -28,8 +28,15 @@ Riferimenti: `01-specifiche-funzionali-v4.md`, `02-specifiche-tecniche-v3.md`
 - Il *cosa* è definito nelle specifiche funzionali, il *come* nelle specifiche tecniche: in caso di dubbio implementativo, verificare prima lì
 
 ## Convenzioni di codice
-[Naming, struttura cartelle, stile - se non li hai ancora, lascia che
-sia Claude Code a proporli nel primo sprint e poi li aggiorni tu qui]
+Proposte nello Sprint 01, in vigore da qui in avanti:
+
+- **Struttura repo:** codice Django in `backend/`, deploy (`docker-compose.yml`, `docker/`) alla radice insieme alle specifiche e a `/sprints`. Il frontend React (da Sprint 18) andrà in `frontend/` allo stesso livello di `backend/`.
+- **Progetto Django:** cartella di settings/config si chiama `config` (non il nome dell'app), con `config/settings.py` unico (niente split `base/dev/prod`: la differenza dev/prod passa da variabili d'ambiente e da `docker-compose.yml` vs `docker-compose.prod.yml`, non da moduli di settings diversi — coerente con "no over-engineering").
+- **App Django:** vivono in `backend/apps/<nome_app>/`, importate come `apps.<nome_app>` in `INSTALLED_APPS`. Un'app per dominio funzionale (es. `accounts`, `common`; seguiranno `profiles`, `searches`, `jobs`, `cv`, `notifications` nei prossimi sprint), non un'unica app monolitica né un'app per modello.
+- **Migrazioni:** sempre generate e **committate** nel repository (mai in `.gitignore`); `makemigrations --check` deve restituire nessuna differenza prima di chiudere uno sprint che tocca i modelli.
+- **Config/segreti:** solo variabili d'ambiente (mai hardcoded), lette in `settings.py` con `os.environ.get(...)`; `.env.example` alla radice documenta le chiavi attese, `.env` reale mai committato.
+- **Docker:** un'unica immagine (`backend/Dockerfile`) condivisa da `web`/`worker`/`beat`, differenziati solo dal comando lanciato in `docker-compose.yml`.
+- **Stile Python:** niente docstring multi-riga salvo motivare un vincolo non ovvio (es. perché `AUTH_USER_MODEL` punta a un modello custom fin dal primo sprint); niente helper/astrazioni introdotte in anticipo su bisogni futuri.
 
 ## Cosa NON fare
 - Non introdurre dipendenze/librerie non necessarie senza chiedere
