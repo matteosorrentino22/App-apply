@@ -47,6 +47,49 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
   expect(consoleErrors, `Errori console rilevati: ${consoleErrors.join('\n')}`).toHaveLength(0)
 })
 
+test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI', async ({ page }) => {
+  const email = uniqueEmail()
+  const password = 'SuperSecret123!'
+  console.log('EXPERIENCE_TEST_EMAIL=' + email)
+
+  await page.goto('/register')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Registrati' }).click()
+  await expect(page).toHaveURL(/\/onboarding$/)
+
+  await page.getByRole('button', { name: 'Avanti' }).click()
+  await expect(page.getByText('Profilo', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Aggiungi azienda' }).click()
+  await page.getByLabel('Azienda').fill('Acme Srl')
+
+  const roleInputs = page.getByLabel('Ruolo', { exact: true })
+  const locationInputs = page.getByLabel('Località', { exact: true })
+  await roleInputs.nth(0).fill('Team Lead')
+  await locationInputs.nth(0).fill('Roma')
+
+  const chipInputs = page.getByLabel('Attività / competenze in questo ruolo')
+  await chipInputs.nth(0).fill('Coordinamento team')
+  await chipInputs.nth(0).press('Enter')
+  await chipInputs.nth(0).fill('Onboarding nuovi assunti')
+  await chipInputs.nth(0).press('Enter')
+
+  await page.getByRole('button', { name: 'Aggiungi un altro ruolo in questa azienda' }).click()
+  await roleInputs.nth(1).fill('Project Manager')
+  await locationInputs.nth(1).fill('Milano')
+  await chipInputs.nth(1).fill('Gestione stakeholder')
+  await chipInputs.nth(1).press('Enter')
+
+  // Un solo campo "Azienda" per i due ruoli: conferma che è un gruppo unico, non due righe indipendenti.
+  await expect(page.getByLabel('Azienda')).toHaveCount(1)
+  await expect(page.getByText('Coordinamento team')).toBeVisible()
+  await expect(page.getByText('Gestione stakeholder')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Salva profilo' }).click()
+  await expect(page.getByText('Crea la tua prima ricerca')).toBeVisible()
+})
+
 test('login con credenziali errate mostra un errore e non naviga oltre', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Email').fill('nonexistent-user@example.com')
@@ -79,7 +122,8 @@ test.describe('cambio lingua manuale', () => {
     await page.goto('/login')
     await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible()
 
-    await page.getByLabel('Lingua / Language').selectOption('it')
+    await page.getByRole('combobox', { name: 'Lingua / Language' }).click()
+    await page.getByRole('option', { name: 'IT' }).click()
     await expect(page.getByRole('heading', { name: 'Accedi' })).toBeVisible()
   })
 })

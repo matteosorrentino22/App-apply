@@ -57,3 +57,25 @@ Utente autenticato con profilo e ricerche configurate, pronto per l'uso della li
 - Verifica reale del round-trip Claude per l'import CV (richiede `ANTHROPIC_API_KEY` valida e ambiente con accesso a rete verso l'API Anthropic — non disponibile in questo sandbox); il percorso è comunque implementato e testato lato backend negli sprint precedenti.
 - Verifica dell'installabilità PWA effettiva (prompt "Aggiungi a schermata Home") e di un audit Lighthouse PWA completo, che richiedono un browser reale con interfaccia grafica — non eseguibile in questo ambiente headless.
 - `docker compose up --build` non eseguito realmente (nessun demone Docker in questo sandbox): la configurazione va validata dall'utente sul proprio VPS al primo deploy di questo sprint.
+
+---
+
+## Aggiornamento — Design system (2026-07-26)
+
+Intervento trasversale post-sprint, non un nuovo sprint numerato: nessuna API/logica funzionale toccata, solo styling e struttura dei componenti UI (come richiesto). Motivo: le schermate erano funzionalmente corrette ma con HTML non stilizzato.
+
+### Cosa è stato fatto
+- **Tailwind CSS v4** (`@tailwindcss/vite`, configurazione CSS-first via `@theme` in `src/index.css`, nessun `postcss.config.js` necessario) + **shadcn/ui** — componenti copiati come sorgente in `src/components/ui/` (`button`, `input`, `textarea`, `label`, `card`, `select`, `checkbox`, `radio-group`, `badge`), non un pacchetto: restano modificabili come qualunque altro file del repo. `components.json` presente per usare in futuro `npx shadcn add` su nuovi componenti con le stesse convenzioni.
+- **Design system**: palette beige/sabbia con un solo accento bruno caldo (non indaco/violetto, scartato su richiesta esplicita per contrasto col beige); scala semantica separata a 5 livelli per il punteggio job (rosso→verde), pensata per lo Sprint 19; font di sistema (`system-ui`, nessun webfont scaricato); token light/dark via `prefers-color-scheme`, coerenti con l'anteprima approvata in artifact prima dell'implementazione.
+- **Select nativa → componente Radix**: la tendina "Località"/switcher lingua non usa più `<select>` del browser (mai stilizzabile da aperta) ma `@radix-ui/react-select`, accessibile e coerente con la palette.
+- **Esperienze raggruppate per azienda** (`ExperienceGroupEditor.jsx`, nuovo): un'azienda può avere più ruoli annidati sotto (pattern "più posizioni", stesso usato da LinkedIn), ognuno con propria località e un elenco di attività/competenze a chip (`ChipInput.jsx`, nuovo componente riusabile). **Nessuna modifica al backend**: il modello `Experience` era già una riga per (azienda, ruolo, località, attività) — il raggruppamento è solo come il form presenta e compila i dati; al salvataggio ogni ruolo resta un'esperienza indipendente con l'azienda copiata, esattamente come prima. L'import da CV raggruppa lato client (`groupExperiencesByCompany`) l'elenco piatto restituito da Claude.
+- `ListSectionEditor` (istruzione/competenze/certificazioni/lingue) semplificato: rimosso il tipo di campo `lines` (testarea riga-per-riga), ormai inutilizzato dato che le esperienze hanno un editor dedicato.
+
+### Verifica eseguita
+- `npm run build` e `npm run lint`: nessun errore (solo warning preesistenti di `oxlint` sul fast-refresh dei file che esportano insieme componenti e varianti, non bloccanti).
+- Backend reale (Postgres/Redis locali) + `python manage.py test` → **84/84 passati**, nessuna regressione.
+- Test e2e Playwright aggiornati per il nuovo markup (switcher lingua non più un `<select>` nativo) + **nuovo test dedicato** che aggiunge due ruoli nella stessa azienda con attività a chip e verifica che il salvataggio produca due `Experience` distinte con lo stesso nome azienda — **6/6 passati**. Verificato anche via shell Django che i dati (azienda, ruolo, località, elenco attività) risultano persistiti esattamente come inseriti in UI.
+- Verifica visiva con screenshot reali (Playwright, tema chiaro e scuro) di login, onboarding (tutti e 3 gli step, incluso il nuovo editor esperienze) e lista: confrontati con l'artifact di design system approvato dall'utente prima dell'implementazione.
+
+### Cosa manca
+- Le altre schermate/card previste dal design system (lista job con punteggio ed azione diretta, dettaglio job con giustificazione) erano solo un mock nell'artifact: l'implementazione reale arriva con lo Sprint 19, quando esisteranno i dati veri da mostrare.

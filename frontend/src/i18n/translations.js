@@ -50,7 +50,14 @@ export const translations = {
       profileLinkedin: 'Link LinkedIn',
       profilePhoto: 'Foto profilo',
       experiences: 'Esperienze',
-      addExperience: 'Aggiungi esperienza',
+      experiencesHint:
+        'Raggruppate per azienda: se hai avuto più ruoli nella stessa azienda, aggiungili sotto la stessa scheda invece di ripeterla.',
+      addCompany: 'Aggiungi azienda',
+      addRole: 'Aggiungi un altro ruolo in questa azienda',
+      removeCompany: 'Rimuovi azienda',
+      removeRole: 'Rimuovi ruolo',
+      activities: 'Attività / competenze in questo ruolo',
+      activitiesPlaceholder: 'Scrivi e premi Invio…',
       educations: 'Istruzione',
       addEducation: 'Aggiungi titolo di studio',
       skills: 'Competenze',
@@ -63,7 +70,6 @@ export const translations = {
       company: 'Azienda',
       role: 'Ruolo',
       location: 'Località',
-      bullets: 'Punti (uno per riga)',
       institution: 'Istituto',
       titleField: 'Titolo',
       dates: 'Periodo',
@@ -87,6 +93,7 @@ export const translations = {
     common: {
       loading: 'Caricamento…',
       genericError: 'Qualcosa è andato storto. Riprova.',
+      or: 'oppure',
     },
   },
   en: {
@@ -136,7 +143,14 @@ export const translations = {
       profileLinkedin: 'LinkedIn link',
       profilePhoto: 'Profile photo',
       experiences: 'Experience',
-      addExperience: 'Add experience',
+      experiencesHint:
+        'Grouped by company: if you held several roles at the same company, add them under the same card instead of repeating it.',
+      addCompany: 'Add company',
+      addRole: 'Add another role at this company',
+      removeCompany: 'Remove company',
+      removeRole: 'Remove role',
+      activities: 'Activities / skills in this role',
+      activitiesPlaceholder: 'Type and press Enter…',
       educations: 'Education',
       addEducation: 'Add education',
       skills: 'Skills',
@@ -149,7 +163,6 @@ export const translations = {
       company: 'Company',
       role: 'Role',
       location: 'Location',
-      bullets: 'Bullet points (one per line)',
       institution: 'Institution',
       titleField: 'Title',
       dates: 'Dates',
@@ -173,6 +186,7 @@ export const translations = {
     common: {
       loading: 'Loading…',
       genericError: 'Something went wrong. Please try again.',
+      or: 'or',
     },
   },
 }

@@ -7,7 +7,7 @@ export default function ProtectedRoute({ children }) {
   const { t } = useLanguage()
 
   if (loading) {
-    return <p className="page-loading">{t('common.loading')}</p>
+    return <p className="mt-16 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
   }
   if (!user) {
     return <Navigate to="/login" replace />
