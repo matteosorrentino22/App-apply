@@ -30,6 +30,11 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.accounts",
     "apps.common",
+    "apps.profiles",
+    "apps.searches",
+    "apps.jobs",
+    "apps.cv",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -89,6 +94,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Foto profilo e PDF dei CV generati (apps.profiles.Profile.photo, apps.cv.CVDocument.pdf_file).
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "mediafiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
