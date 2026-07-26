@@ -12,6 +12,7 @@ from PIL import Image
 from apps.jobs.models import DailyQuota, Job
 from apps.profiles.models import Education, Experience, Profile, Skill
 
+from .enrichment import generate_cv_with_enrichment
 from .generation import generate_cv
 from .manual_generation import (
     ManualGenerationFailed,
@@ -367,3 +368,61 @@ class ManualCvGenerationTests(TestCase):
 
         job.refresh_from_db()
         self.assertFalse(job.is_archived)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class EnrichAndGenerateCvTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="enrich@example.com", email="enrich@example.com", password="pw-Enrich-12345!"
+        )
+        self.profile = Profile.objects.create(user=self.user)
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            score=3,
+        )
+        self.detail = {
+            "company": "Kuwait Petroleum",
+            "role": "Site Supervisor",
+            "location": "Kuwait City",
+            "start_date": None,
+            "end_date": None,
+            "bullets": ["Coordinato un team di 12 persone"],
+            "technologies": [],
+        }
+
+    def test_enrichment_not_saved_to_profile_by_default(self):
+        with patch(
+            "apps.cv.generation.generate_cv_content", return_value=_fake_content(0)
+        ) as mock_content:
+            cv_document = generate_cv_with_enrichment(self.job, self.detail, save_to_profile=False)
+
+        self.assertFalse(
+            self.profile.experiences.filter(company="Kuwait Petroleum").exists()
+        )
+        self.assertIn("Kuwait Petroleum", cv_document.enrichment_used)
+        self.assertIn("Kuwait Petroleum", mock_content.call_args.args[3])
+
+    def test_enrichment_saved_to_profile_when_requested(self):
+        with patch("apps.cv.generation.generate_cv_content", return_value=_fake_content(0)):
+            generate_cv_with_enrichment(self.job, self.detail, save_to_profile=True)
+
+        experience = self.profile.experiences.get(company="Kuwait Petroleum")
+        self.assertEqual(experience.role, "Site Supervisor")
+        self.assertEqual(experience.bullets, ["Coordinato un team di 12 persone"])
+
+    def test_enrichment_does_not_change_job_score(self):
+        score_before = self.job.score
+
+        with patch("apps.cv.generation.generate_cv_content", return_value=_fake_content(0)):
+            generate_cv_with_enrichment(self.job, self.detail, save_to_profile=False)
+
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.score, score_before)

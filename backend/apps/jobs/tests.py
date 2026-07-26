@@ -1,13 +1,16 @@
 import random
+import tempfile
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
+from rest_framework.test import APITestCase
 
 from apps.cv.models import CVDocument
+from apps.profiles.models import Profile
 from apps.searches.models import SavedSearch
 
 from .collection import collect_jobs_for_user
@@ -365,3 +368,68 @@ class NightlyCycleScheduleTests(TestCase):
         self.assertEqual(task.crontab.hour, "2")
         self.assertEqual(task.crontab.minute, "0")
         self.assertEqual(str(task.crontab.timezone), "Europe/Rome")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class EnrichAndGenerateCvApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="enrichapi@example.com",
+            email="enrichapi@example.com",
+            password="pw-EnrichApi-12345!",
+        )
+        Profile.objects.create(user=self.user)
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            score=3,
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_enrichment_with_save_to_profile_is_visible_via_profile_api(self):
+        payload = {
+            "company": "Kuwait Petroleum",
+            "role": "Site Supervisor",
+            "bullets": ["Coordinato un team di 12 persone"],
+            "save_to_profile": True,
+        }
+        with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
+            mock_generate_cv.return_value = MagicMock(pk=1)
+            response = self.client.post(
+                f"/api/jobs/{self.job.pk}/enrich-and-generate-cv/", payload, format="json"
+            )
+
+        self.assertEqual(response.status_code, 201)
+
+        profile_response = self.client.get("/api/profiles/me/")
+        experiences = profile_response.json()["experiences"]
+        self.assertTrue(
+            any(exp["company"] == "Kuwait Petroleum" for exp in experiences)
+        )
+
+    def test_enrichment_without_save_to_profile_is_not_in_profile_api(self):
+        payload = {
+            "company": "Kuwait Petroleum",
+            "role": "Site Supervisor",
+            "bullets": ["Coordinato un team di 12 persone"],
+            "save_to_profile": False,
+        }
+        with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
+            mock_generate_cv.return_value = MagicMock(pk=1)
+            response = self.client.post(
+                f"/api/jobs/{self.job.pk}/enrich-and-generate-cv/", payload, format="json"
+            )
+
+        self.assertEqual(response.status_code, 201)
+
+        profile_response = self.client.get("/api/profiles/me/")
+        experiences = profile_response.json()["experiences"]
+        self.assertFalse(
+            any(exp["company"] == "Kuwait Petroleum" for exp in experiences)
+        )
