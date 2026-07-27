@@ -1,9 +1,21 @@
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import PushSubscription
 from .serializers import PushSubscriptionSerializer
+
+
+class VapidPublicKeyView(APIView):
+    """Espone la chiave pubblica VAPID: il frontend la usa per
+    `PushManager.subscribe()` (Sprint 20) — non era esposta da nessun
+    endpoint, solo letta lato server per firmare gli invii (Sprint 17)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response({"public_key": settings.VAPID_PUBLIC_KEY})
 
 
 class PushSubscriptionView(APIView):

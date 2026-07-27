@@ -216,3 +216,25 @@ class PushSubscriptionApiTests(APITestCase):
         self.assertEqual(PushSubscription.objects.filter(user=self.user).count(), 1)
         subscription = PushSubscription.objects.get(user=self.user)
         self.assertEqual(subscription.p256dh_key, "p256dh-key-2")
+
+
+class VapidPublicKeyApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="vapid@example.com", email="vapid@example.com", password="pw-Vapid-12345!"
+        )
+        self.client.force_authenticate(self.user)
+
+    @patch("apps.notifications.views.settings.VAPID_PUBLIC_KEY", "test-public-key")
+    def test_returns_the_configured_public_key(self):
+        response = self.client.get("/api/notifications/vapid-public-key/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["public_key"], "test-public-key")
+
+    def test_requires_authentication(self):
+        self.client.force_authenticate(None)
+
+        response = self.client.get("/api/notifications/vapid-public-key/")
+
+        self.assertEqual(response.status_code, 401)
