@@ -19,6 +19,16 @@ DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
+# Dietro Caddy in produzione, Django deve fidarsi dell'header impostato dal
+# reverse proxy per sapere che la richiesta originale era HTTPS (altrimenti
+# SECURE_SSL_REDIRECT genera un loop di redirect) — 02-specifiche-tecniche-v3.md
+# §8.3. Disattivato in dev, dove non c'è TLS.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 AUTH_USER_MODEL = "accounts.User"
 
 INSTALLED_APPS = [
@@ -190,3 +200,14 @@ PRICE_IMPORT_EXTRA = Decimal(os.environ.get("PRICE_IMPORT_EXTRA", "0.50"))
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "admin@example.com")
+
+# Backup giornaliero del database su storage a oggetti esterno al VPS
+# (02-specifiche-tecniche-v3.md §8.4): compatibile con qualunque provider che
+# parli l'API S3 (es. Hetzner Object Storage, Backblaze B2), nessun servizio
+# proprietario. Backup saltato (con warning nei log) se il bucket non è
+# configurato, per non far fallire il ciclo Celery Beat in dev.
+BACKUP_S3_ENDPOINT_URL = os.environ.get("BACKUP_S3_ENDPOINT_URL", "")
+BACKUP_S3_BUCKET = os.environ.get("BACKUP_S3_BUCKET", "")
+BACKUP_S3_ACCESS_KEY = os.environ.get("BACKUP_S3_ACCESS_KEY", "")
+BACKUP_S3_SECRET_KEY = os.environ.get("BACKUP_S3_SECRET_KEY", "")
+BACKUP_S3_REGION = os.environ.get("BACKUP_S3_REGION", "auto")
