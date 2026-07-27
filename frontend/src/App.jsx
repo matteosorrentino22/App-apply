@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -10,6 +10,7 @@ import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/onboarding/OnboardingPage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
+import AccountPage from './pages/AccountPage'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -27,6 +28,22 @@ function AccountLanguageSync() {
   return null
 }
 
+function Topbar() {
+  const { user } = useAuth()
+  const { t } = useLanguage()
+
+  return (
+    <div className="mx-auto flex max-w-2xl items-center justify-end gap-4 px-4 pt-4">
+      {user && (
+        <Link to="/account" className="text-sm font-medium text-primary hover:underline">
+          {t('account.navLink')}
+        </Link>
+      )}
+      <LanguageSwitcher />
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <LanguageProvider>
@@ -34,9 +51,7 @@ export default function App() {
         <ToastProvider>
           <AccountLanguageSync />
           <BrowserRouter>
-            <div className="mx-auto flex max-w-2xl justify-end px-4 pt-4">
-              <LanguageSwitcher />
-            </div>
+            <Topbar />
             <Routes>
               <Route path="/" element={<Navigate to="/list" replace />} />
               <Route path="/login" element={<LoginPage />} />
@@ -62,6 +77,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <JobDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/account"
+                element={
+                  <ProtectedRoute>
+                    <AccountPage />
                   </ProtectedRoute>
                 }
               />

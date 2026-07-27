@@ -47,10 +47,14 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             "id",
             "email",
             "plan",
+            "extra_credit",
             "timezone",
             "interface_language",
             "cv_language_mode",
             "cv_include_photo",
             "objective_statement",
         ]
-        read_only_fields = ["id", "email", "plan"]
+        # extra_credit è gestito solo da amministratore (Django Admin, §3
+        # funzionali "Gestione account": nessun checkout/pagamento in UI) —
+        # esposto qui in lettura per la schermata account (Sprint 20).
+        read_only_fields = ["id", "email", "plan", "extra_credit"]
