@@ -426,3 +426,30 @@ class EnrichAndGenerateCvTests(TestCase):
 
         self.job.refresh_from_db()
         self.assertEqual(self.job.score, score_before)
+
+    def test_save_to_profile_works_for_a_user_without_an_existing_profile(self):
+        # Un utente che non ha ancora completato l'onboarding non ha un
+        # Profile finché non salva qualcosa per la prima volta (§5 tecniche
+        # onboarding, stesso get_or_create di ProfileSectionViewSet):
+        # accedere a job.user.profile direttamente solleverebbe
+        # RelatedObjectDoesNotExist (Sprint 19, bug scoperto da un test e2e).
+        user_without_profile = User.objects.create_user(
+            username="noprofile@example.com", email="noprofile@example.com", password="pw-NoProf-12345!"
+        )
+        job = Job.objects.create(
+            user=user_without_profile,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-noprofile",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/2",
+            score=3,
+        )
+
+        with patch("apps.cv.generation.generate_cv_content", return_value=_fake_content(0)):
+            generate_cv_with_enrichment(job, self.detail, save_to_profile=True)
+
+        experience = Experience.objects.get(profile__user=user_without_profile, company="Kuwait Petroleum")
+        self.assertEqual(experience.role, "Site Supervisor")

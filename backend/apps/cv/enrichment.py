@@ -1,4 +1,4 @@
-from apps.profiles.models import Experience
+from apps.profiles.models import Experience, Profile
 
 from .manual_generation import request_manual_cv_generation
 
@@ -22,8 +22,13 @@ def generate_cv_with_enrichment(job, detail, save_to_profile=False):
     enrichment_text = _format_enrichment_text(detail)
 
     if save_to_profile:
+        # `job.user.profile` solleverebbe RelatedObjectDoesNotExist per un
+        # utente che non ha ancora completato l'onboarding (nessun Profile
+        # creato finché non salva la prima volta, §5 tecniche onboarding) —
+        # stesso get_or_create già usato da ProfileSectionViewSet.
+        profile, _ = Profile.objects.get_or_create(user=job.user)
         Experience.objects.create(
-            profile=job.user.profile,
+            profile=profile,
             company=detail["company"],
             role=detail["role"],
             location=detail.get("location", ""),

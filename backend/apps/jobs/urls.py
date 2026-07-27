@@ -5,6 +5,7 @@ from .views import (
     EnrichAndGenerateCvView,
     GenerateCvView,
     ImportJobView,
+    JobDetailView,
     JobListView,
     MarkApplicationDoneView,
     UnarchiveJobView,
@@ -13,6 +14,7 @@ from .views import (
 urlpatterns = [
     path("jobs/", JobListView.as_view(), name="job-list"),
     path("jobs/import/", ImportJobView.as_view(), name="job-import"),
+    path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
     path("jobs/<int:pk>/generate-cv/", GenerateCvView.as_view(), name="job-generate-cv"),
     path(
         "jobs/<int:pk>/enrich-and-generate-cv/",
