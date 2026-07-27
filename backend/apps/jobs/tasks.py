@@ -92,6 +92,22 @@ def run_nightly_cycle_for_user(user):
 def run_nightly_cycle():
     """Task orchestratore schedulato (Celery Beat, 02:00 Europe/Rome —
     02-specifiche-tecniche-v3.md §5.1, §7): raccolta → scoring → cap di
-    intake → CV automatico per ogni utente."""
+    intake → CV automatico per ogni utente.
+
+    Un fallimento per singolo utente (es. fonte Apify non raggiungibile) non
+    deve impedire la raccolta per gli utenti successivi del batch: l'utente
+    vede semplicemente nessun nuovo job quella notte, senza errore tecnico
+    (01-specifiche-funzionali-v4.md §6); la diagnosi resta in `RunLog`."""
     for user in User.objects.all():
-        run_nightly_cycle_for_user(user)
+        started_at = timezone.now()
+        try:
+            run_nightly_cycle_for_user(user)
+        except Exception as exc:
+            RunLog.objects.create(
+                user=user,
+                task_type=RunLog.TaskType.COLLECTION,
+                status=RunLog.Status.FAILURE,
+                message=str(exc),
+                started_at=started_at,
+                finished_at=timezone.now(),
+            )

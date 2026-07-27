@@ -380,6 +380,44 @@ class NightlyCycleScheduleTests(TestCase):
         self.assertEqual(str(task.crontab.timezone), "Europe/Rome")
 
 
+class RunNightlyCycleOrchestratorTests(TestCase):
+    """Sprint 22, §6 "comportamento in caso di fonte non disponibile": un
+    fallimento per un singolo utente (es. sorgente Apify irraggiungibile) non
+    deve bloccare la raccolta per gli utenti successivi del batch — bug reale
+    trovato durante la QA di fine sprint (`run_nightly_cycle` non isolava le
+    eccezioni per utente, a differenza di `_generate_automatic_cv`)."""
+
+    def setUp(self):
+        self.failing_user = User.objects.create_user(
+            username="nightly-fail@example.com",
+            email="nightly-fail@example.com",
+            password="pw-Fail-12345!",
+        )
+        self.healthy_user = User.objects.create_user(
+            username="nightly-ok@example.com", email="nightly-ok@example.com", password="pw-Ok-12345!"
+        )
+
+    def test_failure_for_one_user_does_not_block_the_rest_of_the_batch(self):
+        from . import tasks as tasks_module
+
+        processed = []
+
+        def fake_run_for_user(user):
+            processed.append(user.pk)
+            if user.pk == self.failing_user.pk:
+                raise ConnectionError("fonte non raggiungibile")
+            return {}
+
+        with patch.object(tasks_module, "run_nightly_cycle_for_user", side_effect=fake_run_for_user):
+            tasks_module.run_nightly_cycle()
+
+        self.assertEqual(set(processed), {self.failing_user.pk, self.healthy_user.pk})
+
+        run_log = RunLog.objects.get(user=self.failing_user, task_type=RunLog.TaskType.COLLECTION)
+        self.assertEqual(run_log.status, RunLog.Status.FAILURE)
+        self.assertIn("fonte non raggiungibile", run_log.message)
+
+
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class EnrichAndGenerateCvApiTests(APITestCase):
     def setUp(self):
@@ -678,6 +716,47 @@ class JobListTests(TestCase):
 
         result_ids = {job.pk for job in results}
         self.assertEqual(result_ids, {today_job.pk, old_job.pk})
+
+    def test_today_filter_follows_each_users_own_timezone(self):
+        """Sprint 22, §7 requisiti trasversali: "oggi" in lista segue il
+        fuso locale dell'utente, non un riferimento unico di sistema. Stesso
+        istante assoluto di raccolta, due utenti su fusi diversi: chi è già
+        "domani" nel proprio fuso lo vede in "oggi", chi è ancora "ieri" no.
+        """
+        kiribati_user = User.objects.create_user(
+            username="list-kiribati@example.com",
+            email="list-kiribati@example.com",
+            password="pw-Kiribati-12345!",
+            timezone="Pacific/Kiritimati",
+        )
+
+        # 23:00 UTC del 27/07: le 01:00 CEST del 28/07 a Roma (già "domani"
+        # lì), ma solo le 21:30 UTC del 27/07 restano "oggi" per Roma;
+        # le 13:00 (+14) del 28/07 a Kiritimati, quindi "oggi" anche per loro.
+        fixed_now = timezone.datetime(2026, 7, 27, 23, 0, tzinfo=timezone.get_fixed_timezone(0))
+        job_instant = timezone.datetime(2026, 7, 27, 21, 30, tzinfo=timezone.get_fixed_timezone(0))
+
+        rome_job = self._make_job("tz-rome-1")
+        Job.objects.filter(pk=rome_job.pk).update(date_collected=job_instant)
+
+        kiribati_job = Job.objects.create(
+            user=kiribati_user,
+            source=Job.Source.LINKEDIN,
+            external_id="tz-kiribati-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+        )
+        Job.objects.filter(pk=kiribati_job.pk).update(date_collected=job_instant)
+
+        with patch("apps.jobs.list_service.dj_timezone.now", return_value=fixed_now):
+            rome_today_ids = {job.pk for job in list_jobs(self.user, "main", period="today")}
+            kiribati_today_ids = {job.pk for job in list_jobs(kiribati_user, "main", period="today")}
+
+        self.assertNotIn(rome_job.pk, rome_today_ids)
+        self.assertIn(kiribati_job.pk, kiribati_today_ids)
 
     def test_score_and_status_filters_intersect_correctly_in_every_section(self):
         sections = [
