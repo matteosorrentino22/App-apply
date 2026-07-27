@@ -791,6 +791,66 @@ class ArchiveJobApiTests(APITestCase):
         self.assertEqual(self.job.status, Job.Status.CV_GENERATED)
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class JobDetailApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="detail@example.com", email="detail@example.com", password="pw-Detail-12345!"
+        )
+        self.other_user = User.objects.create_user(
+            username="other-detail@example.com",
+            email="other-detail@example.com",
+            password="pw-Other-12345!",
+        )
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+            status=Job.Status.NEW,
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_returns_job_detail(self):
+        response = self.client.get(f"/api/jobs/{self.job.pk}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], self.job.pk)
+        self.assertEqual(response.data["title"], "Project Manager")
+
+    def test_another_users_job_is_not_found(self):
+        self.client.force_authenticate(self.other_user)
+
+        response = self.client.get(f"/api/jobs/{self.job.pk}/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_cv_pdf_url_is_null_without_a_generated_cv(self):
+        response = self.client.get(f"/api/jobs/{self.job.pk}/")
+
+        self.assertIsNone(response.data["cv_pdf_url"])
+
+    def test_cv_pdf_url_points_to_the_latest_cv_document(self):
+        from django.core.files.base import ContentFile
+
+        older = CVDocument.objects.create(
+            job=self.job, user=self.user, html_source="<html></html>", generation_type="manual"
+        )
+        older.pdf_file.save("older.pdf", ContentFile(b"%PDF-1.4 older"), save=True)
+        newer = CVDocument.objects.create(
+            job=self.job, user=self.user, html_source="<html></html>", generation_type="manual"
+        )
+        newer.pdf_file.save("newer.pdf", ContentFile(b"%PDF-1.4 newer"), save=True)
+
+        response = self.client.get(f"/api/jobs/{self.job.pk}/")
+
+        self.assertIn("newer", response.data["cv_pdf_url"])
+
+
 class MarkApplicationDoneTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -881,3 +941,47 @@ class MarkApplicationDoneApiTests(APITestCase):
         self.assertEqual(response.status_code, 409)
         job.refresh_from_db()
         self.assertEqual(job.status, Job.Status.NEW)
+
+
+class SeedE2eJobsCommandTests(TestCase):
+    """Il comando `seed_e2e_jobs` (Sprint 19) crea i fixture usati dai test
+    e2e Playwright del frontend — verificato qui solo per non lasciare senza
+    copertura un comando che scrive dati, non perché la UI lo usi."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="e2e-seed@example.com", email="e2e-seed@example.com", password="pw-Seed-12345!"
+        )
+
+    @override_settings(DEBUG=True)
+    def test_creates_the_expected_jobs(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        call_command("seed_e2e_jobs", "e2e-seed@example.com", stdout=StringIO())
+
+        jobs = Job.objects.filter(user=self.user, external_id__startswith="e2e-")
+        self.assertEqual(jobs.count(), 6)
+        self.assertTrue(jobs.filter(is_archived=True).exists())
+        self.assertTrue(jobs.filter(origin=Job.Origin.IMPORTED).exists())
+
+    @override_settings(DEBUG=True)
+    def test_is_idempotent(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        call_command("seed_e2e_jobs", "e2e-seed@example.com", stdout=StringIO())
+        call_command("seed_e2e_jobs", "e2e-seed@example.com", stdout=StringIO())
+
+        self.assertEqual(Job.objects.filter(user=self.user, external_id__startswith="e2e-").count(), 6)
+
+    @override_settings(DEBUG=False)
+    def test_refuses_to_run_without_debug(self):
+        from io import StringIO
+
+        from django.core.management import CommandError, call_command
+
+        with self.assertRaises(CommandError):
+            call_command("seed_e2e_jobs", "e2e-seed@example.com", stdout=StringIO())

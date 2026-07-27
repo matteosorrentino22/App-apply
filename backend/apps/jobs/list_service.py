@@ -58,7 +58,7 @@ def list_jobs(user, section, period=DEFAULT_PERIOD, scores=None, statuses=None, 
     resta confinata alla sezione corrente e **ignora** ogni altro filtro
     (temporale, score, stato) — così come richiesto esplicitamente dalle
     specifiche."""
-    queryset = Job.objects.filter(user=user).filter(SECTION_FILTERS[section])
+    queryset = Job.objects.filter(user=user).filter(SECTION_FILTERS[section]).prefetch_related("cv_documents")
 
     if query:
         queryset = queryset.filter(

@@ -24,7 +24,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('/onboarding')
+      navigate('/list')
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 400

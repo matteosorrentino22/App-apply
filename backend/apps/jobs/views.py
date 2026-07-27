@@ -100,6 +100,18 @@ class EnrichAndGenerateCvView(APIView):
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
 
 
+class JobDetailView(APIView):
+    """Dettaglio di un singolo Job dell'utente autenticato — serve alla UI
+    (Sprint 19) per una vista di dettaglio deep-linkabile/sopravvivente al
+    refresh, senza dover tenere lo stato solo lato client dalla lista."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        return Response(JobSerializer(job).data)
+
+
 class JobListView(APIView):
     """Lista job per sezione, con filtri temporali/score/stato e ricerca
     testuale confinata alla sezione (Sprint 15, 01-specifiche-funzionali-v4.md
