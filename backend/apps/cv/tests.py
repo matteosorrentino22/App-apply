@@ -7,6 +7,7 @@ import pdfplumber
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 
 from apps.jobs.models import DailyQuota, Job
@@ -170,6 +171,24 @@ class GenerateCvTests(TestCase):
         self.assertIn("Laurea in Economia", cv_document.html_source)
         self.assertIn("Tesi su project management internazionale.", cv_document.html_source)
 
+    def test_profile_edit_after_generation_does_not_change_already_produced_cv(self):
+        """Sprint 22, §7 profilo/onboarding: una modifica al profilo master
+        si riflette sui CV generati successivamente, non su quelli già
+        prodotti — `html_source` è uno snapshot al momento della
+        generazione, non un riferimento vivo al profilo."""
+        self._add_experiences(1)
+        with patch("apps.cv.generation.generate_cv_content", return_value=_fake_content(1)):
+            cv_document = generate_cv(self.job, CVDocument.GenerationType.MANUAL)
+
+        self.assertIn("Milano", cv_document.html_source)
+
+        self.profile.city = "Torino"
+        self.profile.save()
+
+        cv_document.refresh_from_db()
+        self.assertIn("Milano", cv_document.html_source)
+        self.assertNotIn("Torino", cv_document.html_source)
+
     def test_english_mode_requests_english_regardless_of_job_language(self):
         self._add_experiences(1)
         self.user.cv_language_mode = User.CvLanguageMode.ENGLISH
@@ -252,6 +271,37 @@ class ManualCvGenerationTests(TestCase):
         self.assertEqual(job.status, Job.Status.CV_GENERATED)
         self.assertFalse(job.cv_generation_in_progress)
         self.assertIsNotNone(job.date_cv_generated)
+
+    def test_daily_quota_resets_on_europe_rome_date_regardless_of_user_timezone(self):
+        """Sprint 22, §7 requisiti trasversali: il reset dei massimali segue
+        un riferimento orario unico (Europe/Rome), non il fuso dell'utente
+        (a differenza di "oggi" in lista e delle notifiche). Fissato un
+        istante in cui la data è già cambiata a Roma ma non nel fuso
+        dell'utente, la quota deve usare la data di Roma."""
+        import datetime
+
+        user = User.objects.create_user(
+            username="quota-midway@example.com",
+            email="quota-midway@example.com",
+            password="pw-Midway-12345!",
+            plan=User.Plan.FREE,
+            timezone="Pacific/Midway",
+        )
+        job = self._make_job(user)
+
+        # 23:30 UTC del 27/07: già le 01:30 CEST del 28/07 a Roma (data
+        # cambiata), ma solo le 12:30 del 27/07 a Midway (UTC-11, data
+        # ancora invariata).
+        fixed_now = timezone.datetime(2026, 7, 27, 23, 30, tzinfo=timezone.get_fixed_timezone(0))
+
+        with patch("apps.cv.manual_generation.timezone.now", return_value=fixed_now), patch(
+            "apps.cv.manual_generation.generate_cv"
+        ) as mock_generate_cv:
+            mock_generate_cv.return_value = "cv-doc"
+            request_manual_cv_generation(job)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.date, datetime.date(2026, 7, 28))
 
     def test_free_user_second_generation_rejected_without_enough_credit(self):
         user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("0.50"))
