@@ -48,9 +48,7 @@ def score_job_with_claude(job, profile):
     response = client.messages.create(
         model=settings.ANTHROPIC_SCORING_MODEL,
         max_tokens=2000,
-        thinking={"type": "disabled"},
         output_config={
-            "effort": "medium",
             "format": {"type": "json_schema", "schema": SCORE_JSON_SCHEMA},
         },
         system=SCORING_SYSTEM_PROMPT,
