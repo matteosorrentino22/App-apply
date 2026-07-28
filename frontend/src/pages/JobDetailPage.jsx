@@ -141,9 +141,12 @@ export default function JobDetailPage() {
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <Badge data-testid="job-status-badge" variant={job.status === 'new' ? 'neutral' : 'primary'}>
-              {t(`jobs.status_${job.status}`)}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge data-testid="job-status-badge" variant={job.status === 'new' ? 'neutral' : 'primary'}>
+                {t(`jobs.status_${job.status}`)}
+              </Badge>
+              {job.matched_search && <Badge variant="neutral">{job.matched_search}</Badge>}
+            </div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-balance">{job.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {job.company}

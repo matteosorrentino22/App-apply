@@ -34,7 +34,7 @@ class MultiUserIsolationTests(APITestCase):
         Profile.objects.create(user=self.user_a, summary="Profilo di A")
 
         self.search_a = SavedSearch.objects.create(
-            user=self.user_a, name="Ricerca di A", keywords="developer", location="Roma"
+            user=self.user_a, keywords="developer", city="Roma", country="Italia"
         )
 
         self.job_a = Job.objects.create(
@@ -60,10 +60,12 @@ class MultiUserIsolationTests(APITestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_cannot_modify_another_users_saved_search(self):
-        response = self.client.patch(f"/api/searches/{self.search_a.pk}/", {"name": "Rubata"}, format="json")
+        response = self.client.patch(
+            f"/api/searches/{self.search_a.pk}/", {"keywords": "Rubata"}, format="json"
+        )
         self.assertEqual(response.status_code, 404)
         self.search_a.refresh_from_db()
-        self.assertEqual(self.search_a.name, "Ricerca di A")
+        self.assertEqual(self.search_a.keywords, "developer")
 
     def test_cannot_delete_another_users_saved_search(self):
         response = self.client.delete(f"/api/searches/{self.search_a.pk}/")

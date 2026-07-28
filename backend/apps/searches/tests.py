@@ -23,7 +23,7 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
     def _create(self, index=0):
         return self.client.post(
             "/api/searches/",
-            {"name": f"Ricerca {index}", "keywords": "Project Manager", "location": "Roma"},
+            {"keywords": "Project Manager", "city": "Roma", "country": "Italia"},
             format="json",
         )
 
@@ -40,9 +40,11 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
     def test_activating_a_search_on_free_plan_deactivates_the_previous_one(self):
         self.client.force_authenticate(self.free_user)
         search_a = SavedSearch.objects.create(
-            user=self.free_user, name="A", keywords="PM", location="Roma", is_active=True
+            user=self.free_user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
-        search_b = SavedSearch.objects.create(user=self.free_user, name="B", keywords="PM", location="Milano")
+        search_b = SavedSearch.objects.create(
+            user=self.free_user, keywords="PM", city="Milano", country="Italia"
+        )
 
         response = self.client.post(f"/api/searches/{search_b.pk}/activate/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -57,7 +59,7 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
     def test_pro_user_can_activate_up_to_fifty_searches(self):
         searches = [
             SavedSearch.objects.create(
-                user=self.pro_user, name=f"Ricerca {i}", keywords="PM", location="Roma"
+                user=self.pro_user, keywords="PM", city="Roma", country="Italia"
             )
             for i in range(51)
         ]
@@ -76,9 +78,9 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
         for i in range(15):
             SavedSearch.objects.create(
                 user=self.pro_user,
-                name=f"Ricerca {i}",
                 keywords="PM",
-                location="Roma",
+                city="Roma",
+                country="Italia",
                 is_active=(i < 5),
             )
         self.assertEqual(
@@ -99,11 +101,40 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
 
     def test_get_active_searches_returns_only_active_ones(self):
         active = SavedSearch.objects.create(
-            user=self.free_user, name="Attiva", keywords="PM", location="Roma", is_active=True
+            user=self.free_user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
         SavedSearch.objects.create(
-            user=self.free_user, name="Inattiva", keywords="PM", location="Roma", is_active=False
+            user=self.free_user, keywords="PM", city="Roma", country="Italia", is_active=False
         )
 
         active_searches = services.get_active_searches(self.free_user)
         self.assertEqual(list(active_searches), [active])
+
+    def test_user_can_update_keywords_and_city_country_of_a_saved_search(self):
+        self.client.force_authenticate(self.free_user)
+        search = SavedSearch.objects.create(
+            user=self.free_user, keywords="PM", city="Roma", country="Italia"
+        )
+
+        response = self.client.patch(
+            f"/api/searches/{search.pk}/",
+            {"keywords": "Business Analyst", "city": "Milano", "country": "Italia"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        search.refresh_from_db()
+        self.assertEqual(search.keywords, "Business Analyst")
+        self.assertEqual(search.city, "Milano")
+
+    def test_user_cannot_update_another_users_saved_search(self):
+        self.client.force_authenticate(self.pro_user)
+        other_search = SavedSearch.objects.create(
+            user=self.free_user, keywords="PM", city="Roma", country="Italia"
+        )
+
+        response = self.client.patch(
+            f"/api/searches/{other_search.pk}/", {"keywords": "Hacked"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

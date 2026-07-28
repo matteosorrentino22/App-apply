@@ -6,6 +6,7 @@ import { updateMe } from '../api/auth'
 import {
   fetchSearches,
   createSearch,
+  updateSearch,
   deleteSearch,
   activateSearch,
   deactivateSearch,
@@ -22,9 +23,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import CityAutocomplete from '@/components/CityAutocomplete'
 import { SUPPORTED_LANGUAGES } from '../i18n/translations'
 
-const EMPTY_SEARCH = { name: '', keywords: '', location: '' }
+const EMPTY_SEARCH = { keywords: '', city: '', country: '' }
 
 function formatCredit(value) {
   const amount = Number(value ?? 0)
@@ -41,6 +43,8 @@ export default function AccountPage() {
   const [newSearch, setNewSearch] = useState(EMPTY_SEARCH)
   const [searchError, setSearchError] = useState('')
   const [busySearchId, setBusySearchId] = useState(null)
+  const [editingSearchId, setEditingSearchId] = useState(null)
+  const [editedSearch, setEditedSearch] = useState(EMPTY_SEARCH)
 
   const [notificationStatus, setNotificationStatus] = useState('idle')
 
@@ -107,6 +111,34 @@ export default function AccountPage() {
           }),
         )
       }
+    } catch (err) {
+      setSearchError(
+        err instanceof ApiError && err.data?.detail ? err.data.detail : t('common.genericError'),
+      )
+    } finally {
+      setBusySearchId(null)
+    }
+  }
+
+  function handleStartEdit(search) {
+    setEditingSearchId(search.id)
+    setEditedSearch({ keywords: search.keywords, city: search.city, country: search.country })
+    setSearchError('')
+  }
+
+  function handleCancelEdit() {
+    setEditingSearchId(null)
+    setEditedSearch(EMPTY_SEARCH)
+  }
+
+  async function handleSaveEdit(event) {
+    event.preventDefault()
+    setBusySearchId(editingSearchId)
+    setSearchError('')
+    try {
+      const updated = await updateSearch(editingSearchId, editedSearch)
+      setSearches((current) => current.map((s) => (s.id === updated.id ? updated : s)))
+      setEditingSearchId(null)
     } catch (err) {
       setSearchError(
         err instanceof ApiError && err.data?.detail ? err.data.detail : t('common.genericError'),
@@ -204,56 +236,97 @@ export default function AccountPage() {
             <p className="text-sm text-muted-foreground">{t('account.noSearches')}</p>
           )}
 
-          {searches.map((search) => (
-            <div
-              key={search.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-foreground">{search.name}</span>
-                  {search.is_active && <Badge variant="primary">{t('account.activeBadge')}</Badge>}
+          {searches.map((search) =>
+            editingSearchId === search.id ? (
+              <form
+                key={search.id}
+                onSubmit={handleSaveEdit}
+                className="flex flex-col gap-3 rounded-lg border border-border p-3"
+              >
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex min-w-32 flex-1 flex-col gap-1.5">
+                    <Label htmlFor={`edit-search-keywords-${search.id}`}>
+                      {t('onboarding.searchKeywords')}
+                    </Label>
+                    <Input
+                      id={`edit-search-keywords-${search.id}`}
+                      value={editedSearch.keywords}
+                      onChange={(e) =>
+                        setEditedSearch({ ...editedSearch, keywords: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <CityAutocomplete
+                    cityId={`edit-search-city-${search.id}`}
+                    countryId={`edit-search-country-${search.id}`}
+                    city={editedSearch.city}
+                    country={editedSearch.country}
+                    onChange={({ city, country }) =>
+                      setEditedSearch({ ...editedSearch, city, country })
+                    }
+                  />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {search.keywords} · {search.location}
-                </p>
+                <div className="flex items-center gap-2">
+                  <Button type="submit" size="sm" disabled={busySearchId === search.id}>
+                    {t('account.save')}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleCancelEdit}>
+                    {t('account.cancel')}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div
+                key={search.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground">{search.keywords}</span>
+                    {search.is_active && <Badge variant="primary">{t('account.activeBadge')}</Badge>}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {search.city}, {search.country}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={busySearchId === search.id}
+                    onClick={() => handleToggleActive(search)}
+                  >
+                    {search.is_active ? t('account.deactivate') : t('account.activate')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busySearchId === search.id}
+                    onClick={() => handleStartEdit(search)}
+                  >
+                    {t('account.edit')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busySearchId === search.id}
+                    onClick={() => handleDeleteSearch(search)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    {t('account.delete')}
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={busySearchId === search.id}
-                  onClick={() => handleToggleActive(search)}
-                >
-                  {search.is_active ? t('account.deactivate') : t('account.activate')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busySearchId === search.id}
-                  onClick={() => handleDeleteSearch(search)}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  {t('account.delete')}
-                </Button>
-              </div>
-            </div>
-          ))}
+            ),
+          )}
 
           <form onSubmit={handleCreateSearch} className="flex flex-col gap-3 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-foreground">{t('account.newSearch')}</h3>
             <div className="flex flex-wrap gap-3">
-              <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                <Label htmlFor="new-search-name">{t('onboarding.searchName')}</Label>
-                <Input
-                  id="new-search-name"
-                  value={newSearch.name}
-                  onChange={(e) => setNewSearch({ ...newSearch, name: e.target.value })}
-                  required
-                />
-              </div>
               <div className="flex min-w-32 flex-1 flex-col gap-1.5">
                 <Label htmlFor="new-search-keywords">{t('onboarding.searchKeywords')}</Label>
                 <Input
@@ -263,15 +336,13 @@ export default function AccountPage() {
                   required
                 />
               </div>
-              <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                <Label htmlFor="new-search-location">{t('onboarding.searchLocation')}</Label>
-                <Input
-                  id="new-search-location"
-                  value={newSearch.location}
-                  onChange={(e) => setNewSearch({ ...newSearch, location: e.target.value })}
-                  required
-                />
-              </div>
+              <CityAutocomplete
+                cityId="new-search-city"
+                countryId="new-search-country"
+                city={newSearch.city}
+                country={newSearch.country}
+                onChange={({ city, country }) => setNewSearch({ ...newSearch, city, country })}
+              />
             </div>
             <Button type="submit" className="w-fit">
               {t('account.addSearch')}

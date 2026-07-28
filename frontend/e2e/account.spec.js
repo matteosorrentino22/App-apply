@@ -60,12 +60,13 @@ test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, re
   const { email, password } = await registerUser(request, baseURL)
   await login(page, email, password)
 
-  await page.getByLabel('Nome ricerca').fill('PM Milano')
   await page.getByLabel('Parole chiave').fill('project manager')
-  await page.getByLabel('Località').fill('Milano')
+  await page.getByLabel('Città', { exact: true }).fill('Milano')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
   await page.getByRole('button', { name: 'Aggiungi ricerca' }).click()
 
-  await expect(page.getByText('project manager · Milano')).toBeVisible()
+  await expect(page.getByText('project manager', { exact: true })).toBeVisible()
+  await expect(page.getByText('Milano, Italia')).toBeVisible()
 
   await page.getByRole('button', { name: 'Attiva', exact: true }).click()
   await expect(page.getByText('In uso')).toBeVisible()
@@ -74,7 +75,7 @@ test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, re
   await expect(page.getByText('In uso')).not.toBeVisible()
 
   await page.getByRole('button', { name: 'Elimina' }).click()
-  await expect(page.getByText('project manager · Milano')).not.toBeVisible()
+  await expect(page.getByText('Milano, Italia')).not.toBeVisible()
   await expect(page.getByText('Nessuna ricerca salvata.')).toBeVisible()
 })
 
@@ -89,15 +90,15 @@ test('mostra il messaggio del limite di piano oltre le ricerche salvate consenti
   for (let i = 0; i < 10; i += 1) {
     await request.post(`${baseURL}/api/searches/`, {
       headers: { Authorization: `Token ${token}` },
-      data: { name: `Ricerca ${i}`, keywords: 'developer', location: 'Roma' },
+      data: { keywords: `developer ${i}`, city: 'Roma', country: 'Italia' },
     })
   }
 
   await login(page, email, password)
 
-  await page.getByLabel('Nome ricerca').fill('Undicesima')
   await page.getByLabel('Parole chiave').fill('developer')
-  await page.getByLabel('Località').fill('Roma')
+  await page.getByLabel('Città', { exact: true }).fill('Roma')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
   await page.getByRole('button', { name: 'Aggiungi ricerca' }).click()
 
   await expect(

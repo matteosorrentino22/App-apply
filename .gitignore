@@ -17,6 +17,10 @@ mediafiles/
 
 # Docker / data volumes
 postgres-data/
+backend/celerybeat-schedule
+
+# Backup locali (pg_dump), mai nel repository
+backups/
 
 # Frontend
 frontend/node_modules/

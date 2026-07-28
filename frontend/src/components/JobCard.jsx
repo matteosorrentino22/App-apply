@@ -26,7 +26,10 @@ export default function JobCard({ job, onSwipe, swipeLabel, onGenerateCv, genera
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {statusBadge}
+          <div className="flex flex-wrap items-center gap-2">
+            {statusBadge}
+            {job.matched_search && <Badge variant="neutral">{job.matched_search}</Badge>}
+          </div>
           <h3 className="mt-2 text-base font-semibold text-foreground">{job.title}</h3>
           <p className="text-sm text-muted-foreground">
             {job.company}

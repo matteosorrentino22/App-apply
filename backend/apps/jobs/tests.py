@@ -54,9 +54,7 @@ class CollectJobsForUserTests(TestCase):
         )
         SavedSearch.objects.create(
             user=self.free_user,
-            name="Ricerca",
-            keywords="Project Manager",
-            location="Roma",
+            keywords="Project Manager", city="Roma", country="Italia",
             is_active=True,
         )
 
@@ -105,7 +103,7 @@ class CollectJobsForUserTests(TestCase):
             plan=User.Plan.PRO,
         )
         SavedSearch.objects.create(
-            user=pro_user, name="Ricerca", keywords="PM", location="Roma", is_active=True
+            user=pro_user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
         offers = [_offer(f"ext-{i}") for i in range(150)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
@@ -120,6 +118,15 @@ class CollectJobsForUserTests(TestCase):
             created = collect_jobs_for_user(self.free_user)
         mock_get_source.assert_not_called()
         self.assertEqual(created, [])
+
+    def test_matched_search_from_offer_is_saved_on_the_job(self):
+        offers = [_offer("ext-1", matched_search="Project Manager - Roma, Italia")]
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source:
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            collect_jobs_for_user(self.free_user)
+
+        job = Job.objects.get(user=self.free_user, external_id="ext-1")
+        self.assertEqual(job.matched_search, "Project Manager - Roma, Italia")
 
 
 FAKE_SCORE_RESULT = {
@@ -265,7 +272,7 @@ class RunNightlyCycleForUserTests(TestCase):
             username="nightly@example.com", email="nightly@example.com", password="pw-Night-12345!"
         )
         SavedSearch.objects.create(
-            user=self.user, name="Ricerca", keywords="PM", location="Roma", is_active=True
+            user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
 
     def test_orchestrates_collection_scoring_and_cap_with_run_log(self):
@@ -293,7 +300,7 @@ class AutomaticCvGenerationInNightlyCycleTests(TestCase):
             username="autocv@example.com", email="autocv@example.com", password="pw-Auto-12345!"
         )
         SavedSearch.objects.create(
-            user=self.user, name="Ricerca", keywords="PM", location="Roma", is_active=True
+            user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
 
     def _run_cycle_with_scores(self, scores):

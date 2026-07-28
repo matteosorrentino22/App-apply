@@ -21,6 +21,7 @@ class JobSerializer(serializers.ModelSerializer):
             "apply_url",
             "published_at",
             "salary",
+            "matched_search",
             "origin",
             "is_archived",
             "status",

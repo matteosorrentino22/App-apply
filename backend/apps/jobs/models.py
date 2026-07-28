@@ -24,6 +24,13 @@ class Job(models.Model):
     company = models.CharField(max_length=255)
     location = models.CharField(max_length=255)
     description = models.TextField()
+    # Testo libero che identifica la ricerca salvata che ha prodotto questo
+    # job (dal campo `searchString` restituito da Apify per la raccolta
+    # notturna; per l'import manuale non c'è una ricerca associata, resta
+    # vuoto). Non un FK a SavedSearch: la ricerca può essere modificata o
+    # eliminata in seguito, mentre l'attribuzione del job resta uno storico
+    # immutabile di ciò che l'ha prodotto quella notte.
+    matched_search = models.CharField(max_length=255, blank=True, default="")
     apply_url = models.URLField(max_length=1000)
     published_at = models.DateTimeField(null=True, blank=True)
     salary = models.CharField(max_length=255, blank=True, default="")

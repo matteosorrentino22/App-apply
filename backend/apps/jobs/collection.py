@@ -64,6 +64,7 @@ def collect_jobs_for_user(user):
             apply_url=offer["apply_url"],
             published_at=offer.get("published_at"),
             salary=offer.get("salary", ""),
+            matched_search=offer.get("matched_search", ""),
             origin=Job.Origin.COLLECTED,
         )
         created.append(job)

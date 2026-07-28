@@ -8,6 +8,7 @@ import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
+import CityAutocomplete from '../../components/CityAutocomplete'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -109,7 +110,7 @@ export default function OnboardingPage() {
     languages: [],
   })
 
-  const [search, setSearch] = useState({ name: '', keywords: '', location: '' })
+  const [search, setSearch] = useState({ keywords: '', city: '', country: '' })
 
   async function handlePreferencesSubmit(event) {
     event.preventDefault()
@@ -412,16 +413,6 @@ export default function OnboardingPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="search-name">{t('onboarding.searchName')}</Label>
-                <Input
-                  id="search-name"
-                  type="text"
-                  value={search.name}
-                  onChange={(event) => setSearch({ ...search, name: event.target.value })}
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="search-keywords">{t('onboarding.searchKeywords')}</Label>
                 <Input
                   id="search-keywords"
@@ -431,16 +422,13 @@ export default function OnboardingPage() {
                   required
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="search-location">{t('onboarding.searchLocation')}</Label>
-                <Input
-                  id="search-location"
-                  type="text"
-                  value={search.location}
-                  onChange={(event) => setSearch({ ...search, location: event.target.value })}
-                  required
-                />
-              </div>
+              <CityAutocomplete
+                cityId="search-city"
+                countryId="search-country"
+                city={search.city}
+                country={search.country}
+                onChange={({ city, country }) => setSearch({ ...search, city, country })}
+              />
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={saving}>

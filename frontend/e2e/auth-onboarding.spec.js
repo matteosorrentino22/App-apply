@@ -36,9 +36,9 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
   await expect(page.getByText('Crea la tua prima ricerca')).toBeVisible()
 
   // Step 3: prima ricerca
-  await page.getByLabel('Nome ricerca').fill('Ricerca test')
   await page.getByLabel('Parole chiave').fill('developer')
-  await page.getByLabel('Località').fill('Milano')
+  await page.getByLabel('Città', { exact: true }).fill('Milano')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
   await page.getByRole('button', { name: 'Vai alla lista' }).click()
 
   await expect(page).toHaveURL(/\/list$/)

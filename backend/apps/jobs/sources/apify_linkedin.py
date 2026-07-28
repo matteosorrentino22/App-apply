@@ -23,7 +23,7 @@ class ApifyLinkedInSource:
         for search in searches:
             payload = {
                 "keyword": [search.keywords],
-                "location": search.location,
+                "location": f"{search.city}, {search.country}",
                 "publishedAt": self._published_at_filter(window_hours),
             }
             response = requests.post(
@@ -70,4 +70,5 @@ class ApifyLinkedInSource:
             "apply_url": item.get("applyUrl") or item.get("jobUrl") or item.get("link") or "",
             "published_at": item.get("publishedAt") or item.get("postedAt"),
             "salary": item.get("salary") or "",
+            "matched_search": item.get("searchString") or "",
         }

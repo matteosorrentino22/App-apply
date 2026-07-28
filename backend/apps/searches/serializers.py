@@ -6,5 +6,5 @@ from .models import SavedSearch
 class SavedSearchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SavedSearch
-        fields = ["id", "name", "keywords", "location", "is_active", "created_at"]
+        fields = ["id", "keywords", "city", "country", "is_active", "created_at"]
         read_only_fields = ["id", "is_active", "created_at"]
