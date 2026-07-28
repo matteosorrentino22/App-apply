@@ -22,10 +22,9 @@ class ApifyLinkedInSource:
         items = []
         for search in searches:
             payload = {
-                "keywords": search.keywords,
+                "keyword": [search.keywords],
                 "location": search.location,
-                "hours_old": window_hours,
-                "rows": limit,
+                "publishedAt": self._published_at_filter(window_hours),
             }
             response = requests.post(
                 APIFY_RUN_SYNC_URL,
@@ -44,20 +43,30 @@ class ApifyLinkedInSource:
         response = requests.post(
             APIFY_RUN_SYNC_URL,
             headers={"Authorization": f"Bearer {settings.APIFY_API_TOKEN}"},
-            json={"startUrls": [{"url": url}], "rows": 1},
+            json={"startUrls": [{"url": url}]},
             timeout=60,
         )
         response.raise_for_status()
         items = response.json()
         return self._normalize_item(items[0]) if items else None
 
+    def _published_at_filter(self, window_hours):
+        """Mappa la finestra oraria richiesta sull'enum `publishedAt`
+        dell'actor (solo 24h/7g/30g disponibili — 02-specifiche-tecniche-v3.md
+        §5.3 richiede una finestra di 24h, coperta da "r86400")."""
+        if window_hours <= 24:
+            return "r86400"
+        if window_hours <= 24 * 7:
+            return "r604800"
+        return "r2592000"
+
     def _normalize_item(self, item):
         return {
             "external_id": str(item.get("id") or item.get("jobId") or ""),
-            "title": item.get("title") or "",
+            "title": item.get("title") or item.get("jobTitle") or "",
             "company": item.get("company") or item.get("companyName") or "",
             "location": item.get("location") or "",
-            "description": item.get("description") or "",
+            "description": item.get("description") or item.get("jobDescription") or "",
             "apply_url": item.get("applyUrl") or item.get("jobUrl") or item.get("link") or "",
             "published_at": item.get("publishedAt") or item.get("postedAt"),
             "salary": item.get("salary") or "",
