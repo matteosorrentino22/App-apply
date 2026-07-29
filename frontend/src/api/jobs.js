@@ -35,3 +35,7 @@ export function unarchiveJob(id) {
 export function markApplicationDone(id) {
   return apiFetch(`/api/jobs/${id}/mark-application-done/`, { method: 'POST', body: {} })
 }
+
+export function importJob(url) {
+  return apiFetch('/api/jobs/import/', { method: 'POST', body: { url } })
+}

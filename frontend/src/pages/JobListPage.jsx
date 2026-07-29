@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
-import { fetchJobs, fetchJob, generateCv, archiveJob, unarchiveJob } from '../api/jobs'
+import { fetchJobs, fetchJob, generateCv, archiveJob, unarchiveJob, importJob } from '../api/jobs'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ const STATUSES = ['new', 'cv_generated', 'application_done']
 
 export default function JobListPage() {
   const { t } = useLanguage()
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const { showToast } = useToast()
 
   const [section, setSection] = useState('main')
@@ -30,6 +30,10 @@ export default function JobListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [generatingIds, setGeneratingIds] = useState(() => new Set())
+
+  const [importUrl, setImportUrl] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
 
   const debounceRef = useRef(null)
 
@@ -101,6 +105,24 @@ export default function JobListPage() {
     showToast(t('jobs.unarchivedToast'))
   }
 
+  async function handleImport(event) {
+    event.preventDefault()
+    setImportError('')
+    setImporting(true)
+    try {
+      await importJob(importUrl)
+      setImportUrl('')
+      showToast(t('jobs.importSuccess'))
+      load()
+    } catch (err) {
+      setImportError(
+        err instanceof ApiError && err.data?.detail ? err.data.detail : t('common.genericError'),
+      )
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const searching = query.length > 0
   const swipeProps =
     section === 'archived'
@@ -133,6 +155,35 @@ export default function JobListPage() {
           </button>
         ))}
       </div>
+
+      {section === 'imported' && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          {user?.plan === 'pro' ? (
+            <form onSubmit={handleImport} className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder={t('jobs.importPlaceholder')}
+                  aria-label={t('jobs.importPlaceholder')}
+                  className="min-w-64 flex-1"
+                  required
+                />
+                <Button type="submit" disabled={importing}>
+                  {importing ? t('jobs.importing') : t('jobs.importButton')}
+                </Button>
+              </div>
+              {importError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {importError}
+                </p>
+              )}
+            </form>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t('jobs.importProOnly')}</p>
+          )}
+        </div>
+      )}
 
       <Input
         value={queryInput}

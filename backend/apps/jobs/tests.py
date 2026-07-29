@@ -645,6 +645,58 @@ class ImportJobTests(TestCase):
         self.assertEqual(quota.manual_cv_count, 1)
 
 
+class ImportJobApiTests(APITestCase):
+    """Endpoint HTTP dell'import manuale (`POST /api/jobs/import/`), non
+    ancora esposto in UI finché non è stato collegato un pulsante — la logica
+    di servizio è già coperta a fondo da `ImportJobTests`, qui si verifica
+    solo l'esposizione via API (status code e messaggi d'errore)."""
+
+    def _make_user(self, plan=User.Plan.PRO):
+        return User.objects.create_user(
+            username=f"import-api-{plan}@example.com",
+            email=f"import-api-{plan}@example.com",
+            password="pw-ImportApi-12345!",
+            plan=plan,
+        )
+
+    def test_pro_user_imports_via_api(self):
+        user = self._make_user(plan=User.Plan.PRO)
+        self.client.force_authenticate(user)
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(
+                fetch_by_url=MagicMock(return_value=_import_offer())
+            )
+            response = self.client.post(
+                "/api/jobs/import/", {"url": VALID_LINKEDIN_URL}, format="json"
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Job.objects.filter(pk=response.data["job_id"]).exists())
+
+    def test_free_user_is_rejected_via_api(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            "/api/jobs/import/", {"url": VALID_LINKEDIN_URL}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_invalid_link_is_rejected_via_api(self):
+        user = self._make_user(plan=User.Plan.PRO)
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            "/api/jobs/import/", {"url": "https://example.com/not-a-job"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+
 class JobListTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
