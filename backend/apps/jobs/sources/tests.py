@@ -1,3 +1,4 @@
+import datetime
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -72,6 +73,30 @@ class ApifyLinkedInSourceTests(TestCase):
         normalized = source._normalize_item(item)
 
         self.assertEqual(normalized["matched_search"], "")
+
+    def test_normalize_item_parses_published_at_into_a_real_datetime(self):
+        # Bug osservato in produzione: senza la conversione, il valore resta
+        # una stringa in memoria e `apply_intake_cap` (che confronta le date
+        # per il tie-break) crasha con AttributeError su `.timestamp()`,
+        # perdendo l'intera raccolta della notte per l'utente colpito.
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+                "publishedAt": "2026-07-28T10:00:00Z"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertEqual(
+            normalized["published_at"],
+            datetime.datetime(2026, 7, 28, 10, 0, tzinfo=datetime.timezone.utc),
+        )
+
+    def test_normalize_item_without_published_at_defaults_to_none(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertIsNone(normalized["published_at"])
 
     def test_fetch_retries_once_after_a_timeout_then_succeeds(self):
         source = ApifyLinkedInSource()

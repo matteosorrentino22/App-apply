@@ -3,6 +3,7 @@ import re
 
 import requests
 from django.conf import settings
+from django.utils.dateparse import parse_datetime
 
 # Actor Apify per la raccolta LinkedIn (02-specifiche-tecniche-v3.md §5.3).
 # Non è un segreto: il token di autenticazione, quello sì, viene letto da
@@ -164,7 +165,20 @@ class ApifyLinkedInSource:
             "location": item.get("location") or "",
             "description": item.get("description") or item.get("jobDescription") or "",
             "apply_url": item.get("applyUrl") or item.get("jobUrl") or item.get("link") or "",
-            "published_at": item.get("publishedAt") or item.get("postedAt"),
+            "published_at": self._parse_published_at(
+                item.get("publishedAt") or item.get("postedAt")
+            ),
             "salary": item.get("salary") or "",
             "matched_search": item.get("searchString") or "",
         }
+
+    def _parse_published_at(self, raw_value):
+        """Converte la data restituita da Apify in un `datetime` prima che
+        arrivi a `Job.objects.create()`: assegnata in memoria (senza refresh
+        dal DB), una stringa grezza farebbe fallire con AttributeError il
+        confronto per data più recente nel tie-break del cap di intake
+        (`apps.jobs.intake.apply_intake_cap`), perdendo l'intera raccolta
+        della notte per l'utente colpito — bug osservato in produzione."""
+        if not isinstance(raw_value, str):
+            return None
+        return parse_datetime(raw_value)
