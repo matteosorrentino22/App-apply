@@ -1,3 +1,6 @@
+import html
+import re
+
 import requests
 from django.conf import settings
 
@@ -8,6 +11,18 @@ APIFY_ACTOR = "cheap_scraper~linkedin-job-scraper"
 APIFY_RUN_SYNC_URL = (
     f"https://api.apify.com/v2/acts/{APIFY_ACTOR}/run-sync-get-dataset-items"
 )
+
+# Endpoint pubblico non autenticato usato solo per l'import manuale di un
+# singolo job (Sprint 24): evita di passare da Apify — con i suoi tempi
+# variabili (§5.2) e il consumo di credito — per recuperare i dettagli di
+# un link già noto. Verificato senza rate-limiting apprezzabile su richieste
+# ripetute; nessuna chiave richiesta.
+LINKEDIN_GUEST_JOB_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{id}"
+LINKEDIN_GUEST_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+)
+LINKEDIN_GUEST_TIMEOUT_SECONDS = 15
 
 # Il tempo di risposta della chiamata sincrona a questo actor è molto
 # variabile sotto carico (osservato tra ~10s e oltre 60s per lo stesso
@@ -40,11 +55,80 @@ class ApifyLinkedInSource:
 
     def fetch_by_url(self, url):
         """Recupera i dettagli di una singola offerta a partire dal suo link
-        (import manuale, Sprint 14). Ritorna `None` se non viene restituito
-        alcun risultato."""
-        response = self._post_with_retry({"startUrls": [{"url": url}]})
-        items = response.json()
-        return self._normalize_item(items[0]) if items else None
+        (import manuale, Sprint 14) con una richiesta diretta a LinkedIn,
+        senza passare da Apify (Sprint 24 — vedi nota sull'endpoint guest
+        sopra). Ritorna `None` se il job non esiste più o il link non è
+        riconoscibile."""
+        job_id = self._extract_job_id(url)
+        if job_id is None:
+            return None
+
+        try:
+            response = requests.get(
+                LINKEDIN_GUEST_JOB_URL.format(id=job_id),
+                headers={"User-Agent": LINKEDIN_GUEST_USER_AGENT},
+                timeout=LINKEDIN_GUEST_TIMEOUT_SECONDS,
+            )
+        except requests.RequestException:
+            return None
+
+        if response.status_code != 200:
+            return None
+
+        return self._parse_guest_posting(response.text, url, job_id)
+
+    def _extract_job_id(self, url):
+        match = re.search(r"/jobs/view/(?:[\w-]*-)?(?P<id>\d+)", url or "")
+        return match.group("id") if match else None
+
+    def _parse_guest_posting(self, page_html, url, job_id):
+        title = self._extract_tag_text(
+            page_html, r'class="[^"]*topcard__title[^"]*">(.*?)</h2>'
+        )
+        company = self._extract_tag_text(
+            page_html, r'topcard__org-name-link[^>]*>(.*?)</a>'
+        )
+        location = self._extract_tag_text(
+            page_html, r'class="topcard__flavor topcard__flavor--bullet">(.*?)</span>'
+        )
+        description = self._extract_description(page_html)
+
+        if not title or not description:
+            return None
+
+        return {
+            "external_id": job_id,
+            "title": title,
+            "company": company,
+            "location": location,
+            "description": description,
+            "apply_url": url,
+            "published_at": None,
+            "salary": "",
+            "matched_search": "",
+        }
+
+    def _extract_tag_text(self, page_html, pattern):
+        match = re.search(pattern, page_html, re.S)
+        if not match:
+            return ""
+        return html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip()
+
+    def _extract_description(self, page_html):
+        match = re.search(
+            r'show-more-less-html__markup[^"]*">(.*?)</div>', page_html, re.S
+        )
+        if not match:
+            return ""
+        text = match.group(1)
+        text = re.sub(r"<br\s*/?>", "\n", text)
+        text = re.sub(r"</li>", "\n", text)
+        text = re.sub(r"<li[^>]*>", "- ", text)
+        text = re.sub(r"<[^>]+>", "", text)
+        text = html.unescape(text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+        return text.strip()
 
     def _post_with_retry(self, payload):
         last_error = None

@@ -18,6 +18,17 @@ def _fake_response(items):
     return response
 
 
+def _fake_guest_posting_html(title="Business Analyst", company="Acme", location="Zurich, Switzerland"):
+    return f"""
+    <h2 class="top-card-layout__title topcard__title">{title}</h2>
+    <a class="topcard__org-name-link" href="#">{company}</a>
+    <span class="topcard__flavor topcard__flavor--bullet">{location}</span>
+    <div class="show-more-less-html__markup">
+      <strong>About</strong><br><br>Descrizione del ruolo.<ul><li>Requisito A</li></ul>
+    </div>
+    """
+
+
 class ApifyLinkedInSourceTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -81,3 +92,74 @@ class ApifyLinkedInSourceTests(TestCase):
                 source.fetch([self.search], window_hours=24, limit=50)
 
         self.assertEqual(mock_post.call_count, 2)
+
+
+class ApifyLinkedInSourceFetchByUrlTests(TestCase):
+    """fetch_by_url (import manuale) chiama LinkedIn direttamente, non Apify
+    (Sprint 24): nessuna delle chiamate qui deve toccare requests.post."""
+
+    URL = "https://www.linkedin.com/jobs/view/business-analyst-4123456789/"
+
+    def test_fetch_by_url_parses_title_company_location_description(self):
+        source = ApifyLinkedInSource()
+        fake_response = MagicMock(status_code=200, text=_fake_guest_posting_html())
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get:
+            mock_get.return_value = fake_response
+            offer = source.fetch_by_url(self.URL)
+
+        self.assertEqual(offer["external_id"], "4123456789")
+        self.assertEqual(offer["title"], "Business Analyst")
+        self.assertEqual(offer["company"], "Acme")
+        self.assertEqual(offer["location"], "Zurich, Switzerland")
+        self.assertIn("Descrizione del ruolo.", offer["description"])
+        self.assertIn("Requisito A", offer["description"])
+        self.assertEqual(offer["apply_url"], self.URL)
+
+    def test_fetch_by_url_requests_the_guest_endpoint_not_apify(self):
+        source = ApifyLinkedInSource()
+        fake_response = MagicMock(status_code=200, text=_fake_guest_posting_html())
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get, patch(
+            "apps.jobs.sources.apify_linkedin.requests.post"
+        ) as mock_post:
+            mock_get.return_value = fake_response
+            source.fetch_by_url(self.URL)
+
+        mock_post.assert_not_called()
+        requested_url = mock_get.call_args.args[0]
+        self.assertEqual(
+            requested_url,
+            "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4123456789",
+        )
+
+    def test_fetch_by_url_returns_none_on_404(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get:
+            mock_get.return_value = MagicMock(status_code=404, text="")
+            offer = source.fetch_by_url(self.URL)
+
+        self.assertIsNone(offer)
+
+    def test_fetch_by_url_returns_none_on_network_error(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get:
+            mock_get.side_effect = requests.exceptions.ReadTimeout("timed out")
+            offer = source.fetch_by_url(self.URL)
+
+        self.assertIsNone(offer)
+
+    def test_fetch_by_url_returns_none_for_unrecognized_url(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get:
+            offer = source.fetch_by_url("https://example.com/not-a-linkedin-job")
+
+        mock_get.assert_not_called()
+        self.assertIsNone(offer)
+
+    def test_fetch_by_url_returns_none_when_title_missing(self):
+        source = ApifyLinkedInSource()
+        incomplete_html = '<div class="show-more-less-html__markup">Descrizione.</div>'
+        with patch("apps.jobs.sources.apify_linkedin.requests.get") as mock_get:
+            mock_get.return_value = MagicMock(status_code=200, text=incomplete_html)
+            offer = source.fetch_by_url(self.URL)
+
+        self.assertIsNone(offer)
