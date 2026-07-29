@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -60,3 +61,23 @@ class ApifyLinkedInSourceTests(TestCase):
         normalized = source._normalize_item(item)
 
         self.assertEqual(normalized["matched_search"], "")
+
+    def test_fetch_retries_once_after_a_timeout_then_succeeds(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.side_effect = [
+                requests.exceptions.ReadTimeout("timed out"),
+                _fake_response([]),
+            ]
+            source.fetch([self.search], window_hours=24, limit=50)
+
+        self.assertEqual(mock_post.call_count, 2)
+
+    def test_fetch_raises_after_exhausting_retries(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.side_effect = requests.exceptions.ReadTimeout("timed out")
+            with self.assertRaises(requests.exceptions.ReadTimeout):
+                source.fetch([self.search], window_hours=24, limit=50)
+
+        self.assertEqual(mock_post.call_count, 2)

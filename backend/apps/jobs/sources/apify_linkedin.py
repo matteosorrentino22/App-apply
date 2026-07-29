@@ -9,6 +9,14 @@ APIFY_RUN_SYNC_URL = (
     f"https://api.apify.com/v2/acts/{APIFY_ACTOR}/run-sync-get-dataset-items"
 )
 
+# Il tempo di risposta della chiamata sincrona a questo actor è molto
+# variabile sotto carico (osservato tra ~10s e oltre 60s per lo stesso
+# identico payload): un timeout di 60s con zero retry falliva l'intero ciclo
+# notturno in modo intermittente. Timeout più ampio + un retry riducono il
+# fallimento a un evento raro senza introdurre una libreria di retry esterna.
+REQUEST_TIMEOUT_SECONDS = 180
+MAX_ATTEMPTS = 2
+
 
 class ApifyLinkedInSource:
     """Fonte offerte LinkedIn via Apify.
@@ -26,13 +34,7 @@ class ApifyLinkedInSource:
                 "location": f"{search.city}, {search.country}",
                 "publishedAt": self._published_at_filter(window_hours),
             }
-            response = requests.post(
-                APIFY_RUN_SYNC_URL,
-                headers={"Authorization": f"Bearer {settings.APIFY_API_TOKEN}"},
-                json=payload,
-                timeout=60,
-            )
-            response.raise_for_status()
+            response = self._post_with_retry(payload)
             items.extend(response.json())
         return [self._normalize_item(item) for item in items]
 
@@ -40,15 +42,25 @@ class ApifyLinkedInSource:
         """Recupera i dettagli di una singola offerta a partire dal suo link
         (import manuale, Sprint 14). Ritorna `None` se non viene restituito
         alcun risultato."""
-        response = requests.post(
-            APIFY_RUN_SYNC_URL,
-            headers={"Authorization": f"Bearer {settings.APIFY_API_TOKEN}"},
-            json={"startUrls": [{"url": url}]},
-            timeout=60,
-        )
-        response.raise_for_status()
+        response = self._post_with_retry({"startUrls": [{"url": url}]})
         items = response.json()
         return self._normalize_item(items[0]) if items else None
+
+    def _post_with_retry(self, payload):
+        last_error = None
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                response = requests.post(
+                    APIFY_RUN_SYNC_URL,
+                    headers={"Authorization": f"Bearer {settings.APIFY_API_TOKEN}"},
+                    json=payload,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                response.raise_for_status()
+                return response
+            except requests.RequestException as exc:
+                last_error = exc
+        raise last_error
 
     def _published_at_filter(self, window_hours):
         """Mappa la finestra oraria richiesta sull'enum `publishedAt`
