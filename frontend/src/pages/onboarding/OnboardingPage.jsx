@@ -73,7 +73,6 @@ export default function OnboardingPage() {
 
   const [profileFields, setProfileFields] = useState({
     summary: '',
-    key_achievements: '',
     phone: '',
     city: '',
     linkedin_url: '',
@@ -85,7 +84,8 @@ export default function OnboardingPage() {
     { name: 'institution', label: t('onboarding.institution') },
     { name: 'title', label: t('onboarding.titleField') },
     { name: 'location', label: t('onboarding.location') },
-    { name: 'dates', label: t('onboarding.dates') },
+    { name: 'start_date', label: t('onboarding.startDate'), type: 'date' },
+    { name: 'end_date', label: t('onboarding.endDate'), type: 'date', required: true },
     { name: 'notes', label: t('onboarding.notes') },
   ]
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
@@ -137,7 +137,6 @@ export default function OnboardingPage() {
       const structured = await importCv(file)
       setProfileFields({
         summary: structured.summary || '',
-        key_achievements: structured.key_achievements || '',
         phone: '',
         city: '',
         linkedin_url: '',
@@ -330,16 +329,6 @@ export default function OnboardingPage() {
                     onChange={(event) => setProfileFields({ ...profileFields, summary: event.target.value })}
                   />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="achievements">{t('onboarding.profileAchievements')}</Label>
-                  <Textarea
-                    id="achievements"
-                    value={profileFields.key_achievements}
-                    onChange={(event) =>
-                      setProfileFields({ ...profileFields, key_achievements: event.target.value })
-                    }
-                  />
-                </div>
                 <div className="flex flex-wrap gap-5">
                   <div className="flex min-w-40 flex-1 flex-col gap-1.5">
                     <Label htmlFor="phone">{t('onboarding.profilePhone')}</Label>
@@ -384,6 +373,11 @@ export default function OnboardingPage() {
             </Card>
 
             <ExperienceGroupEditor companies={companies} onChange={setCompanies} t={t} />
+            {companies.reduce((total, group) => total + group.roles.length, 0) > 5 && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {t('onboarding.experiencesLimitWarning')}
+              </p>
+            )}
 
             {SECTION_KEYS.map((sectionKey) => (
               <ListSectionEditor

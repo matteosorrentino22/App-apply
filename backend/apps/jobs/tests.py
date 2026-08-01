@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from apps.cv.manual_generation import request_manual_cv_generation
 from apps.cv.models import CVDocument
-from apps.profiles.models import Profile
+from apps.profiles.models import Education, Profile
 from apps.searches.models import SavedSearch
 
 from .application import ApplicationMarkRejected, mark_application_done
@@ -433,7 +433,10 @@ class EnrichAndGenerateCvApiTests(APITestCase):
             email="enrichapi@example.com",
             password="pw-EnrichApi-12345!",
         )
-        Profile.objects.create(user=self.user)
+        profile = Profile.objects.create(user=self.user)
+        Education.objects.create(
+            profile=profile, institution="Università di Roma", title="Laurea", end_date="2015-07-01"
+        )
         self.job = Job.objects.create(
             user=self.user,
             source=Job.Source.LINKEDIN,
@@ -624,6 +627,10 @@ class ImportJobTests(TestCase):
 
     def test_import_and_manual_cv_generation_consume_separate_counters(self):
         user = self._make_user(plan=User.Plan.PRO)
+        profile = Profile.objects.create(user=user)
+        Education.objects.create(
+            profile=profile, institution="Università di Roma", title="Laurea", end_date="2015-07-01"
+        )
 
         with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT

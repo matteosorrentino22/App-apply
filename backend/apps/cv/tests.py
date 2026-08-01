@@ -48,7 +48,6 @@ def _make_job(user, description="Ricerchiamo un Project Manager per Milano.", ex
 def _fake_content(num_experiences=3):
     return {
         "summary": "Project manager con 8 anni di esperienza.",
-        "key_achievements": ["Consegnato progetto da 2M€ in anticipo"],
         "experiences": [
             {
                 "company": f"Azienda {i}",
@@ -86,7 +85,8 @@ class GenerateCvTests(TestCase):
             institution="Università Bocconi",
             title="Laurea in Economia",
             location="Milano",
-            dates="2010 - 2013",
+            start_date="2010-09-01",
+            end_date="2013-07-01",
             notes="Tesi su project management internazionale.",
         )
         self.job = _make_job(self.user)
@@ -235,13 +235,21 @@ class GenerateCvTests(TestCase):
 @override_settings(PRICE_MANUAL_CV_EXTRA=Decimal("1.50"))
 class ManualCvGenerationTests(TestCase):
     def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
-        return User.objects.create_user(
+        user = User.objects.create_user(
             username=f"manual-{plan}-{extra_credit}@example.com",
             email=f"manual-{plan}-{extra_credit}@example.com",
             password="pw-Manual-12345!",
             plan=plan,
             extra_credit=extra_credit,
         )
+        profile = Profile.objects.create(user=user)
+        Education.objects.create(
+            profile=profile,
+            institution="Università di Roma",
+            title="Laurea",
+            end_date="2015-07-01",
+        )
+        return user
 
     def _make_job(self, user, external_id="ext-1", score=None, status=Job.Status.NEW):
         return Job.objects.create(
@@ -286,6 +294,10 @@ class ManualCvGenerationTests(TestCase):
             password="pw-Midway-12345!",
             plan=User.Plan.FREE,
             timezone="Pacific/Midway",
+        )
+        profile = Profile.objects.create(user=user)
+        Education.objects.create(
+            profile=profile, institution="Università di Roma", title="Laurea", end_date="2015-07-01"
         )
         job = self._make_job(user)
 
@@ -427,6 +439,9 @@ class EnrichAndGenerateCvTests(TestCase):
             username="enrich@example.com", email="enrich@example.com", password="pw-Enrich-12345!"
         )
         self.profile = Profile.objects.create(user=self.user)
+        Education.objects.create(
+            profile=self.profile, institution="Università di Roma", title="Laurea", end_date="2015-07-01"
+        )
         self.job = Job.objects.create(
             user=self.user,
             source=Job.Source.LINKEDIN,
@@ -483,6 +498,10 @@ class EnrichAndGenerateCvTests(TestCase):
         # onboarding, stesso get_or_create di ProfileSectionViewSet):
         # accedere a job.user.profile direttamente solleverebbe
         # RelatedObjectDoesNotExist (Sprint 19, bug scoperto da un test e2e).
+        # Il salvataggio dell'esperienza avviene comunque prima del tentativo
+        # di generazione: un profilo così creato non ha ancora un'istruzione
+        # (Docs/03 §10.2), quindi la generazione viene respinta, ma
+        # l'esperienza arricchita resta salvata nel profilo per le prossime.
         user_without_profile = User.objects.create_user(
             username="noprofile@example.com", email="noprofile@example.com", password="pw-NoProf-12345!"
         )
@@ -499,7 +518,8 @@ class EnrichAndGenerateCvTests(TestCase):
         )
 
         with patch("apps.cv.generation.generate_cv_content", return_value=_fake_content(0)):
-            generate_cv_with_enrichment(job, self.detail, save_to_profile=True)
+            with self.assertRaises(ManualGenerationRejected):
+                generate_cv_with_enrichment(job, self.detail, save_to_profile=True)
 
         experience = Experience.objects.get(profile__user=user_without_profile, company="Kuwait Petroleum")
         self.assertEqual(experience.role, "Site Supervisor")

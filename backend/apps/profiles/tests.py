@@ -78,14 +78,13 @@ SAMPLE_CV_TEXT_LINES = [
 
 FAKE_STRUCTURED_PROFILE = {
     "summary": "Project Manager con 8 anni di esperienza in ambito IT.",
-    "key_achievements": "",
     "experiences": [
         {
             "company": "Acme S.p.A.",
             "role": "Project Manager",
             "location": "",
-            "start_date": "2019",
-            "end_date": "2024",
+            "start_date": "2019-01-01",
+            "end_date": "2024-01-01",
             "bullets": ["Gestione di team cross-funzionali"],
             "technologies": [],
         }
@@ -95,7 +94,8 @@ FAKE_STRUCTURED_PROFILE = {
             "institution": "Politecnico di Milano",
             "title": "Laurea in Ingegneria Gestionale",
             "location": "",
-            "dates": "2014-2019",
+            "start_date": "2014-09-01",
+            "end_date": "2019-07-01",
             "notes": "",
         }
     ],

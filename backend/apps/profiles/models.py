@@ -8,7 +8,6 @@ class Profile(models.Model):
     )
     summary = models.TextField(blank=True, default="")
     photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
-    key_achievements = models.TextField(blank=True, default="")
     # Dati di contatto per l'intestazione del CV generato (Sprint 10): non
     # coperti dai campi esistenti di Profile/User, ma richiesti esplicitamente
     # da 02-specifiche-tecniche-v3.md §6.3 ("nome, contatti, città, link
@@ -19,6 +18,13 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"Profile({self.user})"
+
+    @property
+    def is_complete(self):
+        """Un profilo è generabile solo con almeno 1 voce di istruzione
+        (Docs/03 §3.2, §10.2) — le esperienze possono restare a zero (caso
+        neolaureato, §3.1, §8). `end_date` è già non-nullable sul modello."""
+        return self.educations.exists()
 
 
 class Experience(models.Model):
@@ -40,7 +46,11 @@ class Education(models.Model):
     institution = models.CharField(max_length=255)
     title = models.CharField(max_length=255)
     location = models.CharField(max_length=255, blank=True, default="")
-    dates = models.CharField(max_length=255, blank=True, default="")
+    start_date = models.DateField(null=True, blank=True)
+    # Obbligatoria (non nullable): serve al tie-break di selezione delle 3
+    # voci più recenti nel CV (doc 03 §3.2) — senza una data certa non è
+    # possibile ordinare le voci di istruzione in modo deterministico.
+    end_date = models.DateField()
     notes = models.TextField(blank=True, default="")
 
     def __str__(self):
