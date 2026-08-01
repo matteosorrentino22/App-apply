@@ -45,10 +45,14 @@ export default function ListSectionEditor({ title, addLabel, fields, rows, onCha
         <div key={row._key} className="flex flex-wrap items-end gap-3 rounded-lg border border-border p-3">
           {fields.map((field) => (
             <div key={field.name} className="flex min-w-40 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-${field.name}`}>{field.label}</Label>
+              <Label htmlFor={`${row._key}-${field.name}`}>
+                {field.label}
+                {field.required && ' *'}
+              </Label>
               <Input
                 id={`${row._key}-${field.name}`}
-                type="text"
+                type={field.type || 'text'}
+                required={field.required}
                 value={row[field.name] || ''}
                 onChange={(event) => updateRow(row._key, field.name, event.target.value)}
               />

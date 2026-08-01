@@ -5,6 +5,11 @@ from .models import CVDocument
 from .rendering import render_cv
 
 
+class ProfileIncomplete(Exception):
+    """Il profilo non ha almeno 1 voce di istruzione (Docs/03 §3.2, §10.2):
+    non è generabile un CV finché non è completo."""
+
+
 def _format_date(value):
     return value.strftime("%Y-%m") if value else ""
 
@@ -25,7 +30,7 @@ def _build_educations(profile):
             "institution": edu.institution,
             "title": edu.title,
             "location": edu.location,
-            "dates": edu.dates,
+            "dates": f"{_format_date(edu.start_date)} - {_format_date(edu.end_date)}".strip(" -"),
             "notes": edu.notes,
         }
         for edu in profile.educations.all()
@@ -56,7 +61,6 @@ def _build_render_context(user, profile, job, content):
         "contact_line": _build_contact_line(user, profile),
         "photo_url": _build_photo_url(user, profile),
         "summary": content["summary"],
-        "key_achievements": content["key_achievements"],
         "experiences": content["experiences"],
         "educations": _build_educations(profile),
         "skills": _filter_grounded_skills(content["skills"], profile),
@@ -77,6 +81,8 @@ def generate_cv(job, generation_type, enrichment=""):
     """
     user = job.user
     profile = user.profile
+    if not profile.is_complete:
+        raise ProfileIncomplete("Il profilo non ha ancora almeno un titolo di studio.")
 
     content = generate_cv_content(profile, job, user.cv_language_mode, enrichment)
     context = _build_render_context(user, profile, job, content)

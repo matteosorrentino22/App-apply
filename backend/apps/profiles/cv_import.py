@@ -16,18 +16,19 @@ MIN_TEXT_LENGTH = 40
 
 STRUCTURING_SYSTEM_PROMPT = (
     "Riorganizzi il testo grezzo di un CV nelle sezioni del profilo master di "
-    "un'app di ricerca lavoro: sommario professionale, risultati chiave, "
-    "esperienze, istruzione, competenze, certificazioni, lingue. Non inventare "
-    "competenze, esperienze o dati non presenti nel testo. Se una sezione non "
-    "è presente nel testo, restituiscila vuota (stringa vuota o lista vuota). "
-    "Le date restano nel formato in cui compaiono nel testo."
+    "un'app di ricerca lavoro: sommario professionale, esperienze, istruzione, "
+    "competenze, certificazioni, lingue. Non inventare competenze, esperienze "
+    "o dati non presenti nel testo. Se una sezione non è presente nel testo, "
+    "restituiscila vuota (stringa vuota o lista vuota). Le date di istruzione "
+    "ed esperienza vanno restituite in formato ISO (YYYY-MM-DD); se il testo "
+    "riporta solo mese/anno, usa il primo giorno del mese; se manca del tutto "
+    "una data di fine istruzione ricavabile dal testo, restituisci null."
 )
 
 PROFILE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
-        "key_achievements": {"type": "string"},
         "experiences": {
             "type": "array",
             "items": {
@@ -61,10 +62,18 @@ PROFILE_JSON_SCHEMA = {
                     "institution": {"type": "string"},
                     "title": {"type": "string"},
                     "location": {"type": "string"},
-                    "dates": {"type": "string"},
+                    "start_date": {"type": ["string", "null"]},
+                    "end_date": {"type": ["string", "null"]},
                     "notes": {"type": "string"},
                 },
-                "required": ["institution", "title", "location", "dates", "notes"],
+                "required": [
+                    "institution",
+                    "title",
+                    "location",
+                    "start_date",
+                    "end_date",
+                    "notes",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -101,7 +110,6 @@ PROFILE_JSON_SCHEMA = {
     },
     "required": [
         "summary",
-        "key_achievements",
         "experiences",
         "educations",
         "skills",

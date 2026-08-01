@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.jobs.models import DailyQuota, Job, RunLog
+from apps.profiles.models import Profile
 
 from .generation import generate_cv
 from .models import CVDocument
@@ -83,6 +84,12 @@ def _guard_and_reserve(job):
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
     if locked_job.cv_generation_in_progress:
         raise ManualGenerationRejected("Generazione già in corso per questo job.")
+
+    profile = Profile.objects.filter(user=locked_job.user).first()
+    if profile is None or not profile.is_complete:
+        raise ManualGenerationRejected(
+            "Completa il profilo (almeno un titolo di studio) prima di generare un CV."
+        )
 
     charge_mode = _reserve_quota_or_credit(locked_job.user)
 

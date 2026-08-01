@@ -7,7 +7,6 @@ CONTENT_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
-        "key_achievements": {"type": "array", "items": {"type": "string"}},
         "experiences": {
             "type": "array",
             "items": {
@@ -25,7 +24,7 @@ CONTENT_JSON_SCHEMA = {
         },
         "skills": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["summary", "key_achievements", "experiences", "skills"],
+    "required": ["summary", "experiences", "skills"],
     "additionalProperties": False,
 }
 
@@ -64,7 +63,6 @@ def _build_experiences_input(profile):
 def _build_profile_context(profile):
     return {
         "summary": profile.summary,
-        "key_achievements": profile.key_achievements,
         "experiences": _build_experiences_input(profile),
         "skills": [skill.name for skill in profile.skills.all()],
     }
