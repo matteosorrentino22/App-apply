@@ -71,7 +71,14 @@ def _cut_bullets_to_budget(shown_experiences, budget):
     """Tiene, tra i bullet delle sole esperienze mostrate, i `budget`
     globalmente più rilevanti secondo `relevance_rank` (rank più basso =
     più rilevante). Un'esperienza altamente rilevante che finirebbe senza
-    bullet riceve un minimo garantito, sottratto al taglio globale."""
+    bullet riceve un minimo garantito, sottratto al taglio globale.
+
+    I bullet superstiti restano dict `{text, relevance_rank}` (non ancora
+    appiattiti a stringa): il loop di ripiego per overflow (§6, in
+    `remove_least_relevant_bullet`) deve poter continuare a rimuovere per
+    rilevanza dopo questo taglio, quindi il rank va preservato oltre questa
+    funzione — l'appiattimento a stringa avviene solo appena prima del
+    rendering finale (`generation.py`)."""
     all_bullets = [
         {"experience_index": index, "bullet": bullet}
         for index, exp in enumerate(shown_experiences)
@@ -79,26 +86,22 @@ def _cut_bullets_to_budget(shown_experiences, budget):
     ]
     all_bullets.sort(key=lambda item: item["bullet"].get("relevance_rank", 0))
 
-    kept_indices_by_experience = {index: [] for index in range(len(shown_experiences))}
+    kept_by_experience = {index: [] for index in range(len(shown_experiences))}
     for item in all_bullets[:budget]:
-        kept_indices_by_experience[item["experience_index"]].append(item["bullet"])
+        kept_by_experience[item["experience_index"]].append(item["bullet"])
 
-    remaining_budget = budget - sum(len(v) for v in kept_indices_by_experience.values())
     for index, exp in enumerate(shown_experiences):
-        if kept_indices_by_experience[index] or not exp.get("highly_relevant"):
+        if kept_by_experience[index] or not exp.get("highly_relevant"):
             continue
         if not exp["bullets"]:
             continue
         guaranteed = sorted(exp["bullets"], key=lambda b: b.get("relevance_rank", 0))
-        guaranteed = guaranteed[:MIN_GUARANTEED_BULLETS_FOR_RELEVANT_EXPERIENCE]
-        kept_indices_by_experience[index] = guaranteed
-        remaining_budget -= len(guaranteed)
+        kept_by_experience[index] = guaranteed[:MIN_GUARANTEED_BULLETS_FOR_RELEVANT_EXPERIENCE]
 
     result = []
     for index, exp in enumerate(shown_experiences):
-        kept_bullets = kept_indices_by_experience[index]
-        kept_texts = [b["text"] for b in sorted(kept_bullets, key=lambda b: b.get("relevance_rank", 0))]
-        result.append({**exp, "bullets": kept_texts})
+        kept_bullets = sorted(kept_by_experience[index], key=lambda b: b.get("relevance_rank", 0))
+        result.append({**exp, "bullets": kept_bullets})
     return result
 
 
@@ -106,9 +109,38 @@ def select_and_cut_experiences(experiences, budget):
     """Punto 4 della pipeline (§11): cap esperienze con swap singolo, poi
     taglio bullet al budget globale. `experiences` è la lista completa
     prodotta dal modello per punto 3, in ordine cronologico inverso
-    (dall'esperienza più recente)."""
+    (dall'esperienza più recente). I bullet nel risultato restano dict
+    `{text, relevance_rank}` — vedi nota in `_cut_bullets_to_budget`."""
     for index, exp in enumerate(experiences):
         exp["_order"] = index
 
     shown = _select_shown_experiences(experiences)
     return _cut_bullets_to_budget(shown, budget)
+
+
+def remove_least_relevant_bullet(experiences):
+    """Loop di ripiego per overflow (§6, §11 punto 6): rimuove, tra tutti i
+    bullet sopravvissuti al taglio del punto 4, quello globalmente meno
+    rilevante (rank più alto) — un'unica rimozione per chiamata, così chi
+    orchestra può rirenderizzare tra un tentativo e l'altro. Muta
+    `experiences` in place. Ritorna `True` se ha rimosso qualcosa, `False`
+    se non restano bullet da rimuovere (tutte le esperienze sono già righe
+    singole)."""
+    candidates = [
+        (exp_index, bullet_index, bullet.get("relevance_rank", 0))
+        for exp_index, exp in enumerate(experiences)
+        for bullet_index, bullet in enumerate(exp["bullets"])
+    ]
+    if not candidates:
+        return False
+
+    exp_index, bullet_index, _rank = max(candidates, key=lambda item: item[2])
+    del experiences[exp_index]["bullets"][bullet_index]
+    return True
+
+
+def flatten_bullets_to_text(experiences):
+    """Appiattisce i bullet da dict `{text, relevance_rank}` a semplice
+    stringa, per il rendering finale nel template (nessun uso del rank oltre
+    questo punto della pipeline)."""
+    return [{**exp, "bullets": [b["text"] for b in exp["bullets"]]} for exp in experiences]

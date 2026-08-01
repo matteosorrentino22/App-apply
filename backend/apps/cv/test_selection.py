@@ -4,6 +4,8 @@ from django.test import SimpleTestCase
 
 from .selection import (
     compute_bullet_budget,
+    flatten_bullets_to_text,
+    remove_least_relevant_bullet,
     select_and_cut_experiences,
     select_educations_to_show,
 )
@@ -120,7 +122,7 @@ class SelectAndCutExperiencesTests(SimpleTestCase):
         ]
         result = select_and_cut_experiences(experiences, budget=2)
 
-        all_kept = [b for exp in result for b in exp["bullets"]]
+        all_kept = [b["text"] for exp in result for b in exp["bullets"]]
         self.assertEqual(set(all_kept), {"a1", "b1"})
 
     def test_experience_without_bullets_after_cut_becomes_single_line(self):
@@ -130,7 +132,7 @@ class SelectAndCutExperiencesTests(SimpleTestCase):
         ]
         result = select_and_cut_experiences(experiences, budget=1)
 
-        by_company = {e["company"]: e["bullets"] for e in result}
+        by_company = {e["company"]: [b["text"] for b in e["bullets"]] for e in result}
         self.assertEqual(by_company["a"], ["a1"])
         self.assertEqual(by_company["b"], [])
 
@@ -141,5 +143,35 @@ class SelectAndCutExperiencesTests(SimpleTestCase):
         ]
         result = select_and_cut_experiences(experiences, budget=5)
 
-        by_company = {e["company"]: e["bullets"] for e in result}
-        self.assertEqual(set(by_company["older-relevant"]), {"o1", "o2"})
+        by_company = {e["company"]: {b["text"] for b in e["bullets"]} for e in result}
+        self.assertEqual(by_company["older-relevant"], {"o1", "o2"})
+
+
+class RemoveLeastRelevantBulletTests(SimpleTestCase):
+    def test_removes_the_globally_least_relevant_bullet(self):
+        experiences = [
+            _experience("a", [_bullet("a1", 0), _bullet("a2", 5)]),
+            _experience("b", [_bullet("b1", 2)]),
+        ]
+        removed = remove_least_relevant_bullet(experiences)
+
+        self.assertTrue(removed)
+        remaining = [b["text"] for exp in experiences for b in exp["bullets"]]
+        self.assertEqual(set(remaining), {"a1", "b1"})
+
+    def test_returns_false_when_no_bullets_left(self):
+        experiences = [_experience("a", [])]
+        self.assertFalse(remove_least_relevant_bullet(experiences))
+
+    def test_mutates_experiences_in_place(self):
+        experiences = [_experience("a", [_bullet("a1", 0), _bullet("a2", 1)])]
+        remove_least_relevant_bullet(experiences)
+        self.assertEqual(len(experiences[0]["bullets"]), 1)
+        self.assertEqual(experiences[0]["bullets"][0]["text"], "a1")
+
+
+class FlattenBulletsToTextTests(SimpleTestCase):
+    def test_flattens_dict_bullets_to_plain_strings(self):
+        experiences = [_experience("a", [_bullet("a1", 0), _bullet("a2", 1)])]
+        result = flatten_bullets_to_text(experiences)
+        self.assertEqual(result[0]["bullets"], ["a1", "a2"])

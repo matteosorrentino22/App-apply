@@ -23,3 +23,8 @@ MIN_GUARANTEED_BULLETS_FOR_RELEVANT_EXPERIENCE = 2
 # modello sintetizza per raggiungerlo anche con un profilo scarno.
 AREAS_OF_EXPERTISE_MIN = 4
 AREAS_OF_EXPERTISE_MAX = 6
+
+# Tetto massimo di iterazioni del loop di ripiego per overflow: rimozione di
+# un bullet alla volta con rirenderizzazione, oltre il quale si accetta il
+# caso residuale (PDF multi-pagina, nessun errore mostrato — §6, §11.6).
+MAX_OVERFLOW_ITERATIONS = 4

@@ -241,6 +241,98 @@ class GenerateCvTests(TestCase):
         self.assertEqual(cv_document.generation_type, CVDocument.GenerationType.MANUAL)
 
 
+def _fake_content_with_long_bullets(num_experiences, num_bullets_per_experience, bullet_length=180):
+    """Contenuto sovradimensionato per forzare l'overflow oltre i 3 livelli
+    di compattamento — usato per verificare il loop di ripiego (Docs/03 §6)."""
+    long_text = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 4
+    return {
+        "summary": long_text,
+        "qualification": "Project Manager",
+        "areas_of_expertise": [
+            {"label": f"Area {i}", "grounding_reference": f"bullet {i}.1"} for i in range(6)
+        ],
+        "experiences": [
+            {
+                "company": f"Azienda molto lunga numero {i} internazionale",
+                "role": "Senior Project Manager",
+                "location": "Milano, Italia",
+                "dates": "2020-01 - presente",
+                "highly_relevant": False,
+                "bullets": [
+                    {"text": long_text[:bullet_length], "relevance_rank": b}
+                    for b in range(num_bullets_per_experience)
+                ],
+            }
+            for i in range(num_experiences)
+        ],
+        "skills": ["Project Management"],
+        "certifications": [],
+    }
+
+
+class GenerateCvOverflowTests(TestCase):
+    """Loop di ripiego per overflow (Docs/03 §6, §11 punto 6): rimozione di
+    un bullet alla volta con rirenderizzazione, fino a un tetto massimo di
+    iterazioni; esaurito il tetto, si accetta il multi-pagina senza errore."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="overflow@example.com",
+            email="overflow@example.com",
+            password="pw-Overflow-12345!",
+            first_name="Maria",
+            last_name="Rossi",
+        )
+        self.profile = Profile.objects.create(user=self.user)
+        Education.objects.create(
+            profile=self.profile, institution="Università Bocconi", title="Laurea", end_date="2013-07-01"
+        )
+        for i in range(5):
+            Experience.objects.create(
+                profile=self.profile,
+                company=f"Azienda molto lunga numero {i} internazionale",
+                role="Senior Project Manager",
+                location="Milano, Italia",
+                bullets=[f"Bullet {i}.{b}" for b in range(8)],
+            )
+        self.job = _make_job(self.user)
+
+    def test_overflow_is_resolved_by_removing_bullets_one_at_a_time(self):
+        with patch(
+            "apps.cv.generation.generate_cv_content",
+            return_value=_fake_content_with_long_bullets(5, 8),
+        ):
+            cv_document = generate_cv(self.job, CVDocument.GenerationType.MANUAL)
+
+        with pdfplumber.open(cv_document.pdf_file.path) as pdf:
+            self.assertEqual(len(pdf.pages), 1)
+
+    def test_residual_multi_page_case_is_saved_without_error_and_logged(self):
+        from apps.jobs.models import RunLog
+
+        # Contenuto fisso (sommario + note istruzione) enorme, irriducibile
+        # dal loop di ripiego (che rimuove solo bullet): resta multi-pagina
+        # anche dopo aver esaurito le iterazioni consentite.
+        Education.objects.create(
+            profile=self.profile,
+            institution="Altra università",
+            title="Altro titolo",
+            end_date="2015-07-01",
+            notes="Nota molto lunga. " * 400,
+        )
+        huge_content = _fake_content_with_long_bullets(5, 8)
+        huge_content["summary"] = "Lorem ipsum dolor sit amet. " * 400
+        with patch("apps.cv.generation.generate_cv_content", return_value=huge_content):
+            cv_document = generate_cv(self.job, CVDocument.GenerationType.MANUAL)
+
+        with pdfplumber.open(cv_document.pdf_file.path) as pdf:
+            self.assertGreater(len(pdf.pages), 1)
+
+        run_log = RunLog.objects.get(job=self.job, task_type=RunLog.TaskType.CV_GENERATION)
+        self.assertEqual(run_log.status, RunLog.Status.SUCCESS)
+        self.assertIn("multi-pagina", run_log.message)
+
+
 @override_settings(PRICE_MANUAL_CV_EXTRA=Decimal("1.50"))
 class ManualCvGenerationTests(TestCase):
     def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
