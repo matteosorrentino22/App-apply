@@ -57,8 +57,8 @@ class ComputeBulletBudgetTests(SimpleTestCase):
         self.assertEqual(compute_bullet_budget(0), 12)
 
 
-def _bullet(text, rank):
-    return {"text": text, "relevance_rank": rank}
+def _bullet(text, rank, protected=False):
+    return {"text": text, "relevance_rank": rank, "protected": protected}
 
 
 def _experience(company, bullets, highly_relevant=False):
@@ -146,6 +146,31 @@ class SelectAndCutExperiencesTests(SimpleTestCase):
         by_company = {e["company"]: {b["text"] for b in e["bullets"]} for e in result}
         self.assertEqual(by_company["older-relevant"], {"o1", "o2"})
 
+    def test_protected_bullet_survives_budget_cut_even_with_low_relevance(self):
+        # Docs/03 §5.6: priorità massima di inclusione — sempre tenuto, a
+        # prescindere dal rank, anche con budget insufficiente per il resto.
+        experiences = [
+            _experience("a", [_bullet("a1", 0), _bullet("enriched", 99, protected=True)]),
+        ]
+        result = select_and_cut_experiences(experiences, budget=1)
+
+        kept = [b["text"] for exp in result for b in exp["bullets"]]
+        self.assertIn("enriched", kept)
+
+    def test_experience_with_protected_bullet_is_never_excluded_by_cap(self):
+        # 6 esperienze, cap a 5: la più vecchia porta un bullet protetto e
+        # non marcato "altamente rilevante" — deve comunque restare.
+        experiences = [_experience(f"c{i}", [_bullet("b", 0)]) for i in range(5)]
+        experiences.append(
+            _experience("has-enrichment", [_bullet("enriched", 0, protected=True)])
+        )
+
+        result = select_and_cut_experiences(experiences, budget=100)
+
+        companies = [e["company"] for e in result]
+        self.assertIn("has-enrichment", companies)
+        self.assertEqual(len(result), 5)
+
 
 class RemoveLeastRelevantBulletTests(SimpleTestCase):
     def test_removes_the_globally_least_relevant_bullet(self):
@@ -168,6 +193,26 @@ class RemoveLeastRelevantBulletTests(SimpleTestCase):
         remove_least_relevant_bullet(experiences)
         self.assertEqual(len(experiences[0]["bullets"]), 1)
         self.assertEqual(experiences[0]["bullets"][0]["text"], "a1")
+
+    def test_protected_bullet_is_never_removed(self):
+        experiences = [_experience("a", [_bullet("enriched", 0, protected=True)])]
+        removed = remove_least_relevant_bullet(experiences)
+
+        self.assertFalse(removed)
+        self.assertEqual(len(experiences[0]["bullets"]), 1)
+
+    def test_removes_least_relevant_non_protected_bullet_even_with_lower_rank(self):
+        experiences = [
+            _experience(
+                "a",
+                [_bullet("enriched", 0, protected=True), _bullet("normal", 1)],
+            )
+        ]
+        removed = remove_least_relevant_bullet(experiences)
+
+        self.assertTrue(removed)
+        remaining = [b["text"] for b in experiences[0]["bullets"]]
+        self.assertEqual(remaining, ["enriched"])
 
 
 class FlattenBulletsToTextTests(SimpleTestCase):

@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from apps.cv.manual_generation import request_manual_cv_generation
 from apps.cv.models import CVDocument
-from apps.profiles.models import Education, Profile
+from apps.profiles.models import Education, Experience, Profile
 from apps.searches.models import SavedSearch
 
 from .application import ApplicationMarkRejected, mark_application_done
@@ -437,6 +437,9 @@ class EnrichAndGenerateCvApiTests(APITestCase):
         Education.objects.create(
             profile=profile, institution="Università di Roma", title="Laurea", end_date="2015-07-01"
         )
+        self.experience = Experience.objects.create(
+            profile=profile, company="Kuwait Petroleum", role="Site Supervisor", bullets=["Bullet iniziale"]
+        )
         self.job = Job.objects.create(
             user=self.user,
             source=Job.Source.LINKEDIN,
@@ -452,9 +455,8 @@ class EnrichAndGenerateCvApiTests(APITestCase):
 
     def test_enrichment_with_save_to_profile_is_visible_via_profile_api(self):
         payload = {
-            "company": "Kuwait Petroleum",
-            "role": "Site Supervisor",
-            "bullets": ["Coordinato un team di 12 persone"],
+            "experience_id": self.experience.pk,
+            "additional_bullets": ["Coordinato un team di 12 persone"],
             "save_to_profile": True,
         }
         with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
@@ -467,15 +469,13 @@ class EnrichAndGenerateCvApiTests(APITestCase):
 
         profile_response = self.client.get("/api/profiles/me/")
         experiences = profile_response.json()["experiences"]
-        self.assertTrue(
-            any(exp["company"] == "Kuwait Petroleum" for exp in experiences)
-        )
+        matching = next(exp for exp in experiences if exp["id"] == self.experience.pk)
+        self.assertIn("Coordinato un team di 12 persone", matching["bullets"])
 
     def test_enrichment_without_save_to_profile_is_not_in_profile_api(self):
         payload = {
-            "company": "Kuwait Petroleum",
-            "role": "Site Supervisor",
-            "bullets": ["Coordinato un team di 12 persone"],
+            "experience_id": self.experience.pk,
+            "additional_bullets": ["Coordinato un team di 12 persone"],
             "save_to_profile": False,
         }
         with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
@@ -488,9 +488,29 @@ class EnrichAndGenerateCvApiTests(APITestCase):
 
         profile_response = self.client.get("/api/profiles/me/")
         experiences = profile_response.json()["experiences"]
-        self.assertFalse(
-            any(exp["company"] == "Kuwait Petroleum" for exp in experiences)
+        matching = next(exp for exp in experiences if exp["id"] == self.experience.pk)
+        self.assertNotIn("Coordinato un team di 12 persone", matching["bullets"])
+
+    def test_enrichment_rejects_experience_id_not_in_own_profile(self):
+        other_user = User.objects.create_user(
+            username="other-enrichapi@example.com",
+            email="other-enrichapi@example.com",
+            password="pw-OtherEnrichApi-12345!",
         )
+        other_profile = Profile.objects.create(user=other_user)
+        other_experience = Experience.objects.create(
+            profile=other_profile, company="Altra azienda", role="Altro ruolo"
+        )
+        payload = {
+            "experience_id": other_experience.pk,
+            "additional_bullets": ["Tentativo non autorizzato"],
+            "save_to_profile": False,
+        }
+        response = self.client.post(
+            f"/api/jobs/{self.job.pk}/enrich-and-generate-cv/", payload, format="json"
+        )
+
+        self.assertEqual(response.status_code, 404)
 
 
 VALID_LINKEDIN_URL = "https://www.linkedin.com/jobs/view/1234567890"

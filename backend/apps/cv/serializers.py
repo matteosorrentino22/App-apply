@@ -2,21 +2,14 @@ from rest_framework import serializers
 
 
 class CvEnrichmentSerializer(serializers.Serializer):
-    """Dettaglio di esperienza reale non ancora nel profilo master, da usare
-    per una generazione/rigenerazione manuale (01-specifiche-funzionali-v4.md
-    §4.8). Stessi campi di `apps.profiles.models.Experience`, così il
-    dettaglio è salvabile tale e quale nel profilo se `save_to_profile=True`.
+    """Dettaglio di arricchimento agganciato a un'esperienza **già presente**
+    nel profilo master (Docs/03 §5.6 — sostituisce §4.8 di
+    01-specifiche-funzionali-v5.md): non introduce mai un'azienda/ruolo del
+    tutto nuovo, solo attività/progetti aggiuntivi su un'esperienza esistente.
     """
 
-    company = serializers.CharField(max_length=255)
-    role = serializers.CharField(max_length=255)
-    location = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
-    start_date = serializers.DateField(required=False, allow_null=True, default=None)
-    end_date = serializers.DateField(required=False, allow_null=True, default=None)
-    bullets = serializers.ListField(
-        child=serializers.CharField(allow_blank=True), required=False, default=list
-    )
-    technologies = serializers.ListField(
-        child=serializers.CharField(allow_blank=True), required=False, default=list
+    experience_id = serializers.IntegerField()
+    additional_bullets = serializers.ListField(
+        child=serializers.CharField(allow_blank=False), min_length=1
     )
     save_to_profile = serializers.BooleanField(required=False, default=False)

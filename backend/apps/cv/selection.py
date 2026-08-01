@@ -42,6 +42,10 @@ def compute_bullet_budget(shown_education_count):
     return BULLET_BUDGET_BY_EDU_COUNT[count]
 
 
+def _has_protected_bullet(experience):
+    return any(b.get("protected") for b in experience["bullets"])
+
+
 def _select_shown_experiences(experiences):
     """Cap a `MAX_EXPERIENCES_SHOWN`, con eventuale swap singolo per
     rilevanza (§5.4): se il profilo ha più esperienze del cap, si tengono le
@@ -49,12 +53,29 @@ def _select_shown_experiences(experiences):
     rilevante tra le escluse, tie-break sulla più recente) sostituisce la
     meno recente tra le selezionate. Ogni experience ha già `_order` (indice
     di input, 0 = più recente: le esperienze arrivano già ordinate
-    cronologicamente inverso da chi chiama)."""
+    cronologicamente inverso da chi chiama).
+
+    Priorità assoluta (Docs/03 §5.6): un'esperienza con almeno un bullet di
+    arricchimento `protected` per il CV corrente non può mai finire esclusa
+    — se il cap la escluderebbe, la si include comunque (sostituendo la
+    meno recente tra le altre selezionate), a prescindere da rilevanza o
+    marcatura del modello."""
     if len(experiences) <= MAX_EXPERIENCES_SHOWN:
         return list(experiences)
 
     shown = experiences[:MAX_EXPERIENCES_SHOWN]
     excluded = experiences[MAX_EXPERIENCES_SHOWN:]
+
+    protected_excluded = [exp for exp in excluded if _has_protected_bullet(exp)]
+    protected_orders = {exp["_order"] for exp in protected_excluded}
+    for protected_exp in protected_excluded:
+        non_protected_in_shown = [exp for exp in shown if not _has_protected_bullet(exp)]
+        if not non_protected_in_shown:
+            break
+        least_recent = max(non_protected_in_shown, key=lambda exp: exp["_order"])
+        shown[[exp["_order"] for exp in shown].index(least_recent["_order"])] = protected_exp
+
+    excluded = [exp for exp in excluded if exp["_order"] not in protected_orders]
 
     highly_relevant_excluded = [exp for exp in excluded if exp.get("highly_relevant")]
     if not highly_relevant_excluded:
@@ -73,21 +94,33 @@ def _cut_bullets_to_budget(shown_experiences, budget):
     più rilevante). Un'esperienza altamente rilevante che finirebbe senza
     bullet riceve un minimo garantito, sottratto al taglio globale.
 
-    I bullet superstiti restano dict `{text, relevance_rank}` (non ancora
-    appiattiti a stringa): il loop di ripiego per overflow (§6, in
-    `remove_least_relevant_bullet`) deve poter continuare a rimuovere per
-    rilevanza dopo questo taglio, quindi il rank va preservato oltre questa
-    funzione — l'appiattimento a stringa avviene solo appena prima del
-    rendering finale (`generation.py`)."""
-    all_bullets = [
+    I bullet marcati `protected` (arricchimento per il CV corrente, Docs/03
+    §5.6) sono sempre tenuti, a prescindere dal rank: contano nel budget
+    consumato ma non sono mai tra gli eleggibili all'esclusione.
+
+    I bullet superstiti restano dict `{text, relevance_rank, protected}`
+    (non ancora appiattiti a stringa): il loop di ripiego per overflow (§6,
+    in `remove_least_relevant_bullet`) deve poter continuare a rimuovere
+    per rilevanza dopo questo taglio, quindi il rank va preservato oltre
+    questa funzione — l'appiattimento a stringa avviene solo appena prima
+    del rendering finale (`generation.py`)."""
+    kept_by_experience = {index: [] for index in range(len(shown_experiences))}
+    remaining_budget = budget
+
+    for index, exp in enumerate(shown_experiences):
+        protected = [b for b in exp["bullets"] if b.get("protected")]
+        kept_by_experience[index].extend(protected)
+        remaining_budget -= len(protected)
+
+    all_other_bullets = [
         {"experience_index": index, "bullet": bullet}
         for index, exp in enumerate(shown_experiences)
         for bullet in exp["bullets"]
+        if not bullet.get("protected")
     ]
-    all_bullets.sort(key=lambda item: item["bullet"].get("relevance_rank", 0))
+    all_other_bullets.sort(key=lambda item: item["bullet"].get("relevance_rank", 0))
 
-    kept_by_experience = {index: [] for index in range(len(shown_experiences))}
-    for item in all_bullets[:budget]:
+    for item in all_other_bullets[: max(0, remaining_budget)]:
         kept_by_experience[item["experience_index"]].append(item["bullet"])
 
     for index, exp in enumerate(shown_experiences):
@@ -122,14 +155,18 @@ def remove_least_relevant_bullet(experiences):
     """Loop di ripiego per overflow (§6, §11 punto 6): rimuove, tra tutti i
     bullet sopravvissuti al taglio del punto 4, quello globalmente meno
     rilevante (rank più alto) — un'unica rimozione per chiamata, così chi
-    orchestra può rirenderizzare tra un tentativo e l'altro. Muta
+    orchestra può rirenderizzare tra un tentativo e l'altro. I bullet
+    `protected` (arricchimento per il CV corrente, §5.6) sono esclusi dai
+    candidati e non vengono mai rimossi da questa funzione: se sono l'unico
+    contenuto rimasto e il CV eccede ancora la pagina, si ricade nel caso
+    residuale già previsto (multi-pagina salvato senza errore — §6). Muta
     `experiences` in place. Ritorna `True` se ha rimosso qualcosa, `False`
-    se non restano bullet da rimuovere (tutte le esperienze sono già righe
-    singole)."""
+    se non restano bullet non protetti da rimuovere."""
     candidates = [
         (exp_index, bullet_index, bullet.get("relevance_rank", 0))
         for exp_index, exp in enumerate(experiences)
         for bullet_index, bullet in enumerate(exp["bullets"])
+        if not bullet.get("protected")
     ]
     if not candidates:
         return False

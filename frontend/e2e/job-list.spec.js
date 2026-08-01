@@ -191,28 +191,38 @@ test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async (
   await expect(page.getByRole('button', { name: 'Segna candidatura fatta' })).not.toBeVisible()
 })
 
-test('arricchimento con "salva anche nel profilo" crea l\'esperienza nel profilo', async ({
+test('arricchimento con "salva anche nel profilo" aggiunge il bullet all\'esperienza esistente', async ({
   page,
   request,
   baseURL,
 }) => {
   const { token } = await loginAsSeededUser(page, request, baseURL)
 
+  // L'arricchimento (Docs/03 §5.6) si aggancia a un'esperienza già presente
+  // nel profilo: non introduce mai un'azienda/ruolo del tutto nuovo, quindi
+  // il profilo deve già averne una prima di poterla selezionare nel form.
+  const experienceResponse = await request.post(`${baseURL}/api/experiences/`, {
+    headers: { Authorization: `Token ${token}` },
+    data: { company: 'Beta SpA', role: 'Backend Developer', bullets: ['Bullet iniziale'] },
+  })
+  const experience = await experienceResponse.json()
+
   await cardFor(page, 'Backend Developer').getByRole('link', { name: 'Dettagli' }).click()
   await page.waitForURL(/jobs\//)
 
-  await page.getByRole('button', { name: /Aggiungi un dettaglio/ }).click()
-  await page.getByLabel('Azienda').fill('Libero professionista')
-  await page.getByLabel('Ruolo').fill('Consulente backend freelance')
+  await page.getByRole('button', { name: /Aggiungi un'attività/ }).click()
+  await page.getByLabel('Esperienza').click()
+  await page.getByRole('option', { name: 'Backend Developer — Beta SpA' }).click()
+  await page.getByLabel('Nuove attività / competenze').fill('Consulenza backend freelance')
+  await page.keyboard.press('Enter')
   await page.getByRole('checkbox', { name: 'Salva anche nel profilo' }).check()
 
-  // `save_to_profile` viene applicato prima della chiamata a Claude
-  // (apps/cv/enrichment.py): l'esperienza finisce nel profilo anche se poi
-  // la generazione vera e propria fallisce per mancanza di una chiave
-  // Anthropic reale in questo ambiente (stessa riserva delle altre
-  // integrazioni Claude, già documentata negli sprint precedenti).
+  // Il profilo di questo utente e2e non ha un titolo di studio (nessun
+  // onboarding completato, §10.2): la generazione vera e propria viene
+  // respinta prima della chiamata a Claude, ma `save_to_profile` è già
+  // stato applicato prima di quel controllo (apps/cv/enrichment.py).
   await page.getByRole('button', { name: 'Genera CV con questo dettaglio' }).click()
-  await expect(page.getByText('Non siamo riusciti a generare il CV. Riprova.')).toBeVisible({
+  await expect(page.getByText('Generazione già in corso per questo job.')).toBeVisible({
     timeout: 20000,
   })
 
@@ -220,5 +230,6 @@ test('arricchimento con "salva anche nel profilo" crea l\'esperienza nel profilo
     headers: { Authorization: `Token ${token}` },
   })
   const experiences = await response.json()
-  expect(experiences.some((exp) => exp.company === 'Libero professionista' && exp.role === 'Consulente backend freelance')).toBe(true)
+  const updated = experiences.find((exp) => exp.id === experience.id)
+  expect(updated.bullets).toContain('Consulenza backend freelance')
 })

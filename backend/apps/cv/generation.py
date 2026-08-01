@@ -94,28 +94,40 @@ def _filter_grounded_skills(ai_names, profile_names):
     return [name for name in ai_names if name in profile_names]
 
 
-def _attach_technologies(ai_experiences, profile):
+def _attach_technologies_and_enrichment(ai_experiences, profile, protected_bullets, protected_experience_id):
     """`technologies` è dato fattuale del profilo, non riformulato
     dall'AI (come `location`/`dates`): il prompt garantisce stesso ordine e
     stesso numero di voci in output (Docs/03 §11 punto 3), quindi si
-    riattacca per indice invece di chiederlo di nuovo al modello."""
+    riattacca per indice invece di chiederlo di nuovo al modello. Stesso
+    principio per i bullet di arricchimento (§5.6): iniettati letteralmente
+    (mai passati alla riformulazione AI) sull'esperienza corrispondente,
+    marcati `protected` per la protezione nel taglio budget/overflow."""
     ordered_profile_experiences = list(
         profile.experiences.all().order_by("-end_date", "-start_date")
     )
-    return [
-        {**exp, "technologies": ordered_profile_experiences[index].technologies}
-        for index, exp in enumerate(ai_experiences)
-    ]
+    result = []
+    for index, exp in enumerate(ai_experiences):
+        profile_experience = ordered_profile_experiences[index]
+        bullets = list(exp["bullets"])
+        if protected_experience_id and profile_experience.pk == protected_experience_id:
+            bullets.extend(
+                {"text": text, "relevance_rank": -1, "protected": True}
+                for text in protected_bullets
+            )
+        result.append({**exp, "technologies": profile_experience.technologies, "bullets": bullets})
+    return result
 
 
-def _build_shown_experiences(content, bullet_budget, profile):
+def _build_shown_experiences(content, bullet_budget, profile, protected_bullets, protected_experience_id):
     """Applica selezione (cap 5, swap singolo) e taglio bullet al budget
     globale (Docs/03 §11 punto 4), sul contenuto già prodotto dal modello
     per punto 3. I bullet restano dict `{text, relevance_rank}` — il loop di
     ripiego per overflow (§6) deve poterli continuare a rimuovere per
     rilevanza; l'appiattimento a stringa avviene solo subito prima del primo
     rendering (`generate_cv`)."""
-    with_technologies = _attach_technologies(content["experiences"], profile)
+    with_technologies = _attach_technologies_and_enrichment(
+        content["experiences"], profile, protected_bullets or [], protected_experience_id
+    )
     selected = select_and_cut_experiences(with_technologies, bullet_budget)
     return [
         {
@@ -130,7 +142,7 @@ def _build_shown_experiences(content, bullet_budget, profile):
     ]
 
 
-def _build_render_context(user, profile, content):
+def _build_render_context(user, profile, content, protected_bullets, protected_experience_id):
     shown_educations, shown_education_count = _build_shown_educations(profile)
     bullet_budget = compute_bullet_budget(shown_education_count)
     profile_skill_names = {skill.name for skill in profile.skills.all()}
@@ -146,7 +158,9 @@ def _build_render_context(user, profile, content):
         "qualification": content["qualification"],
         "summary": content["summary"],
         "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
-        "experiences": _build_shown_experiences(content, bullet_budget, profile),
+        "experiences": _build_shown_experiences(
+            content, bullet_budget, profile, protected_bullets, protected_experience_id
+        ),
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
         "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
@@ -187,7 +201,9 @@ def _render_with_overflow_retry(job, context):
     return html, pdf_bytes
 
 
-def generate_cv(job, generation_type, enrichment=""):
+def generate_cv(
+    job, generation_type, enrichment="", protected_bullets=None, protected_experience_id=None
+):
     """Genera un CV per `job` sul profilo del suo utente (Docs/03 §11):
     contenuti via Claude (qualifica, Areas of Expertise, bullet con
     ordinamento di rilevanza per ogni esperienza), selezione/taglio
@@ -195,6 +211,11 @@ def generate_cv(job, generation_type, enrichment=""):
     di voci di istruzione mostrate), composizione del template HTML,
     conversione PDF con WeasyPrint (con loop di ripiego per overflow),
     salvataggio in `CVDocument`.
+
+    `protected_bullets`/`protected_experience_id` (Docs/03 §5.6): bullet di
+    arricchimento con priorità massima di inclusione per questa generazione
+    — mai esclusi dal cap esperienze, dal taglio budget né dal loop di
+    ripiego per overflow.
 
     Solleva l'eccezione a chi chiama in caso di fallimento (profilo
     incompleto, chiamata Claude, rendering): la gestione (stato Job,
@@ -208,7 +229,9 @@ def generate_cv(job, generation_type, enrichment=""):
         raise ProfileIncomplete("Il profilo non ha ancora almeno un titolo di studio.")
 
     content = generate_cv_content(profile, job, user.cv_language_mode, enrichment)
-    context = _build_render_context(user, profile, content)
+    context = _build_render_context(
+        user, profile, content, protected_bullets, protected_experience_id
+    )
     html, pdf_bytes = _render_with_overflow_retry(job, context)
 
     cv_document = CVDocument.objects.create(
