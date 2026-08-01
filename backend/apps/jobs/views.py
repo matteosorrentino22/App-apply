@@ -3,7 +3,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.cv.enrichment import generate_cv_with_enrichment
+from apps.cv.enrichment import EnrichmentExperienceNotFound, generate_cv_with_enrichment
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
     ManualGenerationRejected,
@@ -77,9 +77,10 @@ class ImportJobView(APIView):
 
 
 class EnrichAndGenerateCvView(APIView):
-    """Generazione manuale con un dettaglio di arricchimento del profilo
-    applicato prima della generazione (Sprint 13, 01-specifiche-funzionali
-    -v4.md §4.8)."""
+    """Generazione manuale con un dettaglio di arricchimento agganciato a
+    un'esperienza già presente nel profilo, applicato prima della
+    generazione (Sprint 13, Docs/03 §5.6 — sostituisce
+    01-specifiche-funzionali-v4.md §4.8)."""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -87,11 +88,17 @@ class EnrichAndGenerateCvView(APIView):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         serializer = CvEnrichmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        detail = dict(serializer.validated_data)
-        save_to_profile = detail.pop("save_to_profile")
+        data = serializer.validated_data
 
         try:
-            cv_document = generate_cv_with_enrichment(job, detail, save_to_profile=save_to_profile)
+            cv_document = generate_cv_with_enrichment(
+                job,
+                data["experience_id"],
+                data["additional_bullets"],
+                save_to_profile=data["save_to_profile"],
+            )
+        except EnrichmentExperienceNotFound as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         except ManualGenerationRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except ManualGenerationFailed as exc:

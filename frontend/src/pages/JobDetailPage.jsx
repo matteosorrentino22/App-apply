@@ -7,13 +7,14 @@ import {
   enrichAndGenerateCv,
   markApplicationDone,
 } from '../api/jobs'
+import { fetchProfile } from '../api/profile'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import ChipInput from '@/components/ChipInput'
 
 const SCORE_STYLE = {
@@ -25,11 +26,8 @@ const SCORE_STYLE = {
 }
 
 const EMPTY_ENRICHMENT = {
-  company: '',
-  role: '',
-  location: '',
-  bullets: [],
-  technologies: [],
+  experience_id: '',
+  additional_bullets: [],
   save_to_profile: false,
 }
 
@@ -40,6 +38,7 @@ export default function JobDetailPage() {
   const { showToast } = useToast()
 
   const [job, setJob] = useState(null)
+  const [experiences, setExperiences] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [generating, setGenerating] = useState(false)
@@ -51,9 +50,11 @@ export default function JobDetailPage() {
     let cancelled = false
     setLoading(true)
     setError('')
-    fetchJob(id)
-      .then((data) => {
-        if (!cancelled) setJob(data)
+    Promise.all([fetchJob(id), fetchProfile()])
+      .then(([jobData, profileData]) => {
+        if (cancelled) return
+        setJob(jobData)
+        setExperiences(profileData.experiences || [])
       })
       .catch(() => {
         if (!cancelled) setError(t('jobs.notFound'))
@@ -66,11 +67,11 @@ export default function JobDetailPage() {
     }
   }, [id, t])
 
-  // L'API richiede azienda e ruolo insieme (CvEnrichmentSerializer): finché
-  // non sono entrambi compilati il dettaglio non è ancora un'esperienza
-  // valida da inviare, quindi si genera senza arricchimento.
-  const enrichmentStarted = enrichment.company || enrichment.role
-  const enrichmentComplete = enrichment.company.trim() && enrichment.role.trim()
+  // L'arricchimento va agganciato a un'esperienza già presente nel
+  // profilo (Docs/03 §5.6): finché non è selezionata un'esperienza e non
+  // c'è almeno un'attività aggiuntiva, non c'è nulla di valido da inviare.
+  const enrichmentStarted = enrichment.experience_id || enrichment.additional_bullets.length > 0
+  const enrichmentComplete = Boolean(enrichment.experience_id) && enrichment.additional_bullets.length > 0
   const enrichmentIncomplete = enrichmentStarted && !enrichmentComplete
 
   async function handleGenerate() {
@@ -227,63 +228,56 @@ export default function JobDetailPage() {
         {showEnrichment && (
           <div className="mt-4 flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">{t('jobs.enrichmentHint')}</p>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                <Label htmlFor="enr-company">{t('jobs.enrichmentCompany')}</Label>
-                <Input
-                  id="enr-company"
-                  value={enrichment.company}
-                  onChange={(e) => setEnrichment({ ...enrichment, company: e.target.value })}
-                />
-              </div>
-              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                <Label htmlFor="enr-role">{t('jobs.enrichmentRole')}</Label>
-                <Input
-                  id="enr-role"
-                  value={enrichment.role}
-                  onChange={(e) => setEnrichment({ ...enrichment, role: e.target.value })}
-                />
-              </div>
-              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                <Label htmlFor="enr-location">{t('jobs.enrichmentLocation')}</Label>
-                <Input
-                  id="enr-location"
-                  value={enrichment.location}
-                  onChange={(e) => setEnrichment({ ...enrichment, location: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="enr-bullets">{t('jobs.enrichmentBullets')}</Label>
-              <ChipInput
-                id="enr-bullets"
-                value={enrichment.bullets}
-                onChange={(bullets) => setEnrichment({ ...enrichment, bullets })}
-                placeholder={t('onboarding.activitiesPlaceholder')}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="enr-tech">{t('jobs.enrichmentTechnologies')}</Label>
-              <ChipInput
-                id="enr-tech"
-                value={enrichment.technologies}
-                onChange={(technologies) => setEnrichment({ ...enrichment, technologies })}
-                placeholder={t('onboarding.activitiesPlaceholder')}
-              />
-            </div>
-            <label className="flex items-center gap-2.5 text-sm">
-              <Checkbox
-                checked={enrichment.save_to_profile}
-                onCheckedChange={(checked) =>
-                  setEnrichment({ ...enrichment, save_to_profile: checked === true })
-                }
-              />
-              {t('jobs.enrichmentSaveToProfile')}
-            </label>
-            {enrichmentIncomplete && (
-              <p role="alert" className="text-sm text-destructive">
-                {t('jobs.enrichmentIncomplete')}
-              </p>
+            {experiences.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('jobs.enrichmentNoExperiences')}</p>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="enr-experience">{t('jobs.enrichmentExperience')}</Label>
+                  <Select
+                    value={enrichment.experience_id ? String(enrichment.experience_id) : ''}
+                    onValueChange={(value) =>
+                      setEnrichment({ ...enrichment, experience_id: Number(value) })
+                    }
+                  >
+                    <SelectTrigger id="enr-experience">
+                      <SelectValue placeholder={t('jobs.enrichmentExperiencePlaceholder')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {experiences.map((exp) => (
+                        <SelectItem key={exp.id} value={String(exp.id)}>
+                          {exp.role} — {exp.company}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="enr-bullets">{t('jobs.enrichmentBullets')}</Label>
+                  <ChipInput
+                    id="enr-bullets"
+                    value={enrichment.additional_bullets}
+                    onChange={(additional_bullets) =>
+                      setEnrichment({ ...enrichment, additional_bullets })
+                    }
+                    placeholder={t('onboarding.activitiesPlaceholder')}
+                  />
+                </div>
+                <label className="flex items-center gap-2.5 text-sm">
+                  <Checkbox
+                    checked={enrichment.save_to_profile}
+                    onCheckedChange={(checked) =>
+                      setEnrichment({ ...enrichment, save_to_profile: checked === true })
+                    }
+                  />
+                  {t('jobs.enrichmentSaveToProfile')}
+                </label>
+                {enrichmentIncomplete && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {t('jobs.enrichmentIncomplete')}
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
