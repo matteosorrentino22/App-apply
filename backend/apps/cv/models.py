@@ -18,6 +18,11 @@ class CVDocument(models.Model):
     generated_at = models.DateTimeField(auto_now_add=True)
     generation_type = models.CharField(max_length=10, choices=GenerationType.choices)
     enrichment_used = models.TextField(blank=True, default="")
+    # Riferimento interno di provenienza per ogni Area of Expertise prodotta
+    # (Docs/03 §5.3, §13): mai mostrato all'utente, serve solo alla diagnosi
+    # in fase di tuning del prompt (verificare che le aree siano riconducibili
+    # a contenuto reale del profilo). Dato di servizio, non una nuova tabella.
+    areas_of_expertise_grounding = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"CV — {self.job} ({self.generated_at})"

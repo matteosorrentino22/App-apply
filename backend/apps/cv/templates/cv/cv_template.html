@@ -18,6 +18,11 @@
         font-size: {{ base_font_size|add:8 }}pt;
         margin: 0 0 2pt 0;
     }
+    .qualification {
+        font-size: {{ base_font_size|add:2 }}pt;
+        color: #333;
+        margin: 0 0 3pt 0;
+    }
     .contact {
         font-size: {{ base_font_size|add:-1 }}pt;
         color: #444;
@@ -78,12 +83,21 @@
         display: inline-block;
         margin: 0 8pt 2pt 0;
     }
+    .areas-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1pt 12pt;
+    }
 </style>
 </head>
 <body>
     <div class="header">
         <div class="header-text">
             <h1>{{ full_name }}</h1>
+            {% if qualification %}<p class="qualification">{{ qualification }}</p>{% endif %}
             <p class="contact">{{ contact_line }}</p>
         </div>
         {% if photo_url %}
@@ -95,6 +109,17 @@
     <section>
         <h2>Profilo</h2>
         <p>{{ summary }}</p>
+    </section>
+    {% endif %}
+
+    {% if areas_of_expertise %}
+    <section>
+        <h2>Areas of Expertise</h2>
+        <ul class="areas-list">
+            {% for area in areas_of_expertise %}
+            <li>{{ area }}</li>
+            {% endfor %}
+        </ul>
     </section>
     {% endif %}
 

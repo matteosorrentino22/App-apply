@@ -48,17 +48,26 @@ def _make_job(user, description="Ricerchiamo un Project Manager per Milano.", ex
 def _fake_content(num_experiences=3):
     return {
         "summary": "Project manager con 8 anni di esperienza.",
+        "qualification": "Project Manager",
+        "areas_of_expertise": [
+            {"label": f"Area {i}", "grounding_reference": f"bullet {i}.1"} for i in range(4)
+        ],
         "experiences": [
             {
                 "company": f"Azienda {i}",
                 "role": "Project Manager",
                 "location": "Milano",
                 "dates": "2020-01 - presente",
-                "bullets": [f"Bullet {i}.1", f"Bullet {i}.2"],
+                "highly_relevant": False,
+                "bullets": [
+                    {"text": f"Bullet {i}.1", "relevance_rank": 0},
+                    {"text": f"Bullet {i}.2", "relevance_rank": 1},
+                ],
             }
             for i in range(num_experiences)
         ],
         "skills": ["Project Management"],
+        "certifications": [],
     }
 
 
