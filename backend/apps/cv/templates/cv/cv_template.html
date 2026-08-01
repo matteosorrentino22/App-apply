@@ -14,55 +14,83 @@
         line-height: {{ line_height }};
         color: #1a1a1a;
     }
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: center;
+        border-bottom: 1.5pt solid #2f4a63;
+        padding-bottom: {{ heading_gap }};
+        margin-bottom: {{ section_gap }};
+    }
+    .header-text {
+        flex: 1;
+    }
     h1 {
-        font-size: {{ base_font_size|add:8 }}pt;
+        font-size: {{ base_font_size|add:9 }}pt;
+        font-weight: bold;
         margin: 0 0 2pt 0;
     }
     .qualification {
         font-size: {{ base_font_size|add:2 }}pt;
         color: #333;
-        margin: 0 0 3pt 0;
+        margin: 0 0 4pt 0;
     }
     .contact {
         font-size: {{ base_font_size|add:-1 }}pt;
         color: #444;
-        margin: 0 0 {{ section_gap }} 0;
+        margin: 0;
     }
-    .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-    }
-    .header-text {
-        flex: 1;
+    .contact a {
+        color: inherit;
+        text-decoration: underline;
     }
     .photo {
         width: {{ photo_size }};
         height: {{ photo_size }};
         object-fit: cover;
-        border-radius: 4pt;
-        margin-left: 12pt;
+        border-radius: 50%;
+        margin-left: 14pt;
     }
     section {
         margin-bottom: {{ section_gap }};
     }
     h2 {
-        font-size: {{ base_font_size|add:2 }}pt;
+        font-size: {{ base_font_size|add:1 }}pt;
+        font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 0.5pt;
-        border-bottom: 1pt solid #999;
+        color: #2f4a63;
+        border-bottom: 1pt solid #2f4a63;
         margin: 0 0 {{ heading_gap }} 0;
         padding-bottom: 2pt;
     }
     .experience, .education-item {
         margin-bottom: {{ item_gap }};
     }
-    .experience-title, .education-title {
+    .experience-company {
+        font-weight: bold;
+        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+    }
+    .experience-role {
         font-weight: bold;
         display: flex;
         justify-content: space-between;
     }
-    .experience-meta, .education-meta {
+    .education-title {
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+    }
+    .experience-technologies {
+        font-style: italic;
+        color: #555;
+        font-size: {{ base_font_size|add:-1 }}pt;
+        margin: 1pt 0 0 0;
+    }
+    .education-meta {
         font-style: italic;
         color: #555;
         font-size: {{ base_font_size|add:-1 }}pt;
@@ -74,22 +102,28 @@
     ul.bullets li {
         margin-bottom: 1pt;
     }
-    .skills-list, .languages-list, .certifications-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-    .skills-list li, .languages-list li, .certifications-list li {
-        display: inline-block;
-        margin: 0 8pt 2pt 0;
-    }
     .areas-list {
         margin: 0;
         padding: 0;
         list-style: none;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1pt 12pt;
+        gap: 1pt 16pt;
+    }
+    .skills-certifications p {
+        margin: 0 0 1pt 0;
+    }
+    .languages-row {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        justify-content: center;
+        gap: 18pt;
+        text-align: center;
+    }
+    .languages-row li {
+        display: inline-block;
     }
 </style>
 </head>
@@ -107,14 +141,14 @@
 
     {% if summary %}
     <section>
-        <h2>Profilo</h2>
+        <h2>{{ labels.summary }}</h2>
         <p>{{ summary }}</p>
     </section>
     {% endif %}
 
     {% if areas_of_expertise %}
     <section>
-        <h2>Areas of Expertise</h2>
+        <h2>{{ labels.areas_of_expertise }}</h2>
         <ul class="areas-list">
             {% for area in areas_of_expertise %}
             <li>{{ area }}</li>
@@ -125,20 +159,26 @@
 
     {% if experiences %}
     <section>
-        <h2>Esperienza</h2>
+        <h2>{{ labels.experience }}</h2>
         {% for exp in experiences %}
         <div class="experience">
-            <div class="experience-title">
-                <span>{{ exp.role }} — {{ exp.company }}</span>
+            <div class="experience-company">
+                <span>{{ exp.company }}</span>
+                <span>{{ exp.location }}</span>
+            </div>
+            <div class="experience-role">
+                <span>{{ exp.role }}</span>
                 <span>{{ exp.dates }}</span>
             </div>
-            <div class="experience-meta">{{ exp.location }}</div>
             {% if exp.bullets %}
             <ul class="bullets">
                 {% for bullet in exp.bullets %}
                 <li>{{ bullet }}</li>
                 {% endfor %}
             </ul>
+            {% endif %}
+            {% if exp.technologies %}
+            <p class="experience-technologies">{{ labels.technologies }}: {{ exp.technologies|join:", " }}</p>
             {% endif %}
         </div>
         {% endfor %}
@@ -147,7 +187,7 @@
 
     {% if educations %}
     <section>
-        <h2>Istruzione</h2>
+        <h2>{{ labels.education }}</h2>
         {% for edu in educations %}
         <div class="education-item">
             <div class="education-title">
@@ -161,34 +201,19 @@
     </section>
     {% endif %}
 
-    {% if skills %}
-    <section>
-        <h2>Competenze</h2>
-        <ul class="skills-list">
-            {% for skill in skills %}
-            <li>{{ skill }}</li>
-            {% endfor %}
-        </ul>
-    </section>
-    {% endif %}
-
-    {% if certifications %}
-    <section>
-        <h2>Certificazioni</h2>
-        <ul class="certifications-list">
-            {% for cert in certifications %}
-            <li>{{ cert }}</li>
-            {% endfor %}
-        </ul>
+    {% if skills or certifications %}
+    <section class="skills-certifications">
+        {% if certifications %}<p>{{ labels.certified_in }}: {{ certifications|join:", " }}</p>{% endif %}
+        {% if skills %}<p>{{ labels.skilled_in }}: {{ skills|join:", " }}</p>{% endif %}
     </section>
     {% endif %}
 
     {% if languages %}
     <section>
-        <h2>Lingue</h2>
-        <ul class="languages-list">
+        <h2>{{ labels.languages }}</h2>
+        <ul class="languages-row">
             {% for lang in languages %}
-            <li>{{ lang.language }}{% if lang.level %} ({{ lang.level }}){% endif %}</li>
+            <li>{{ lang.language }}{% if lang.level %}: {{ lang.level }}{% endif %}</li>
             {% endfor %}
         </ul>
     </section>

@@ -1,14 +1,50 @@
 from django.core.files.base import ContentFile
+from django.utils import timezone
+
+from apps.jobs.models import RunLog
 
 from .ai_content import generate_cv_content
+from .cv_parameters import MAX_OVERFLOW_ITERATIONS
 from .models import CVDocument
 from .rendering import render_cv
-from .selection import compute_bullet_budget, select_and_cut_experiences, select_educations_to_show
+from .selection import (
+    compute_bullet_budget,
+    flatten_bullets_to_text,
+    remove_least_relevant_bullet,
+    select_and_cut_experiences,
+    select_educations_to_show,
+)
 
 
 class ProfileIncomplete(Exception):
     """Il profilo non ha almeno 1 voce di istruzione (Docs/03 §3.2, §10.2):
     non è generabile un CV finché non è completo."""
+
+
+# Etichette fisse di sezione: seguono `cv_language_mode` come il resto del
+# contenuto del CV (Docs/03 §4), non restano fisse in una lingua.
+SECTION_LABELS = {
+    "it": {
+        "summary": "Profilo",
+        "areas_of_expertise": "Aree di competenza",
+        "experience": "Esperienza",
+        "education": "Istruzione",
+        "certified_in": "Certificazioni",
+        "skilled_in": "Competenze",
+        "languages": "Lingue",
+        "technologies": "Tecnologie",
+    },
+    "en": {
+        "summary": "Profile",
+        "areas_of_expertise": "Areas of Expertise",
+        "experience": "Experience",
+        "education": "Education",
+        "certified_in": "Certified in",
+        "skilled_in": "Skilled in",
+        "languages": "Languages",
+        "technologies": "Technologies",
+    },
+}
 
 
 def _format_date(value):
@@ -58,11 +94,29 @@ def _filter_grounded_skills(ai_names, profile_names):
     return [name for name in ai_names if name in profile_names]
 
 
-def _build_shown_experiences(content, bullet_budget):
+def _attach_technologies(ai_experiences, profile):
+    """`technologies` è dato fattuale del profilo, non riformulato
+    dall'AI (come `location`/`dates`): il prompt garantisce stesso ordine e
+    stesso numero di voci in output (Docs/03 §11 punto 3), quindi si
+    riattacca per indice invece di chiederlo di nuovo al modello."""
+    ordered_profile_experiences = list(
+        profile.experiences.all().order_by("-end_date", "-start_date")
+    )
+    return [
+        {**exp, "technologies": ordered_profile_experiences[index].technologies}
+        for index, exp in enumerate(ai_experiences)
+    ]
+
+
+def _build_shown_experiences(content, bullet_budget, profile):
     """Applica selezione (cap 5, swap singolo) e taglio bullet al budget
     globale (Docs/03 §11 punto 4), sul contenuto già prodotto dal modello
-    per punto 3. Ritorna la lista pronta per il template."""
-    selected = select_and_cut_experiences(content["experiences"], bullet_budget)
+    per punto 3. I bullet restano dict `{text, relevance_rank}` — il loop di
+    ripiego per overflow (§6) deve poterli continuare a rimuovere per
+    rilevanza; l'appiattimento a stringa avviene solo subito prima del primo
+    rendering (`generate_cv`)."""
+    with_technologies = _attach_technologies(content["experiences"], profile)
+    selected = select_and_cut_experiences(with_technologies, bullet_budget)
     return [
         {
             "company": exp["company"],
@@ -70,6 +124,7 @@ def _build_shown_experiences(content, bullet_budget):
             "location": exp["location"],
             "dates": exp["dates"],
             "bullets": exp["bullets"],
+            "technologies": exp["technologies"],
         }
         for exp in selected
     ]
@@ -80,21 +135,56 @@ def _build_render_context(user, profile, content):
     bullet_budget = compute_bullet_budget(shown_education_count)
     profile_skill_names = {skill.name for skill in profile.skills.all()}
     profile_certification_names = {cert.name for cert in profile.certifications.all()}
+    html_lang = "en" if user.cv_language_mode == "english" else "it"
 
     return {
-        "html_lang": "en" if user.cv_language_mode == "english" else "it",
+        "html_lang": html_lang,
+        "labels": SECTION_LABELS[html_lang],
         "full_name": _build_full_name(user),
         "contact_line": _build_contact_line(user, profile),
         "photo_url": _build_photo_url(user, profile),
         "qualification": content["qualification"],
         "summary": content["summary"],
         "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
-        "experiences": _build_shown_experiences(content, bullet_budget),
+        "experiences": _build_shown_experiences(content, bullet_budget, profile),
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
         "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
         "languages": _build_languages(profile),
     }
+
+
+def _render_with_overflow_retry(job, context):
+    """Controllo "1 pagina" e loop di ripiego (Docs/03 §6, §11 punto 6):
+    `render_cv` applica già i 3 livelli di compattamento; se il risultato
+    resta multi-pagina, si rimuove un bullet alla volta (il globalmente
+    meno rilevante, sugli stessi dati già selezionati/tagliati al budget)
+    e si rirenderizza, fino a `MAX_OVERFLOW_ITERATIONS`. Esaurito il tetto,
+    si accetta il caso residuale: si salva comunque il PDF multi-pagina,
+    senza errore mostrato, con l'evento tracciato in `RunLog` per diagnosi."""
+    raw_experiences = context["experiences"]
+    context["experiences"] = flatten_bullets_to_text(raw_experiences)
+    html, pdf_bytes, page_count = render_cv(context)
+
+    iterations = 0
+    while page_count > 1 and iterations < MAX_OVERFLOW_ITERATIONS:
+        if not remove_least_relevant_bullet(raw_experiences):
+            break
+        context["experiences"] = flatten_bullets_to_text(raw_experiences)
+        html, pdf_bytes, page_count = render_cv(context)
+        iterations += 1
+
+    if page_count > 1:
+        RunLog.objects.create(
+            user=job.user,
+            job=job,
+            task_type=RunLog.TaskType.CV_GENERATION,
+            status=RunLog.Status.SUCCESS,
+            message=f"CV generato multi-pagina ({page_count} pagine) dopo {iterations} iterazioni di ripiego.",
+            started_at=timezone.now(),
+            finished_at=timezone.now(),
+        )
+    return html, pdf_bytes
 
 
 def generate_cv(job, generation_type, enrichment=""):
@@ -103,7 +193,8 @@ def generate_cv(job, generation_type, enrichment=""):
     ordinamento di rilevanza per ogni esperienza), selezione/taglio
     server-side (cap esperienze con swap singolo, budget bullet dal numero
     di voci di istruzione mostrate), composizione del template HTML,
-    conversione PDF con WeasyPrint, salvataggio in `CVDocument`.
+    conversione PDF con WeasyPrint (con loop di ripiego per overflow),
+    salvataggio in `CVDocument`.
 
     Solleva l'eccezione a chi chiama in caso di fallimento (profilo
     incompleto, chiamata Claude, rendering): la gestione (stato Job,
@@ -118,7 +209,7 @@ def generate_cv(job, generation_type, enrichment=""):
 
     content = generate_cv_content(profile, job, user.cv_language_mode, enrichment)
     context = _build_render_context(user, profile, content)
-    html, pdf_bytes, _page_count = render_cv(context)
+    html, pdf_bytes = _render_with_overflow_retry(job, context)
 
     cv_document = CVDocument.objects.create(
         job=job,
