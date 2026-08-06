@@ -194,7 +194,12 @@ export default function AccountPage() {
         <Link to="/list" className="text-sm font-medium text-primary hover:underline">
           ← {t('jobs.backToList')}
         </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">{t('account.title')}</h1>
+        <div className="mt-2 flex items-center justify-between gap-4">
+          <h1 className="text-3xl font-bold tracking-tight">{t('account.title')}</h1>
+          <Button variant="secondary" asChild>
+            <Link to="/profile">{t('account.editProfileLink')}</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>

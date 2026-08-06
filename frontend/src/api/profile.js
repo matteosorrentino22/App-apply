@@ -26,6 +26,10 @@ export function createSectionItem(section, payload) {
   return apiFetch(SECTION_ENDPOINTS[section], { method: 'POST', body: payload })
 }
 
+export function updateSectionItem(section, id, payload) {
+  return apiFetch(`${SECTION_ENDPOINTS[section]}${id}/`, { method: 'PATCH', body: payload })
+}
+
 export function deleteSectionItem(section, id) {
   return apiFetch(`${SECTION_ENDPOINTS[section]}${id}/`, { method: 'DELETE' })
 }
