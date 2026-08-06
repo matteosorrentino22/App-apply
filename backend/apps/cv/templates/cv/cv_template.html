@@ -110,6 +110,14 @@
         grid-template-columns: 1fr 1fr;
         gap: 1pt 16pt;
     }
+    .areas-list li {
+        padding-left: 10pt;
+        text-indent: -10pt;
+    }
+    .areas-list li::before {
+        content: "•";
+        padding-right: 5pt;
+    }
     .skills-certifications p {
         margin: 0 0 1pt 0;
     }
@@ -118,9 +126,9 @@
         padding: 0;
         list-style: none;
         display: flex;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 18pt;
-        text-align: center;
+        text-align: left;
     }
     .languages-row li {
         display: inline-block;
@@ -141,7 +149,6 @@
 
     {% if summary %}
     <section>
-        <h2>{{ labels.summary }}</h2>
         <p>{{ summary }}</p>
     </section>
     {% endif %}
@@ -154,6 +161,13 @@
             <li>{{ area }}</li>
             {% endfor %}
         </ul>
+    </section>
+    {% endif %}
+
+    {% if skills or certifications %}
+    <section class="skills-certifications">
+        {% if certifications %}<p>{{ labels.certified_in }}: {{ certifications|join:", " }}</p>{% endif %}
+        {% if skills %}<p>{{ labels.skilled_in }}: {{ skills|join:", " }}</p>{% endif %}
     </section>
     {% endif %}
 
@@ -198,13 +212,6 @@
             {% if edu.notes %}<p>{{ edu.notes }}</p>{% endif %}
         </div>
         {% endfor %}
-    </section>
-    {% endif %}
-
-    {% if skills or certifications %}
-    <section class="skills-certifications">
-        {% if certifications %}<p>{{ labels.certified_in }}: {{ certifications|join:", " }}</p>{% endif %}
-        {% if skills %}<p>{{ labels.skilled_in }}: {{ skills|join:", " }}</p>{% endif %}
     </section>
     {% endif %}
 

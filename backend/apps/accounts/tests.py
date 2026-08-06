@@ -37,6 +37,18 @@ class MeEndpointTests(APITestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.extra_credit, Decimal("12.50"))
 
+    def test_first_and_last_name_are_editable_and_exposed(self):
+        response = self.client.patch(
+            "/api/accounts/me/", {"first_name": "Maria", "last_name": "Rossi"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["first_name"], "Maria")
+        self.assertEqual(response.data["last_name"], "Rossi")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Maria")
+        self.assertEqual(self.user.last_name, "Rossi")
+
 
 class SetE2eAccountCommandTests(TestCase):
     def setUp(self):

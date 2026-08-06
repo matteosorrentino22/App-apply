@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
+import { updateMe } from '../api/auth'
 import {
   fetchProfile,
   updateProfile,
@@ -97,12 +99,17 @@ async function saveSection(section, currentRows, initialIds) {
 
 export default function ProfilePage() {
   const { t } = useLanguage()
+  const { user, refreshUser } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const [nameFields, setNameFields] = useState({
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
+  })
   const [profileFields, setProfileFields] = useState({
     summary: '',
     phone: '',
@@ -198,6 +205,9 @@ export default function ProfilePage() {
     setNotice('')
     setSaving(true)
     try {
+      await updateMe(nameFields)
+      await refreshUser()
+
       if (photoFile) {
         const formData = new FormData()
         Object.entries(profileFields).forEach(([key, value]) => formData.append(key, value))
@@ -248,6 +258,28 @@ export default function ProfilePage() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         <Card>
           <CardContent className="flex flex-col gap-5 pt-6">
+            <div className="flex flex-wrap gap-5">
+              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                <Label htmlFor="first-name">{t('onboarding.firstName')}</Label>
+                <Input
+                  id="first-name"
+                  type="text"
+                  required
+                  value={nameFields.first_name}
+                  onChange={(event) => setNameFields({ ...nameFields, first_name: event.target.value })}
+                />
+              </div>
+              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                <Label htmlFor="last-name">{t('onboarding.lastName')}</Label>
+                <Input
+                  id="last-name"
+                  type="text"
+                  required
+                  value={nameFields.last_name}
+                  onChange={(event) => setNameFields({ ...nameFields, last_name: event.target.value })}
+                />
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="summary">{t('profile.summary')}</Label>
               <Textarea
