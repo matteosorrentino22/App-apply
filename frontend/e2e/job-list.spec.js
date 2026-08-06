@@ -220,11 +220,13 @@ test('arricchimento con "salva anche nel profilo" aggiunge il bullet all\'esperi
   // Il profilo di questo utente e2e non ha un titolo di studio (nessun
   // onboarding completato, §10.2): la generazione vera e propria viene
   // respinta prima della chiamata a Claude, ma `save_to_profile` è già
-  // stato applicato prima di quel controllo (apps/cv/enrichment.py).
+  // stato applicato prima di quel controllo (apps/cv/enrichment.py). Il
+  // frontend mostra il messaggio esatto restituito dal backend (`detail`),
+  // non un testo fisso di "generazione già in corso" (bug corretto).
   await page.getByRole('button', { name: 'Genera CV con questo dettaglio' }).click()
-  await expect(page.getByText('Generazione già in corso per questo job.')).toBeVisible({
-    timeout: 20000,
-  })
+  await expect(
+    page.getByText('Completa il profilo (almeno un titolo di studio) prima di generare un CV.'),
+  ).toBeVisible({ timeout: 20000 })
 
   const response = await request.get(`${baseURL}/api/experiences/`, {
     headers: { Authorization: `Token ${token}` },
