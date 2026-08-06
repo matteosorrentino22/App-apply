@@ -89,7 +89,11 @@ export default function JobDetailPage() {
       setShowEnrichment(false)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        showToast(t('jobs.generationConflict'))
+        // Il backend distingue più cause dietro lo stesso 409 (concorrenza,
+        // profilo incompleto, massimale/credito esaurito): il messaggio
+        // esatto arriva in `detail`, non va sostituito con un testo fisso
+        // che nasconderebbe all'utente la vera causa del blocco.
+        showToast(err.data?.detail || t('jobs.generationConflict'))
       } else {
         showToast(t('jobs.generationFailed'))
       }

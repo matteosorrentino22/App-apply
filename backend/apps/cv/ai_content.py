@@ -11,9 +11,12 @@ CONTENT_JSON_SCHEMA = {
         "summary": {"type": "string"},
         "qualification": {"type": "string"},
         "areas_of_expertise": {
+            # Niente minItems/maxItems: l'API Anthropic per gli output
+            # strutturati non supporta valori diversi da 0/1 per un array
+            # (400 "minItems values other than 0 or 1 are not supported" —
+            # bug reale osservato in produzione). Il vincolo 4-6 resta solo
+            # nel prompt testuale, come già per experiences/bullets.
             "type": "array",
-            "minItems": AREAS_OF_EXPERTISE_MIN,
-            "maxItems": AREAS_OF_EXPERTISE_MAX,
             "items": {
                 "type": "object",
                 "properties": {
