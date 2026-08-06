@@ -66,6 +66,8 @@ export default function OnboardingPage() {
   const [error, setError] = useState('')
 
   const [preferences, setPreferences] = useState({
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
     objective_statement: user?.objective_statement || '',
     cv_language_mode: user?.cv_language_mode || 'job_language',
     cv_include_photo: user?.cv_include_photo || false,
@@ -249,6 +251,32 @@ export default function OnboardingPage() {
         <Card>
           <form onSubmit={handlePreferencesSubmit}>
             <CardContent className="flex flex-col gap-5 pt-6">
+              <div className="flex flex-wrap gap-5">
+                <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                  <Label htmlFor="first-name">{t('onboarding.firstName')}</Label>
+                  <Input
+                    id="first-name"
+                    type="text"
+                    required
+                    value={preferences.first_name}
+                    onChange={(event) =>
+                      setPreferences({ ...preferences, first_name: event.target.value })
+                    }
+                  />
+                </div>
+                <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                  <Label htmlFor="last-name">{t('onboarding.lastName')}</Label>
+                  <Input
+                    id="last-name"
+                    type="text"
+                    required
+                    value={preferences.last_name}
+                    onChange={(event) =>
+                      setPreferences({ ...preferences, last_name: event.target.value })
+                    }
+                  />
+                </div>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="objective">{t('onboarding.objectiveLabel')}</Label>
                 <Textarea

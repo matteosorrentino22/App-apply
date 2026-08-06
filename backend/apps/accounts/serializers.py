@@ -46,6 +46,8 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "email",
+            "first_name",
+            "last_name",
             "plan",
             "extra_credit",
             "timezone",
