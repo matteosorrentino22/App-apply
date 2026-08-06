@@ -72,7 +72,10 @@ export default function JobListPage() {
       setJobs((current) => current.map((j) => (j.id === job.id ? updated : j)))
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        showToast(t('jobs.generationConflict'))
+        // Il backend distingue più cause dietro lo stesso 409 (concorrenza,
+        // profilo incompleto, massimale/credito esaurito): il messaggio
+        // esatto arriva in `detail` (stesso fix di JobDetailPage, Sprint 30).
+        showToast(err.data?.detail || t('jobs.generationConflict'))
       } else {
         showToast(t('jobs.generationFailed'))
       }

@@ -40,3 +40,13 @@ mostrare `detail` quando presente, con il vecchio testo come fallback.
 Nessuno dei due fix introduce nuovi punti aperti. Resta valido quanto già
 segnalato negli sprint precedenti (calibrazione parametri, qualità reale
 dei contenuti, suite e2e da eseguire su ambiente dedicato).
+
+## Addendum (2026-08-06) — stesso bug 2, secondo punto non coperto
+Il committente ha rilevato che il messaggio fuorviante compariva ancora,
+testando dalla lista job (non dalla pagina di dettaglio). Il fix del Bug 2
+sopra aveva corretto solo `JobDetailPage.jsx`: `JobListPage.jsx` ha il
+pulsante "Genera CV" sulla card della lista con lo stesso identico bug
+(stesso pattern di codice, mai notato perché non è lo stesso file).
+Corretto con lo stesso fix (`err.data?.detail` con fallback al testo fisso).
+Nessun altro punto residuo nel codice con lo stesso pattern (verificato con
+una ricerca su tutto `frontend/src` per `status === 409`).
