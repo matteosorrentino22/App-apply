@@ -26,7 +26,13 @@ export function emptyCompany() {
  * un'esperienza indipendente (azienda + ruolo + località + attività) — il
  * raggruppamento è solo come il form lo presenta, non cosa viene inviato.
  */
-export default function ExperienceGroupEditor({ companies, onChange, t }) {
+export default function ExperienceGroupEditor({
+  companies,
+  onChange,
+  t,
+  titleKey = 'onboarding.experiences',
+  hintKey = 'onboarding.experiencesHint',
+}) {
   function updateCompany(companyKey, patch) {
     onChange(companies.map((c) => (c._key === companyKey ? { ...c, ...patch } : c)))
   }
@@ -65,8 +71,8 @@ export default function ExperienceGroupEditor({ companies, onChange, t }) {
 
   return (
     <fieldset className="flex flex-col gap-4">
-      <legend className="mb-1 text-base font-semibold text-foreground">{t('onboarding.experiences')}</legend>
-      <p className="-mt-2 text-sm text-muted-foreground">{t('onboarding.experiencesHint')}</p>
+      <legend className="mb-1 text-base font-semibold text-foreground">{t(titleKey)}</legend>
+      <p className="-mt-2 text-sm text-muted-foreground">{t(hintKey)}</p>
 
       {companies.map((c) => (
         <Card key={c._key} className="p-5">

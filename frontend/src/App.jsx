@@ -11,6 +11,7 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
 import AccountPage from './pages/AccountPage'
+import ProfilePage from './pages/ProfilePage'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -85,6 +86,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <AccountPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
                   </ProtectedRoute>
                 }
               />
