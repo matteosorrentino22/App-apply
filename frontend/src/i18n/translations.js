@@ -58,6 +58,7 @@ export const translations = {
       addRole: 'Aggiungi un altro ruolo in questa azienda',
       removeCompany: 'Rimuovi azienda',
       removeRole: 'Rimuovi ruolo',
+      ongoing: 'In corso',
       activities: 'Attività / competenze in questo ruolo',
       activitiesPlaceholder: 'Scrivi e premi Invio…',
       experiencesLimitWarning:
@@ -277,6 +278,7 @@ export const translations = {
       addRole: 'Add another role at this company',
       removeCompany: 'Remove company',
       removeRole: 'Remove role',
+      ongoing: 'Ongoing',
       activities: 'Activities / skills in this role',
       activitiesPlaceholder: 'Type and press Enter…',
       experiencesLimitWarning:

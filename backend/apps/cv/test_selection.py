@@ -25,6 +25,10 @@ def _edu(name, end, start=None):
     return _FakeEducation(name, start, datetime.date(*end))
 
 
+def _ongoing_edu(name, start=None):
+    return _FakeEducation(name, start, None)
+
+
 class SelectEducationsToShowTests(SimpleTestCase):
     def test_keeps_the_three_most_recent_by_end_date(self):
         educations = [
@@ -45,6 +49,23 @@ class SelectEducationsToShowTests(SimpleTestCase):
     def test_fewer_than_max_shown_returns_all(self):
         educations = [_edu("only", (2020, 1, 1))]
         self.assertEqual(len(select_educations_to_show(educations)), 1)
+
+    def test_ongoing_education_without_end_date_is_treated_as_most_recent(self):
+        # Sprint 34: un'istruzione ancora in corso (end_date=None) vince il
+        # confronto con qualsiasi data di fine passata, invece di rompere
+        # l'ordinamento con un AttributeError su None.toordinal().
+        ongoing = _ongoing_edu("ongoing", start=datetime.date(2023, 1, 1))
+        finished = _edu("finished", (2023, 1, 1))
+        shown = select_educations_to_show([finished, ongoing])
+        self.assertEqual(shown[0].name, "ongoing")
+
+    def test_ongoing_education_duration_uses_todays_date(self):
+        # La durata per il tie-break di un'istruzione in corso usa la data
+        # odierna come fine provvisoria, non fallisce sul confronto None.
+        ongoing_long = _ongoing_edu("ongoing-long", start=datetime.date(2015, 1, 1))
+        ongoing_short = _ongoing_edu("ongoing-short", start=datetime.date(2024, 1, 1))
+        shown = select_educations_to_show([ongoing_long, ongoing_short])
+        self.assertEqual(shown[0].name, "ongoing-short")
 
 
 class ComputeBulletBudgetTests(SimpleTestCase):

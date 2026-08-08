@@ -2,8 +2,10 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card } from '@/components/ui/card'
 import ChipInput from '@/components/ChipInput'
+import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 
 let nextKey = 0
 function makeKey() {
@@ -12,7 +14,16 @@ function makeKey() {
 }
 
 export function emptyRole() {
-  return { _key: makeKey(), role: '', location: '', bullets: [] }
+  return {
+    _key: makeKey(),
+    role: '',
+    location: '',
+    location_country_code: '',
+    start_date: '',
+    end_date: '',
+    ongoing: false,
+    bullets: [],
+  }
 }
 
 export function emptyCompany() {
@@ -115,14 +126,17 @@ export default function ExperienceGroupEditor({
                           onChange={(e) => updateRole(c._key, r._key, { role: e.target.value })}
                         />
                       </div>
-                      <div className="flex max-w-60 flex-1 flex-col gap-1.5">
-                        <Label htmlFor={`role-location-${r._key}`}>{t('onboarding.location')}</Label>
-                        <Input
-                          id={`role-location-${r._key}`}
-                          value={r.location}
-                          onChange={(e) => updateRole(c._key, r._key, { location: e.target.value })}
-                        />
-                      </div>
+                      <CityOnlyAutocomplete
+                        cityId={`role-location-${r._key}`}
+                        label={t('onboarding.location')}
+                        city={r.location}
+                        onChange={({ city, countryCode }) =>
+                          updateRole(c._key, r._key, {
+                            location: city,
+                            location_country_code: countryCode ?? r.location_country_code,
+                          })
+                        }
+                      />
                     </div>
                     <Button
                       type="button"
@@ -134,6 +148,39 @@ export default function ExperienceGroupEditor({
                       <Trash2 className="h-3.5 w-3.5" />
                       {t('onboarding.removeRole')}
                     </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-end gap-4">
+                    <div className="flex min-w-32 flex-1 flex-col gap-1.5">
+                      <Label htmlFor={`role-start-${r._key}`}>{t('onboarding.startDate')}</Label>
+                      <Input
+                        id={`role-start-${r._key}`}
+                        type="date"
+                        value={r.start_date}
+                        onChange={(e) => updateRole(c._key, r._key, { start_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex min-w-32 flex-1 flex-col gap-1.5">
+                      <Label htmlFor={`role-end-${r._key}`}>{t('onboarding.endDate')}</Label>
+                      <Input
+                        id={`role-end-${r._key}`}
+                        type="date"
+                        disabled={r.ongoing}
+                        value={r.end_date}
+                        onChange={(e) => updateRole(c._key, r._key, { end_date: e.target.value })}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 pb-2 text-sm">
+                      <Checkbox
+                        checked={r.ongoing}
+                        onCheckedChange={(checked) =>
+                          updateRole(c._key, r._key, {
+                            ongoing: checked === true,
+                            end_date: checked === true ? '' : r.end_date,
+                          })
+                        }
+                      />
+                      {t('onboarding.ongoing')}
+                    </label>
                   </div>
                   <div className="mt-3 flex flex-col gap-1.5">
                     <Label htmlFor={`activities-${r._key}`}>{t('onboarding.activities')}</Label>

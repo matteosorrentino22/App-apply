@@ -35,8 +35,6 @@ CONTENT_JSON_SCHEMA = {
                 "properties": {
                     "company": {"type": "string"},
                     "role": {"type": "string"},
-                    "location": {"type": "string"},
-                    "dates": {"type": "string"},
                     "highly_relevant": {"type": "boolean"},
                     "bullets": {
                         "type": "array",
@@ -51,7 +49,7 @@ CONTENT_JSON_SCHEMA = {
                         },
                     },
                 },
-                "required": ["company", "role", "location", "dates", "highly_relevant", "bullets"],
+                "required": ["company", "role", "highly_relevant", "bullets"],
                 "additionalProperties": False,
             },
         },
@@ -119,17 +117,14 @@ CONTENT_SYSTEM_PROMPT = (
 )
 
 
-def _format_date(value):
-    return value.strftime("%Y-%m") if value else ""
-
-
 def _build_experiences_input(profile):
+    # `location`/`dates` non sono inclusi: sono dati fattuali (come
+    # `technologies`), non riformulati dall'AI — riattaccati lato server
+    # dopo la chiamata (Sprint 34, stesso principio di generation.py).
     return [
         {
             "company": exp.company,
             "role": exp.role,
-            "location": exp.location,
-            "dates": f"{_format_date(exp.start_date)} - {_format_date(exp.end_date) or 'presente'}",
             "bullets": exp.bullets,
             "technologies": exp.technologies,
         }
