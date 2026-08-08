@@ -49,6 +49,7 @@ def _fake_content(num_experiences=3):
     return {
         "summary": "Project manager con 8 anni di esperienza.",
         "qualification": "Project Manager",
+        "translated_city": "Milano",
         "areas_of_expertise": [
             {"label": f"Area {i}", "grounding_reference": f"bullet {i}.1"} for i in range(4)
         ],
@@ -248,6 +249,7 @@ def _fake_content_with_long_bullets(num_experiences, num_bullets_per_experience,
     return {
         "summary": long_text,
         "qualification": "Project Manager",
+        "translated_city": "Milano",
         "areas_of_expertise": [
             {"label": f"Area {i}", "grounding_reference": f"bullet {i}.1"} for i in range(6)
         ],

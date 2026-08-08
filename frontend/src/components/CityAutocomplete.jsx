@@ -42,7 +42,7 @@ export default function CityAutocomplete({ city, country, onChange, cityId, coun
   }
 
   function handleSelect(suggestion) {
-    onChange({ city: suggestion.city, country: suggestion.country })
+    onChange({ city: suggestion.city, country: suggestion.country, countryCode: suggestion.country_code })
     setSuggestions([])
     setOpen(false)
   }

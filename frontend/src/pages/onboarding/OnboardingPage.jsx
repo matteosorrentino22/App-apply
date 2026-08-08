@@ -77,8 +77,10 @@ export default function OnboardingPage() {
     summary: '',
     phone: '',
     city: '',
+    country_code: '',
     linkedin_url: '',
   })
+  const [profileCountry, setProfileCountry] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
   const [cvNotice, setCvNotice] = useState('')
 
@@ -141,8 +143,10 @@ export default function OnboardingPage() {
         summary: structured.summary || '',
         phone: '',
         city: '',
+        country_code: '',
         linkedin_url: '',
       })
+      setProfileCountry('')
       setCompanies(groupExperiencesByCompany(structured.experiences))
       setSections({
         educations: importedListToRows(structured.educations, EDUCATION_FIELDS),
@@ -357,26 +361,30 @@ export default function OnboardingPage() {
                     onChange={(event) => setProfileFields({ ...profileFields, summary: event.target.value })}
                   />
                 </div>
-                <div className="flex flex-wrap gap-5">
-                  <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                    <Label htmlFor="phone">{t('onboarding.profilePhone')}</Label>
-                    <Input
-                      id="phone"
-                      type="text"
-                      value={profileFields.phone}
-                      onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
-                    />
-                  </div>
-                  <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                    <Label htmlFor="city">{t('onboarding.profileCity')}</Label>
-                    <Input
-                      id="city"
-                      type="text"
-                      value={profileFields.city}
-                      onChange={(event) => setProfileFields({ ...profileFields, city: event.target.value })}
-                    />
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="phone">{t('onboarding.profilePhone')}</Label>
+                  <Input
+                    id="phone"
+                    type="text"
+                    placeholder={t('onboarding.profilePhonePlaceholder')}
+                    value={profileFields.phone}
+                    onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
+                  />
                 </div>
+                <CityAutocomplete
+                  cityId="city"
+                  countryId="country"
+                  city={profileFields.city}
+                  country={profileCountry}
+                  onChange={({ city, country, countryCode }) => {
+                    setProfileFields({
+                      ...profileFields,
+                      city,
+                      country_code: countryCode ?? profileFields.country_code,
+                    })
+                    setProfileCountry(country)
+                  }}
+                />
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="linkedin">{t('onboarding.profileLinkedin')}</Label>
                   <Input

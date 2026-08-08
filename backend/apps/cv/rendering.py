@@ -6,9 +6,9 @@ from weasyprint import HTML
 # template è già progettato per starci con un profilo di dimensioni standard,
 # questo è solo un margine di sicurezza per profili più ricchi della norma.
 COMPACT_LEVELS = [
-    {"base_font_size": 10, "line_height": "1.3", "section_gap": "10pt", "heading_gap": "4pt", "item_gap": "8pt", "page_margin": "1.5cm", "photo_size": "70pt"},
-    {"base_font_size": 9, "line_height": "1.2", "section_gap": "7pt", "heading_gap": "3pt", "item_gap": "6pt", "page_margin": "1.2cm", "photo_size": "60pt"},
-    {"base_font_size": 8, "line_height": "1.1", "section_gap": "5pt", "heading_gap": "2pt", "item_gap": "4pt", "page_margin": "1cm", "photo_size": "50pt"},
+    {"base_font_size": 9, "line_height": "1.25", "section_gap": "9pt", "heading_gap": "4pt", "item_gap": "7pt", "page_margin": "1.4cm", "photo_size": "65pt"},
+    {"base_font_size": 8, "line_height": "1.15", "section_gap": "6pt", "heading_gap": "3pt", "item_gap": "5pt", "page_margin": "1.1cm", "photo_size": "55pt"},
+    {"base_font_size": 7, "line_height": "1.1", "section_gap": "4pt", "heading_gap": "2pt", "item_gap": "3pt", "page_margin": "0.9cm", "photo_size": "45pt"},
 ]
 
 

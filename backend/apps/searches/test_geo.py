@@ -28,12 +28,14 @@ class CityAutocompleteApiTests(APITestCase):
                 "address": {
                     "city": "Zürich",
                     "country": "Switzerland",
+                    "country_code": "ch",
                 }
             },
             {
                 "address": {
                     "state": "Zürich",  # nessun city/town/village: da scartare
                     "country": "Switzerland",
+                    "country_code": "ch",
                 }
             },
         ]
@@ -42,7 +44,10 @@ class CityAutocompleteApiTests(APITestCase):
             response = self.client.get("/api/searches-city-autocomplete/", {"q": "Zuri"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, [{"city": "Zürich", "country": "Switzerland"}])
+        self.assertEqual(
+            response.data,
+            [{"city": "Zürich", "country": "Switzerland", "country_code": "CH"}],
+        )
 
     def test_short_query_returns_empty_without_calling_nominatim(self):
         with patch("apps.searches.geo.requests.get") as mock_get:

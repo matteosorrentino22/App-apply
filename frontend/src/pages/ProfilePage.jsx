@@ -12,6 +12,7 @@ import {
 } from '../api/profile'
 import ListSectionEditor, { emptyRow } from '../components/ListSectionEditor'
 import ExperienceGroupEditor from '../components/ExperienceGroupEditor'
+import CityAutocomplete from '../components/CityAutocomplete'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -114,8 +115,10 @@ export default function ProfilePage() {
     summary: '',
     phone: '',
     city: '',
+    country_code: '',
     linkedin_url: '',
   })
+  const [profileCountry, setProfileCountry] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
   const [companies, setCompanies] = useState([])
   const [initialExperienceIds, setInitialExperienceIds] = useState([])
@@ -169,8 +172,10 @@ export default function ProfilePage() {
           summary: data.summary || '',
           phone: data.phone || '',
           city: data.city || '',
+          country_code: data.country_code || '',
           linkedin_url: data.linkedin_url || '',
         })
+        setProfileCountry(data.country_code || '')
         const groupedExperiences = groupExperiencesByCompany(data.experiences)
         setCompanies(groupedExperiences)
         setInitialExperienceIds((data.experiences || []).map((exp) => exp.id))
@@ -288,26 +293,30 @@ export default function ProfilePage() {
                 onChange={(event) => setProfileFields({ ...profileFields, summary: event.target.value })}
               />
             </div>
-            <div className="flex flex-wrap gap-5">
-              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                <Label htmlFor="phone">{t('profile.phone')}</Label>
-                <Input
-                  id="phone"
-                  type="text"
-                  value={profileFields.phone}
-                  onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
-                />
-              </div>
-              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-                <Label htmlFor="city">{t('profile.city')}</Label>
-                <Input
-                  id="city"
-                  type="text"
-                  value={profileFields.city}
-                  onChange={(event) => setProfileFields({ ...profileFields, city: event.target.value })}
-                />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="phone">{t('profile.phone')}</Label>
+              <Input
+                id="phone"
+                type="text"
+                placeholder={t('onboarding.profilePhonePlaceholder')}
+                value={profileFields.phone}
+                onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
+              />
             </div>
+            <CityAutocomplete
+              cityId="city"
+              countryId="country"
+              city={profileFields.city}
+              country={profileCountry}
+              onChange={({ city, country, countryCode }) => {
+                setProfileFields({
+                  ...profileFields,
+                  city,
+                  country_code: countryCode ?? profileFields.country_code,
+                })
+                setProfileCountry(country)
+              }}
+            />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="linkedin">{t('profile.linkedin')}</Label>
               <Input

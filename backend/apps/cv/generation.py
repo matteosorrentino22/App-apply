@@ -27,7 +27,7 @@ SECTION_LABELS = {
     "it": {
         "summary": "Profilo",
         "areas_of_expertise": "Aree di competenza",
-        "experience": "Esperienza",
+        "experience": "Esperienza lavorativa",
         "education": "Istruzione",
         "certified_in": "Certificazioni",
         "skilled_in": "Competenze",
@@ -37,7 +37,7 @@ SECTION_LABELS = {
     "en": {
         "summary": "Profile",
         "areas_of_expertise": "Areas of Expertise",
-        "experience": "Experience",
+        "experience": "Work Experience",
         "education": "Education",
         "certified_in": "Certified in",
         "skilled_in": "Skilled in",
@@ -51,9 +51,24 @@ def _format_date(value):
     return value.strftime("%Y-%m") if value else ""
 
 
-def _build_contact_line(user, profile):
-    parts = [user.email, profile.phone, profile.city, profile.linkedin_url]
-    return " · ".join(part for part in parts if part)
+def _build_contact_parts(user, profile, translated_city):
+    """Riga contatti nell'intestazione, ordine fisso (segnalato dal
+    committente): Città, PAESE | telefono | email | LinkedIn. LinkedIn è
+    l'unica parte con link ipertestuale (`is_link`), quindi il template
+    compone il markup invece di ricevere una stringa già concatenata."""
+    city_country = ", ".join(
+        part for part in [translated_city, profile.country_code.upper()] if part
+    )
+    parts = []
+    if city_country:
+        parts.append({"text": city_country, "is_link": False})
+    if profile.phone:
+        parts.append({"text": profile.phone, "is_link": False})
+    if user.email:
+        parts.append({"text": user.email, "is_link": False})
+    if profile.linkedin_url:
+        parts.append({"text": "LinkedIn", "url": profile.linkedin_url, "is_link": True})
+    return parts
 
 
 def _build_full_name(user):
@@ -153,7 +168,7 @@ def _build_render_context(user, profile, content, protected_bullets, protected_e
         "html_lang": html_lang,
         "labels": SECTION_LABELS[html_lang],
         "full_name": _build_full_name(user),
-        "contact_line": _build_contact_line(user, profile),
+        "contact_parts": _build_contact_parts(user, profile, content["translated_city"]),
         "photo_url": _build_photo_url(user, profile),
         "qualification": content["qualification"],
         "summary": content["summary"],
