@@ -13,11 +13,14 @@ CACHE_TTL_SECONDS = 60 * 60
 
 
 def search_cities(query):
-    """Suggerimenti città per l'autocomplete delle ricerche salvate.
+    """Suggerimenti città per l'autocomplete (ricerche salvate e città del
+    profilo, quest'ultima per l'intestazione del CV — Sprint 33).
 
-    Ritorna una lista di dict `{"city": ..., "country": ...}`, deduplicata
-    per coppia città/paese (Nominatim può restituire più risultati per lo
-    stesso nome a livelli amministrativi diversi — city/state/county)."""
+    Ritorna una lista di dict `{"city": ..., "country": ..., "country_code":
+    ...}` (country_code: ISO 3166-1 alpha-2, 2 lettere maiuscole, es. "IT"),
+    deduplicata per coppia città/paese (Nominatim può restituire più
+    risultati per lo stesso nome a livelli amministrativi diversi —
+    city/state/county)."""
     query = (query or "").strip()
     if len(query) < 2:
         return []
@@ -52,13 +55,14 @@ def search_cities(query):
             or address.get("municipality")
         )
         country = address.get("country")
+        country_code = (address.get("country_code") or "").upper()
         if not city or not country:
             continue
         key = (city, country)
         if key in seen:
             continue
         seen.add(key)
-        results.append({"city": city, "country": country})
+        results.append({"city": city, "country": country, "country_code": country_code})
 
     cache.set(cache_key, results, CACHE_TTL_SECONDS)
     return results

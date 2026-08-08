@@ -10,6 +10,7 @@ CONTENT_JSON_SCHEMA = {
     "properties": {
         "summary": {"type": "string"},
         "qualification": {"type": "string"},
+        "translated_city": {"type": "string"},
         "areas_of_expertise": {
             # Niente minItems/maxItems: l'API Anthropic per gli output
             # strutturati non supporta valori diversi da 0/1 per un array
@@ -57,7 +58,15 @@ CONTENT_JSON_SCHEMA = {
         "skills": {"type": "array", "items": {"type": "string"}},
         "certifications": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["summary", "qualification", "areas_of_expertise", "experiences", "skills", "certifications"],
+    "required": [
+        "summary",
+        "qualification",
+        "translated_city",
+        "areas_of_expertise",
+        "experiences",
+        "skills",
+        "certifications",
+    ],
     "additionalProperties": False,
 }
 
@@ -77,6 +86,11 @@ CONTENT_SYSTEM_PROMPT = (
     "titolo è ambiguo o multi-ruolo e non ne ricavi un ruolo univoco, usa il "
     "ruolo dell'esperienza professionale più recente del profilo; se il "
     "profilo non ha esperienze, usa comunque il titolo del job ripulito.\n\n"
+    "CITTÀ TRADOTTA ('translated_city'): la città del candidato (fornita nel "
+    "profilo) tradotta nella lingua richiesta per questo CV (es. 'Roma' → "
+    "'Rome' in inglese). Se la città è già nella lingua richiesta o non è "
+    "traducibile, restituiscila invariata. Non aggiungere il paese: solo il "
+    "nome della città.\n\n"
     "AREAS OF EXPERTISE ('areas_of_expertise'): da 4 a 6 voci di soft skill / "
     "aree funzionali-trasversali (leadership, stakeholder management, "
     "problem solving...), distinte dalle hard skill di 'skills'. Puoi "
@@ -126,6 +140,7 @@ def _build_experiences_input(profile):
 def _build_profile_context(profile):
     return {
         "summary": profile.summary,
+        "city": profile.city,
         "experiences": _build_experiences_input(profile),
         "skills": [skill.name for skill in profile.skills.all()],
         "certifications": [cert.name for cert in profile.certifications.all()],

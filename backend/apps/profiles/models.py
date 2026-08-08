@@ -14,6 +14,10 @@ class Profile(models.Model):
     # LinkedIn stanno in User/Profile e vengono iniettati nell'HTML").
     phone = models.CharField(max_length=50, blank=True, default="")
     city = models.CharField(max_length=255, blank=True, default="")
+    # Acronimo ISO 3166-1 alpha-2 (2 lettere, es. "IT"), derivato
+    # dall'autocomplete città/paese: mostrato nell'intestazione del CV come
+    # "Città, XX" — il nome completo del paese non serve altrove.
+    country_code = models.CharField(max_length=2, blank=True, default="")
     linkedin_url = models.URLField(max_length=500, blank=True, default="")
 
     def __str__(self):

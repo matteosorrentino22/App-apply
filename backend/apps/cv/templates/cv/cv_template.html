@@ -23,6 +23,11 @@
         padding-bottom: {{ heading_gap }};
         margin-bottom: {{ section_gap }};
     }
+    .contact-line {
+        border-top: 1pt solid #2f4a63;
+        padding-top: 3pt;
+        margin-top: 3pt;
+    }
     .header-text {
         flex: 1;
     }
@@ -56,7 +61,7 @@
         margin-bottom: {{ section_gap }};
     }
     h2 {
-        font-size: {{ base_font_size|add:1 }}pt;
+        font-size: 11pt;
         font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 0.5pt;
@@ -71,29 +76,41 @@
     .experience-company {
         font-weight: bold;
         text-transform: uppercase;
-        display: flex;
-        justify-content: space-between;
     }
     .experience-role {
-        font-weight: bold;
+        text-transform: uppercase;
         display: flex;
         justify-content: space-between;
+        gap: 8pt;
+    }
+    .experience-role-meta {
+        font-weight: normal;
+        text-transform: none;
+        white-space: nowrap;
+    }
+    .experience-role-meta strong {
+        font-weight: bold;
     }
     .education-title {
-        font-weight: bold;
         display: flex;
         justify-content: space-between;
+        gap: 8pt;
+    }
+    .education-title-main {
+        font-weight: bold;
+    }
+    .education-title-meta {
+        font-weight: normal;
+        white-space: nowrap;
+    }
+    .education-title-meta strong {
+        font-weight: bold;
     }
     .experience-technologies {
         font-style: italic;
         color: #555;
         font-size: {{ base_font_size|add:-1 }}pt;
         margin: 1pt 0 0 0;
-    }
-    .education-meta {
-        font-style: italic;
-        color: #555;
-        font-size: {{ base_font_size|add:-1 }}pt;
     }
     ul.bullets {
         margin: 2pt 0 0 0;
@@ -140,7 +157,12 @@
         <div class="header-text">
             <h1>{{ full_name }}</h1>
             {% if qualification %}<p class="qualification">{{ qualification }}</p>{% endif %}
-            <p class="contact">{{ contact_line }}</p>
+            <p class="contact contact-line">
+                {% for part in contact_parts %}
+                {% if not forloop.first %} | {% endif %}
+                {% if part.is_link %}<a href="{{ part.url }}">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}
+                {% endfor %}
+            </p>
         </div>
         {% if photo_url %}
         <img class="photo" src="{{ photo_url }}" alt="">
@@ -166,8 +188,8 @@
 
     {% if skills or certifications %}
     <section class="skills-certifications">
-        {% if certifications %}<p>{{ labels.certified_in }}: {{ certifications|join:", " }}</p>{% endif %}
-        {% if skills %}<p>{{ labels.skilled_in }}: {{ skills|join:", " }}</p>{% endif %}
+        {% if certifications %}<p><strong>{{ labels.certified_in }}:</strong> {{ certifications|join:", " }}</p>{% endif %}
+        {% if skills %}<p><strong>{{ labels.skilled_in }}:</strong> {{ skills|join:", " }}</p>{% endif %}
     </section>
     {% endif %}
 
@@ -176,13 +198,10 @@
         <h2>{{ labels.experience }}</h2>
         {% for exp in experiences %}
         <div class="experience">
-            <div class="experience-company">
-                <span>{{ exp.company }}</span>
-                <span>{{ exp.location }}</span>
-            </div>
+            <div class="experience-company">{{ exp.company }}</div>
             <div class="experience-role">
                 <span>{{ exp.role }}</span>
-                <span>{{ exp.dates }}</span>
+                <span class="experience-role-meta">{{ exp.location }}{% if exp.location and exp.dates %} | {% endif %}<strong>{{ exp.dates }}</strong></span>
             </div>
             {% if exp.bullets %}
             <ul class="bullets">
@@ -205,10 +224,9 @@
         {% for edu in educations %}
         <div class="education-item">
             <div class="education-title">
-                <span>{{ edu.title }} — {{ edu.institution }}</span>
-                <span>{{ edu.dates }}</span>
+                <span class="education-title-main">{{ edu.title }} — {{ edu.institution }}</span>
+                <span class="education-title-meta">{{ edu.location }}{% if edu.location and edu.dates %} | {% endif %}<strong>{{ edu.dates }}</strong></span>
             </div>
-            {% if edu.location %}<div class="education-meta">{{ edu.location }}</div>{% endif %}
             {% if edu.notes %}<p>{{ edu.notes }}</p>{% endif %}
         </div>
         {% endfor %}
