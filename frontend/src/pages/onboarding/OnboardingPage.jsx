@@ -8,6 +8,7 @@ import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
+import EducationListEditor, { emptyEducationRow } from '../../components/EducationListEditor'
 import CityAutocomplete from '../../components/CityAutocomplete'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
 
-const SECTION_KEYS = ['educations', 'skills', 'certifications', 'languages']
+const SECTION_KEYS = ['skills', 'certifications', 'languages']
 
 let nextGroupKey = 0
 function makeGroupKey() {
@@ -33,6 +34,19 @@ function importedListToRows(items, fields) {
     }
     return row
   })
+}
+
+function importedEducationsToRows(items) {
+  // Il parsing del CV importato non estrae città/paese strutturati né
+  // sa se un'istruzione è ancora in corso: pre-popola solo i campi
+  // testuali di base, il resto resta da compilare manualmente.
+  return (items || []).map((item) => ({
+    ...emptyEducationRow(),
+    institution: item.institution || '',
+    title: item.title || '',
+    location: item.location || '',
+    notes: item.notes || '',
+  }))
 }
 
 function groupExperiencesByCompany(items) {
@@ -84,14 +98,6 @@ export default function OnboardingPage() {
   const [photoFile, setPhotoFile] = useState(null)
   const [cvNotice, setCvNotice] = useState('')
 
-  const EDUCATION_FIELDS = [
-    { name: 'institution', label: t('onboarding.institution') },
-    { name: 'title', label: t('onboarding.titleField') },
-    { name: 'location', label: t('onboarding.location') },
-    { name: 'start_date', label: t('onboarding.startDate'), type: 'date' },
-    { name: 'end_date', label: t('onboarding.endDate'), type: 'date', required: true },
-    { name: 'notes', label: t('onboarding.notes') },
-  ]
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const CERTIFICATION_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const LANGUAGE_FIELDS = [
@@ -100,15 +106,14 @@ export default function OnboardingPage() {
   ]
 
   const SECTION_CONFIG = {
-    educations: { fields: EDUCATION_FIELDS, title: t('onboarding.educations'), addLabel: t('onboarding.addEducation') },
     skills: { fields: SKILL_FIELDS, title: t('onboarding.skills'), addLabel: t('onboarding.addSkill') },
     certifications: { fields: CERTIFICATION_FIELDS, title: t('onboarding.certifications'), addLabel: t('onboarding.addCertification') },
     languages: { fields: LANGUAGE_FIELDS, title: t('onboarding.languages'), addLabel: t('onboarding.addLanguage') },
   }
 
   const [companies, setCompanies] = useState([])
+  const [educations, setEducations] = useState([])
   const [sections, setSections] = useState({
-    educations: [],
     skills: [],
     certifications: [],
     languages: [],
@@ -148,8 +153,8 @@ export default function OnboardingPage() {
       })
       setProfileCountry('')
       setCompanies(groupExperiencesByCompany(structured.experiences))
+      setEducations(importedEducationsToRows(structured.educations))
       setSections({
-        educations: importedListToRows(structured.educations, EDUCATION_FIELDS),
         skills: importedListToRows(structured.skills, SKILL_FIELDS),
         certifications: importedListToRows(structured.certifications, CERTIFICATION_FIELDS),
         languages: importedListToRows(structured.languages, LANGUAGE_FIELDS),
@@ -185,9 +190,17 @@ export default function OnboardingPage() {
             company: companyGroup.company,
             role: role.role,
             location: role.location,
+            location_country_code: role.location_country_code,
+            start_date: role.start_date || null,
+            end_date: role.ongoing ? null : role.end_date || null,
             bullets: role.bullets,
           })
         }
+      }
+
+      for (const edu of educations) {
+        const { _key, ongoing, ...payload } = edu
+        await createSectionItem('educations', { ...payload, end_date: ongoing ? null : payload.end_date || null })
       }
 
       for (const sectionKey of SECTION_KEYS) {
@@ -414,6 +427,8 @@ export default function OnboardingPage() {
                 {t('onboarding.experiencesLimitWarning')}
               </p>
             )}
+
+            <EducationListEditor rows={educations} onChange={setEducations} t={t} />
 
             {SECTION_KEYS.map((sectionKey) => (
               <ListSectionEditor

@@ -33,6 +33,7 @@ SECTION_LABELS = {
         "skilled_in": "Competenze",
         "languages": "Lingue",
         "technologies": "Tecnologie",
+        "ongoing": "Presente",
     },
     "en": {
         "summary": "Profile",
@@ -43,12 +44,25 @@ SECTION_LABELS = {
         "skilled_in": "Skilled in",
         "languages": "Languages",
         "technologies": "Technologies",
+        "ongoing": "Present",
     },
 }
 
 
 def _format_date(value):
     return value.strftime("%Y-%m") if value else ""
+
+
+def _format_date_range(start, end, ongoing_label):
+    """Intervallo date per esperienza/istruzione: `end=None` è "in corso"
+    (Sprint 34), non una data mancante — mostra l'etichetta tradotta invece
+    di lasciare la riga tronca (es. "2017-09 -")."""
+    end_text = ongoing_label if end is None else _format_date(end)
+    return f"{_format_date(start)} - {end_text}".strip(" -")
+
+
+def _format_location(city, country_code):
+    return ", ".join(part for part in [city, (country_code or "").upper()] if part)
 
 
 def _build_contact_parts(user, profile, translated_city):
@@ -76,7 +90,7 @@ def _build_full_name(user):
     return full_name or user.email
 
 
-def _build_shown_educations(profile):
+def _build_shown_educations(profile, ongoing_label):
     """Le `EDU_MAX_SHOWN` voci più recenti (Docs/03 §3.2), copiate senza
     riformulazione — solo selezione, nessuna chiamata AI per questa sezione."""
     shown = select_educations_to_show(list(profile.educations.all()))
@@ -84,8 +98,8 @@ def _build_shown_educations(profile):
         {
             "institution": edu.institution,
             "title": edu.title,
-            "location": edu.location,
-            "dates": f"{_format_date(edu.start_date)} - {_format_date(edu.end_date)}".strip(" -"),
+            "location": _format_location(edu.location, edu.location_country_code),
+            "dates": _format_date_range(edu.start_date, edu.end_date, ongoing_label),
             "notes": edu.notes,
         }
         for edu in shown
@@ -109,14 +123,16 @@ def _filter_grounded_skills(ai_names, profile_names):
     return [name for name in ai_names if name in profile_names]
 
 
-def _attach_technologies_and_enrichment(ai_experiences, profile, protected_bullets, protected_experience_id):
-    """`technologies` è dato fattuale del profilo, non riformulato
-    dall'AI (come `location`/`dates`): il prompt garantisce stesso ordine e
+def _attach_facts_and_enrichment(
+    ai_experiences, profile, protected_bullets, protected_experience_id, ongoing_label
+):
+    """`location`/`dates`/`technologies` sono dati fattuali del profilo, non
+    riformulati dall'AI (grounding): il prompt garantisce stesso ordine e
     stesso numero di voci in output (Docs/03 §11 punto 3), quindi si
-    riattacca per indice invece di chiederlo di nuovo al modello. Stesso
-    principio per i bullet di arricchimento (§5.6): iniettati letteralmente
-    (mai passati alla riformulazione AI) sull'esperienza corrispondente,
-    marcati `protected` per la protezione nel taglio budget/overflow."""
+    riattaccano per indice invece di chiederli al modello. Stesso principio
+    per i bullet di arricchimento (§5.6): iniettati letteralmente (mai
+    passati alla riformulazione AI) sull'esperienza corrispondente, marcati
+    `protected` per la protezione nel taglio budget/overflow."""
     ordered_profile_experiences = list(
         profile.experiences.all().order_by("-end_date", "-start_date")
     )
@@ -129,21 +145,35 @@ def _attach_technologies_and_enrichment(ai_experiences, profile, protected_bulle
                 {"text": text, "relevance_rank": -1, "protected": True}
                 for text in protected_bullets
             )
-        result.append({**exp, "technologies": profile_experience.technologies, "bullets": bullets})
+        result.append(
+            {
+                **exp,
+                "location": _format_location(
+                    profile_experience.location, profile_experience.location_country_code
+                ),
+                "dates": _format_date_range(
+                    profile_experience.start_date, profile_experience.end_date, ongoing_label
+                ),
+                "technologies": profile_experience.technologies,
+                "bullets": bullets,
+            }
+        )
     return result
 
 
-def _build_shown_experiences(content, bullet_budget, profile, protected_bullets, protected_experience_id):
+def _build_shown_experiences(
+    content, bullet_budget, profile, protected_bullets, protected_experience_id, ongoing_label
+):
     """Applica selezione (cap 5, swap singolo) e taglio bullet al budget
     globale (Docs/03 §11 punto 4), sul contenuto già prodotto dal modello
     per punto 3. I bullet restano dict `{text, relevance_rank}` — il loop di
     ripiego per overflow (§6) deve poterli continuare a rimuovere per
     rilevanza; l'appiattimento a stringa avviene solo subito prima del primo
     rendering (`generate_cv`)."""
-    with_technologies = _attach_technologies_and_enrichment(
-        content["experiences"], profile, protected_bullets or [], protected_experience_id
+    with_facts = _attach_facts_and_enrichment(
+        content["experiences"], profile, protected_bullets or [], protected_experience_id, ongoing_label
     )
-    selected = select_and_cut_experiences(with_technologies, bullet_budget)
+    selected = select_and_cut_experiences(with_facts, bullet_budget)
     return [
         {
             "company": exp["company"],
@@ -158,11 +188,12 @@ def _build_shown_experiences(content, bullet_budget, profile, protected_bullets,
 
 
 def _build_render_context(user, profile, content, protected_bullets, protected_experience_id):
-    shown_educations, shown_education_count = _build_shown_educations(profile)
+    html_lang = "en" if user.cv_language_mode == "english" else "it"
+    ongoing_label = SECTION_LABELS[html_lang]["ongoing"]
+    shown_educations, shown_education_count = _build_shown_educations(profile, ongoing_label)
     bullet_budget = compute_bullet_budget(shown_education_count)
     profile_skill_names = {skill.name for skill in profile.skills.all()}
     profile_certification_names = {cert.name for cert in profile.certifications.all()}
-    html_lang = "en" if user.cv_language_mode == "english" else "it"
 
     return {
         "html_lang": html_lang,
@@ -174,7 +205,7 @@ def _build_render_context(user, profile, content, protected_bullets, protected_e
         "summary": content["summary"],
         "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
         "experiences": _build_shown_experiences(
-            content, bullet_budget, profile, protected_bullets, protected_experience_id
+            content, bullet_budget, profile, protected_bullets, protected_experience_id, ongoing_label
         ),
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),

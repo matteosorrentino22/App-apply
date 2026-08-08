@@ -11,6 +11,7 @@ class ExperienceSerializer(serializers.ModelSerializer):
             "company",
             "role",
             "location",
+            "location_country_code",
             "start_date",
             "end_date",
             "bullets",
@@ -21,7 +22,16 @@ class ExperienceSerializer(serializers.ModelSerializer):
 class EducationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Education
-        fields = ["id", "institution", "title", "location", "start_date", "end_date", "notes"]
+        fields = [
+            "id",
+            "institution",
+            "title",
+            "location",
+            "location_country_code",
+            "start_date",
+            "end_date",
+            "notes",
+        ]
 
 
 class SkillSerializer(serializers.ModelSerializer):

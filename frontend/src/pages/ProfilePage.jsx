@@ -12,6 +12,7 @@ import {
 } from '../api/profile'
 import ListSectionEditor, { emptyRow } from '../components/ListSectionEditor'
 import ExperienceGroupEditor from '../components/ExperienceGroupEditor'
+import EducationListEditor from '../components/EducationListEditor'
 import CityAutocomplete from '../components/CityAutocomplete'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 
-const SECTION_KEYS = ['educations', 'skills', 'certifications', 'languages']
+const SECTION_KEYS = ['skills', 'certifications', 'languages']
 
 let nextGroupKey = 0
 function makeGroupKey() {
@@ -42,6 +43,27 @@ function existingListToRows(items, fields) {
   })
 }
 
+function existingEducationsToRows(items) {
+  return (items || []).map((item) => ({
+    _key: item.id,
+    institution: item.institution || '',
+    title: item.title || '',
+    location: item.location || '',
+    location_country_code: item.location_country_code || '',
+    start_date: item.start_date || '',
+    end_date: item.end_date || '',
+    ongoing: !item.end_date,
+    notes: item.notes || '',
+  }))
+}
+
+function flattenEducations(rows) {
+  return rows.map((row) => {
+    const { _key, ongoing, ...payload } = row
+    return { _key, ...payload, end_date: ongoing ? null : payload.end_date || null }
+  })
+}
+
 function groupExperiencesByCompany(items) {
   const groups = []
   const byName = new Map()
@@ -57,6 +79,10 @@ function groupExperiencesByCompany(items) {
       _key: item.id,
       role: item.role || '',
       location: item.location || '',
+      location_country_code: item.location_country_code || '',
+      start_date: item.start_date || '',
+      end_date: item.end_date || '',
+      ongoing: !item.end_date,
       bullets: item.bullets || [],
     })
   }
@@ -70,6 +96,9 @@ function flattenRoles(companies) {
       company: group.company,
       role: role.role,
       location: role.location,
+      location_country_code: role.location_country_code,
+      start_date: role.start_date || null,
+      end_date: role.ongoing ? null : role.end_date || null,
       bullets: role.bullets,
     })),
   )
@@ -122,27 +151,19 @@ export default function ProfilePage() {
   const [photoFile, setPhotoFile] = useState(null)
   const [companies, setCompanies] = useState([])
   const [initialExperienceIds, setInitialExperienceIds] = useState([])
+  const [educations, setEducations] = useState([])
+  const [initialEducationIds, setInitialEducationIds] = useState([])
   const [sections, setSections] = useState({
-    educations: [],
     skills: [],
     certifications: [],
     languages: [],
   })
   const [initialSectionIds, setInitialSectionIds] = useState({
-    educations: [],
     skills: [],
     certifications: [],
     languages: [],
   })
 
-  const EDUCATION_FIELDS = [
-    { name: 'institution', label: t('onboarding.institution') },
-    { name: 'title', label: t('onboarding.titleField') },
-    { name: 'location', label: t('onboarding.location') },
-    { name: 'start_date', label: t('onboarding.startDate'), type: 'date' },
-    { name: 'end_date', label: t('onboarding.endDate'), type: 'date', required: true },
-    { name: 'notes', label: t('onboarding.notes') },
-  ]
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const CERTIFICATION_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const LANGUAGE_FIELDS = [
@@ -151,7 +172,6 @@ export default function ProfilePage() {
   ]
 
   const SECTION_CONFIG = {
-    educations: { fields: EDUCATION_FIELDS, title: t('profile.educations'), addLabel: t('profile.addEducation') },
     skills: { fields: SKILL_FIELDS, title: t('profile.skills'), addLabel: t('profile.addSkill') },
     certifications: {
       fields: CERTIFICATION_FIELDS,
@@ -179,14 +199,14 @@ export default function ProfilePage() {
         const groupedExperiences = groupExperiencesByCompany(data.experiences)
         setCompanies(groupedExperiences)
         setInitialExperienceIds((data.experiences || []).map((exp) => exp.id))
+        setEducations(existingEducationsToRows(data.educations))
+        setInitialEducationIds((data.educations || []).map((item) => item.id))
         setSections({
-          educations: existingListToRows(data.educations, EDUCATION_FIELDS),
           skills: existingListToRows(data.skills, SKILL_FIELDS),
           certifications: existingListToRows(data.certifications, CERTIFICATION_FIELDS),
           languages: existingListToRows(data.languages, LANGUAGE_FIELDS),
         })
         setInitialSectionIds({
-          educations: (data.educations || []).map((item) => item.id),
           skills: (data.skills || []).map((item) => item.id),
           certifications: (data.certifications || []).map((item) => item.id),
           languages: (data.languages || []).map((item) => item.id),
@@ -223,6 +243,7 @@ export default function ProfilePage() {
       }
 
       await saveSection('experiences', flattenRoles(companies), initialExperienceIds)
+      await saveSection('educations', flattenEducations(educations), initialEducationIds)
 
       for (const sectionKey of SECTION_KEYS) {
         await saveSection(sectionKey, sections[sectionKey], initialSectionIds[sectionKey])
@@ -352,6 +373,8 @@ export default function ProfilePage() {
             {t('profile.experiencesLimitWarning')}
           </p>
         )}
+
+        <EducationListEditor rows={educations} onChange={setEducations} t={t} />
 
         {SECTION_KEYS.map((sectionKey) => (
           <ListSectionEditor

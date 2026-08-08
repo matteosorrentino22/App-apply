@@ -5,6 +5,8 @@ l'ordinamento di rilevanza già restituito dal modello."""
 
 import random
 
+from django.utils import timezone
+
 from .cv_parameters import (
     BULLET_BUDGET_BY_EDU_COUNT,
     EDU_MAX_SHOWN,
@@ -13,13 +15,25 @@ from .cv_parameters import (
 )
 
 
+def _education_end_ordinal(education):
+    """Data di fine come intero ordinabile: un'istruzione ancora in corso
+    (`end_date=None`, "Present" sul CV — Sprint 34) è per definizione la più
+    recente possibile, quindi vince il confronto con qualunque data di fine
+    passata (valore massimo, non un caso da escludere)."""
+    if education.end_date is None:
+        return float("inf")
+    return education.end_date.toordinal()
+
+
 def _education_duration_days(education):
     """Durata in giorni per il tie-break (§3.2): una voce senza data di
     inizio è trattata come "durata sconosciuta", meno preferibile di una
-    voce esplicitamente breve (non è una "durata minore" verificabile)."""
+    voce esplicitamente breve (non è una "durata minore" verificabile). Una
+    voce ancora in corso usa la data odierna come fine provvisoria."""
     if education.start_date is None:
         return float("inf")
-    return (education.end_date - education.start_date).days
+    end = education.end_date or timezone.localdate()
+    return (end - education.start_date).days
 
 
 def select_educations_to_show(educations):
@@ -30,7 +44,7 @@ def select_educations_to_show(educations):
     random.shuffle(shuffled)
     ordered = sorted(
         shuffled,
-        key=lambda edu: (-edu.end_date.toordinal(), _education_duration_days(edu)),
+        key=lambda edu: (-_education_end_ordinal(edu), _education_duration_days(edu)),
     )
     return ordered[:EDU_MAX_SHOWN]
 

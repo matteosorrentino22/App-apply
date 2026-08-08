@@ -57,8 +57,6 @@ def _fake_content(num_experiences=3):
             {
                 "company": f"Azienda {i}",
                 "role": "Project Manager",
-                "location": "Milano",
-                "dates": "2020-01 - presente",
                 "highly_relevant": False,
                 "bullets": [
                     {"text": f"Bullet {i}.1", "relevance_rank": 0},
@@ -257,8 +255,6 @@ def _fake_content_with_long_bullets(num_experiences, num_bullets_per_experience,
             {
                 "company": f"Azienda molto lunga numero {i} internazionale",
                 "role": "Senior Project Manager",
-                "location": "Milano, Italia",
-                "dates": "2020-01 - presente",
                 "highly_relevant": False,
                 "bullets": [
                     {"text": long_text[:bullet_length], "relevance_rank": b}
