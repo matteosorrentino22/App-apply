@@ -50,7 +50,9 @@ SECTION_LABELS = {
 
 
 def _format_date(value):
-    return value.strftime("%Y-%m") if value else ""
+    """Solo l'anno sul CV (richiesto esplicitamente): la data precisa resta
+    salvata nel profilo per usi futuri, qui si mostra solo `%Y`."""
+    return value.strftime("%Y") if value else ""
 
 
 def _format_date_range(start, end, ongoing_label):

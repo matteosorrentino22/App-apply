@@ -19,9 +19,9 @@
         justify-content: space-between;
         align-items: center;
         text-align: center;
-        border-bottom: 1.5pt solid #2f4a63;
+        border-bottom: 1pt solid #2f4a63;
         padding-bottom: {{ heading_gap }};
-        margin-bottom: {{ section_gap }};
+        margin-bottom: {{ heading_gap }};
     }
     .contact-line {
         border-top: 1pt solid #2f4a63;
@@ -59,6 +59,9 @@
     }
     section {
         margin-bottom: {{ section_gap }};
+    }
+    section > p {
+        margin: 0;
     }
     h2 {
         font-size: 11pt;
@@ -105,6 +108,9 @@
     }
     .education-title-meta strong {
         font-weight: bold;
+    }
+    .education-item p {
+        margin: 0;
     }
     .experience-technologies {
         font-style: italic;
