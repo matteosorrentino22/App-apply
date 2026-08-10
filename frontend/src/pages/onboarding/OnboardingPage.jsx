@@ -171,6 +171,16 @@ export default function OnboardingPage() {
     }
   }
 
+  // Le righe non ancora inviate al server hanno `_key` stringa (generata
+  // localmente da `makeKey`/`makeGroupKey`); dopo la creazione riuscita
+  // viene sostituita con l'id numerico reale. Se un tentativo di
+  // salvataggio fallisce a metà (es. errore sulle sezioni successive) e
+  // l'utente clicca di nuovo "Salva profilo", questo evita di recreare —
+  // duplicando — le righe già create con successo nel tentativo precedente.
+  function isCreatedRow(row) {
+    return typeof row._key === 'number'
+  }
+
   async function handleProfileSubmit(event) {
     event.preventDefault()
     setError('')
@@ -185,9 +195,15 @@ export default function OnboardingPage() {
         await updateProfile(profileFields)
       }
 
+      const nextCompanies = []
       for (const companyGroup of companies) {
+        const nextRoles = []
         for (const role of companyGroup.roles) {
-          await createSectionItem('experiences', {
+          if (isCreatedRow(role)) {
+            nextRoles.push(role)
+            continue
+          }
+          const created = await createSectionItem('experiences', {
             company: companyGroup.company,
             role: role.role,
             location: role.location,
@@ -196,24 +212,43 @@ export default function OnboardingPage() {
             end_date: role.ongoing ? null : role.end_date || null,
             bullets: role.bullets,
           })
+          nextRoles.push({ ...role, _key: created.id })
         }
+        nextCompanies.push({ ...companyGroup, roles: nextRoles })
       }
+      setCompanies(nextCompanies)
 
+      const nextEducations = []
       for (const edu of educations) {
+        if (isCreatedRow(edu)) {
+          nextEducations.push(edu)
+          continue
+        }
         const { _key, ongoing, ...payload } = edu
-        await createSectionItem('educations', {
+        const created = await createSectionItem('educations', {
           ...payload,
           start_date: payload.start_date || null,
           end_date: ongoing ? null : payload.end_date || null,
         })
+        nextEducations.push({ ...edu, _key: created.id })
       }
+      setEducations(nextEducations)
 
+      const nextSections = { ...sections }
       for (const sectionKey of SECTION_KEYS) {
+        const nextRows = []
         for (const row of sections[sectionKey]) {
+          if (isCreatedRow(row)) {
+            nextRows.push(row)
+            continue
+          }
           const { _key, ...payload } = row
-          await createSectionItem(sectionKey, payload)
+          const created = await createSectionItem(sectionKey, payload)
+          nextRows.push({ ...row, _key: created.id })
         }
+        nextSections[sectionKey] = nextRows
       }
+      setSections(nextSections)
 
       setStep(3)
     } catch (err) {
