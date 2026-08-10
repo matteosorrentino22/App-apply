@@ -116,6 +116,22 @@ function isExistingRow(row) {
   return typeof row._key === 'number'
 }
 
+// Riporta gli id reali di `savedRoles` (stesso ordine di `flattenRoles`,
+// azienda per azienda) dentro la struttura raggruppata per azienda usata
+// da `ExperienceGroupEditor`, senza toccare il raggruppamento in sé.
+function regroupSavedRoles(companies, savedRoles) {
+  let index = 0
+  return companies.map((group) => ({
+    ...group,
+    roles: group.roles.map((role) => ({ ...role, _key: savedRoles[index++]._key })),
+  }))
+}
+
+// Ritorna le righe salvate con l'id reale del server al posto di ogni
+// `_key` locale (stringa) appena creato: senza, un salvataggio ripetuto
+// (es. dopo un errore su una sezione successiva) non riconosce più le
+// righe già create in questa sessione come "esistenti" e le rimanda come
+// nuove, duplicandole sul server.
 async function saveSection(section, currentRows, initialIds) {
   const currentIds = new Set(currentRows.filter(isExistingRow).map((row) => row._key))
   for (const id of initialIds) {
@@ -123,14 +139,18 @@ async function saveSection(section, currentRows, initialIds) {
       await deleteSectionItem(section, id)
     }
   }
+  const savedRows = []
   for (const row of currentRows) {
     const { _key, ...payload } = row
     if (isExistingRow(row)) {
       await updateSectionItem(section, _key, payload)
+      savedRows.push(row)
     } else {
-      await createSectionItem(section, payload)
+      const created = await createSectionItem(section, payload)
+      savedRows.push({ ...row, _key: created.id })
     }
   }
+  return savedRows
 }
 
 export default function ProfilePage() {
@@ -187,36 +207,40 @@ export default function ProfilePage() {
     languages: { fields: LANGUAGE_FIELDS, title: t('profile.languages'), addLabel: t('profile.addLanguage') },
   }
 
+  // Applica un profilo scaricato dal server allo stato del form, al
+  // caricamento iniziale della pagina.
+  function applyProfileData(data) {
+    setProfileFields({
+      summary: data.summary || '',
+      phone: data.phone || '',
+      city: data.city || '',
+      country_code: data.country_code || '',
+      linkedin_url: data.linkedin_url || '',
+    })
+    setProfileCountry(data.country_code || '')
+    setCompanies(groupExperiencesByCompany(data.experiences))
+    setInitialExperienceIds((data.experiences || []).map((exp) => exp.id))
+    setEducations(existingEducationsToRows(data.educations))
+    setInitialEducationIds((data.educations || []).map((item) => item.id))
+    setSections({
+      skills: existingListToRows(data.skills, SKILL_FIELDS),
+      certifications: existingListToRows(data.certifications, CERTIFICATION_FIELDS),
+      languages: existingListToRows(data.languages, LANGUAGE_FIELDS),
+    })
+    setInitialSectionIds({
+      skills: (data.skills || []).map((item) => item.id),
+      certifications: (data.certifications || []).map((item) => item.id),
+      languages: (data.languages || []).map((item) => item.id),
+    })
+  }
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError('')
     fetchProfile()
       .then((data) => {
-        if (cancelled) return
-        setProfileFields({
-          summary: data.summary || '',
-          phone: data.phone || '',
-          city: data.city || '',
-          country_code: data.country_code || '',
-          linkedin_url: data.linkedin_url || '',
-        })
-        setProfileCountry(data.country_code || '')
-        const groupedExperiences = groupExperiencesByCompany(data.experiences)
-        setCompanies(groupedExperiences)
-        setInitialExperienceIds((data.experiences || []).map((exp) => exp.id))
-        setEducations(existingEducationsToRows(data.educations))
-        setInitialEducationIds((data.educations || []).map((item) => item.id))
-        setSections({
-          skills: existingListToRows(data.skills, SKILL_FIELDS),
-          certifications: existingListToRows(data.certifications, CERTIFICATION_FIELDS),
-          languages: existingListToRows(data.languages, LANGUAGE_FIELDS),
-        })
-        setInitialSectionIds({
-          skills: (data.skills || []).map((item) => item.id),
-          certifications: (data.certifications || []).map((item) => item.id),
-          languages: (data.languages || []).map((item) => item.id),
-        })
+        if (!cancelled) applyProfileData(data)
       })
       .catch(() => {
         if (!cancelled) setError(t('profile.loadError'))
@@ -248,11 +272,19 @@ export default function ProfilePage() {
         await updateProfile(profileFields)
       }
 
-      await saveSection('experiences', flattenRoles(companies), initialExperienceIds)
-      await saveSection('educations', flattenEducations(educations), initialEducationIds)
+      const savedRoles = await saveSection('experiences', flattenRoles(companies), initialExperienceIds)
+      const savedExperienceIds = savedRoles.map((role) => role._key)
+      setCompanies(regroupSavedRoles(companies, savedRoles))
+      setInitialExperienceIds(savedExperienceIds)
+
+      const savedEducations = await saveSection('educations', flattenEducations(educations), initialEducationIds)
+      setEducations(savedEducations)
+      setInitialEducationIds(savedEducations.map((row) => row._key))
 
       for (const sectionKey of SECTION_KEYS) {
-        await saveSection(sectionKey, sections[sectionKey], initialSectionIds[sectionKey])
+        const savedRows = await saveSection(sectionKey, sections[sectionKey], initialSectionIds[sectionKey])
+        setSections((prev) => ({ ...prev, [sectionKey]: savedRows }))
+        setInitialSectionIds((prev) => ({ ...prev, [sectionKey]: savedRows.map((row) => row._key) }))
       }
 
       setNotice(t('profile.saved'))
