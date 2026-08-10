@@ -14,6 +14,7 @@ import ListSectionEditor, { emptyRow } from '../components/ListSectionEditor'
 import ExperienceGroupEditor from '../components/ExperienceGroupEditor'
 import EducationListEditor from '../components/EducationListEditor'
 import CityAutocomplete from '../components/CityAutocomplete'
+import { formatApiErrorDetail } from '../utils/apiErrors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,7 +61,12 @@ function existingEducationsToRows(items) {
 function flattenEducations(rows) {
   return rows.map((row) => {
     const { _key, ongoing, ...payload } = row
-    return { _key, ...payload, end_date: ongoing ? null : payload.end_date || null }
+    return {
+      _key,
+      ...payload,
+      start_date: payload.start_date || null,
+      end_date: ongoing ? null : payload.end_date || null,
+    }
   })
 }
 
@@ -251,8 +257,9 @@ export default function ProfilePage() {
 
       setNotice(t('profile.saved'))
       setPhotoFile(null)
-    } catch {
-      setError(t('profile.saveError'))
+    } catch (err) {
+      const detail = formatApiErrorDetail(err)
+      setError(detail ? `${t('profile.saveError')} (${detail})` : t('profile.saveError'))
     } finally {
       setSaving(false)
     }
