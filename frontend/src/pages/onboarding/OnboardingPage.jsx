@@ -6,6 +6,7 @@ import { updateMe } from '../../api/auth'
 import { updateProfile, importCv, createSectionItem } from '../../api/profile'
 import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
+import { formatApiErrorDetail } from '../../utils/apiErrors'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
 import EducationListEditor, { emptyEducationRow } from '../../components/EducationListEditor'
@@ -200,7 +201,11 @@ export default function OnboardingPage() {
 
       for (const edu of educations) {
         const { _key, ongoing, ...payload } = edu
-        await createSectionItem('educations', { ...payload, end_date: ongoing ? null : payload.end_date || null })
+        await createSectionItem('educations', {
+          ...payload,
+          start_date: payload.start_date || null,
+          end_date: ongoing ? null : payload.end_date || null,
+        })
       }
 
       for (const sectionKey of SECTION_KEYS) {
@@ -211,8 +216,9 @@ export default function OnboardingPage() {
       }
 
       setStep(3)
-    } catch {
-      setError(t('common.genericError'))
+    } catch (err) {
+      const detail = formatApiErrorDetail(err)
+      setError(detail ? `${t('common.genericError')} (${detail})` : t('common.genericError'))
     } finally {
       setSaving(false)
     }
