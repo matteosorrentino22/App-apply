@@ -58,9 +58,14 @@ def _format_date(value):
 def _format_date_range(start, end, ongoing_label):
     """Intervallo date per esperienza/istruzione: `end=None` è "in corso"
     (Sprint 34), non una data mancante — mostra l'etichetta tradotta invece
-    di lasciare la riga tronca (es. "2017-09 -")."""
-    end_text = ongoing_label if end is None else _format_date(end)
-    return f"{_format_date(start)} - {end_text}".strip(" -")
+    di lasciare la riga tronca (es. "2017 -"). Inizio e fine nello stesso
+    anno (solo l'anno viene mostrato) collassano su un anno solo invece di
+    ripeterlo (es. "2022 - 2022" → "2022")."""
+    if end is None:
+        return f"{_format_date(start)} - {ongoing_label}".strip(" -")
+    if start and start.year == end.year:
+        return _format_date(end)
+    return f"{_format_date(start)} - {_format_date(end)}".strip(" -")
 
 
 def _format_location(city, country_code):
@@ -93,8 +98,9 @@ def _build_full_name(user):
 
 
 def _build_shown_educations(profile, ongoing_label):
-    """Le `EDU_MAX_SHOWN` voci più recenti (Docs/03 §3.2), copiate senza
-    riformulazione — solo selezione, nessuna chiamata AI per questa sezione."""
+    """Tutte le voci di istruzione del profilo, ordinate (Docs/03 §3.2) e
+    copiate senza riformulazione — nessuna esclusa per limite di conteggio,
+    nessuna chiamata AI per questa sezione."""
     shown = select_educations_to_show(list(profile.educations.all()))
     return [
         {

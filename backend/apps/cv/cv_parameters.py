@@ -3,7 +3,10 @@
 # da calibrare in test (§14 del documento) — modificabili qui senza toccare
 # la logica, stessa natura dei prezzi del credito in config/settings.py.
 
-# Voci di istruzione mostrate nel CV: le più recenti (§3.2).
+# Soglia oltre la quale il budget bullet applica il valore più stretto
+# della tabella sotto (nessun limite al numero di voci di istruzione
+# effettivamente mostrate nel CV — tutte compaiono, richiesto
+# esplicitamente dal committente).
 EDU_MAX_SHOWN = 3
 
 # Budget bullet totale (B) in funzione del numero di voci di istruzione

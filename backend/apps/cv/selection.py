@@ -37,21 +37,25 @@ def _education_duration_days(education):
 
 
 def select_educations_to_show(educations):
-    """Le `EDU_MAX_SHOWN` voci più recenti (data di fine decrescente); a
-    parità di data di fine vince la durata minore; a parità anche di
-    durata, la scelta è casuale (§3.2)."""
+    """Tutte le voci di istruzione, ordinate per data di fine decrescente
+    (a parità vince la durata minore, poi la scelta è casuale) — nessuna
+    esclusa per limite di conteggio: a differenza delle esperienze, che
+    vengono tagliate per rilevanza/spazio, l'istruzione riflette
+    interamente quanto scritto dall'utente."""
     shuffled = list(educations)
     random.shuffle(shuffled)
-    ordered = sorted(
+    return sorted(
         shuffled,
         key=lambda edu: (-_education_end_ordinal(edu), _education_duration_days(edu)),
     )
-    return ordered[:EDU_MAX_SHOWN]
 
 
 def compute_bullet_budget(shown_education_count):
     """Budget bullet totale (B), tabella §5.4/§12: più voci di istruzione
-    mostrate, meno bullet disponibili per le esperienze."""
+    mostrate, meno bullet disponibili per le esperienze. La tabella ha solo
+    le chiavi 1-3: con più istruzione mostrata (nessun limite di conteggio,
+    tutte le voci del profilo compaiono) si applica comunque il budget più
+    stretto previsto per 3+ voci, invece di un `KeyError`."""
     count = max(1, min(shown_education_count, EDU_MAX_SHOWN))
     return BULLET_BUDGET_BY_EDU_COUNT[count]
 

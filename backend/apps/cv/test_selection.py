@@ -30,7 +30,10 @@ def _ongoing_edu(name, start=None):
 
 
 class SelectEducationsToShowTests(SimpleTestCase):
-    def test_keeps_the_three_most_recent_by_end_date(self):
+    def test_returns_all_educations_ordered_by_end_date_descending(self):
+        # Sprint 38: nessuna voce esclusa per limite di conteggio, a
+        # differenza delle esperienze — l'istruzione riflette interamente
+        # quanto scritto dall'utente.
         educations = [
             _edu("oldest", (2010, 1, 1)),
             _edu("newest", (2023, 1, 1)),
@@ -38,7 +41,9 @@ class SelectEducationsToShowTests(SimpleTestCase):
             _edu("older-still", (2005, 1, 1)),
         ]
         shown = select_educations_to_show(educations)
-        self.assertEqual([e.name for e in shown], ["newest", "middle", "oldest"])
+        self.assertEqual(
+            [e.name for e in shown], ["newest", "middle", "oldest", "older-still"]
+        )
 
     def test_tie_break_prefers_shorter_duration_at_same_end_date(self):
         long_one = _edu("long", (2020, 1, 1), start=datetime.date(2015, 1, 1))
