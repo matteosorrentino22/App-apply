@@ -24,6 +24,7 @@ from .import_service import (
     ImportRejected,
     import_job_from_url,
 )
+from .manual_job_service import ManualJobRejected, create_manual_job
 from .list_service import (
     DEFAULT_PERIOD,
     FILTERABLE_STATUSES,
@@ -34,7 +35,7 @@ from .list_service import (
     unarchive_job,
 )
 from .models import Job
-from .serializers import JobSerializer
+from .serializers import JobSerializer, ManualJobCreateSerializer
 
 
 class GenerateCvView(APIView):
@@ -107,6 +108,28 @@ class ImportJobView(APIView):
         except ImportDuplicate as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except ImportRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        return Response(
+            {"job_id": job.pk, "status": job.status, "score": job.score},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CreateManualJobView(APIView):
+    """Creazione manuale di un job senza fonte esterna (Sprint 43,
+    sezione "Importati"): disponibile su entrambi i piani, budget
+    giornaliero separato da quello dell'import da LinkedIn."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ManualJobCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            job = create_manual_job(request.user, serializer.validated_data)
+        except ManualJobRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
         return Response(

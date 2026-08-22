@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     ArchiveJobView,
     CoverLetterInstructionsView,
+    CreateManualJobView,
     EnrichAndGenerateCvView,
     GenerateCoverLetterView,
     GenerateCvView,
@@ -16,6 +17,7 @@ from .views import (
 urlpatterns = [
     path("jobs/", JobListView.as_view(), name="job-list"),
     path("jobs/import/", ImportJobView.as_view(), name="job-import"),
+    path("jobs/manual/", CreateManualJobView.as_view(), name="job-manual-create"),
     path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
     path("jobs/<int:pk>/generate-cv/", GenerateCvView.as_view(), name="job-generate-cv"),
     path(
