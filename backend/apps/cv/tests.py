@@ -45,11 +45,12 @@ def _make_job(user, description="Ricerchiamo un Project Manager per Milano.", ex
     )
 
 
-def _fake_content(num_experiences=3):
+def _fake_content(num_experiences=3, content_language="it"):
     return {
         "summary": "Project manager con 8 anni di esperienza.",
         "qualification": "Project Manager",
         "translated_city": "Milano",
+        "content_language": content_language,
         "areas_of_expertise": [
             {"label": f"Area {i}", "grounding_reference": f"bullet {i}.1"} for i in range(4)
         ],

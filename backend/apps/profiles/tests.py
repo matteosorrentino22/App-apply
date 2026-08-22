@@ -1,4 +1,3 @@
-import json
 import tempfile
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -115,13 +114,6 @@ def _make_docx_bytes(paragraphs):
     return buffer.read()
 
 
-def _fake_anthropic_response(payload):
-    text_block = MagicMock()
-    text_block.type = "text"
-    text_block.text = json.dumps(payload)
-    response = MagicMock()
-    response.content = [text_block]
-    return response
 
 
 class CVImportApiTests(APITestCase):
@@ -133,12 +125,9 @@ class CVImportApiTests(APITestCase):
         )
         self.client.force_authenticate(self.user)
 
-    @patch("apps.profiles.cv_import.Anthropic")
-    def test_docx_upload_prepopulates_profile_without_saving(self, mock_anthropic_cls):
-        mock_client = mock_anthropic_cls.return_value
-        mock_client.messages.create.return_value = _fake_anthropic_response(
-            FAKE_STRUCTURED_PROFILE
-        )
+    @patch("apps.profiles.cv_import.call_claude_structured")
+    def test_docx_upload_prepopulates_profile_without_saving(self, mock_call_claude):
+        mock_call_claude.return_value = FAKE_STRUCTURED_PROFILE
 
         upload = SimpleUploadedFile(
             "cv.docx",
@@ -158,15 +147,14 @@ class CVImportApiTests(APITestCase):
         self.assertFalse(Profile.objects.filter(user=self.user).exists())
 
         # A Claude va passato solo il testo estratto, mai il file binario.
-        call_kwargs = mock_client.messages.create.call_args.kwargs
-        sent_content = call_kwargs["messages"][0]["content"]
+        sent_content = mock_call_claude.call_args.kwargs["user_content"]
         self.assertIsInstance(sent_content, str)
         self.assertIn("Mario Rossi", sent_content)
         self.assertNotIn("PK\x03\x04", sent_content)  # firma binaria .docx assente dal testo
 
     @patch("apps.profiles.cv_import.pdfplumber.open")
-    @patch("apps.profiles.cv_import.Anthropic")
-    def test_pdf_upload_prepopulates_profile(self, mock_anthropic_cls, mock_pdf_open):
+    @patch("apps.profiles.cv_import.call_claude_structured")
+    def test_pdf_upload_prepopulates_profile(self, mock_call_claude, mock_pdf_open):
         mock_page = MagicMock()
         mock_page.extract_text.return_value = "\n".join(SAMPLE_CV_TEXT_LINES)
         mock_pdf = MagicMock()
@@ -174,10 +162,7 @@ class CVImportApiTests(APITestCase):
         mock_pdf.__enter__.return_value = mock_pdf
         mock_pdf_open.return_value = mock_pdf
 
-        mock_client = mock_anthropic_cls.return_value
-        mock_client.messages.create.return_value = _fake_anthropic_response(
-            FAKE_STRUCTURED_PROFILE
-        )
+        mock_call_claude.return_value = FAKE_STRUCTURED_PROFILE
 
         upload = SimpleUploadedFile("cv.pdf", b"%PDF-1.4 fake pdf bytes", content_type="application/pdf")
         response = self.client.post("/api/profile/import-cv/", {"file": upload}, format="multipart")

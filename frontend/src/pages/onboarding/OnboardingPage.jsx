@@ -8,6 +8,7 @@ import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import { formatApiErrorDetail } from '../../utils/apiErrors'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
+import { getLanguageLevelOptions, getLanguageNameOptions } from '../../utils/languageOptions'
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
 import EducationListEditor, { emptyEducationRow } from '../../components/EducationListEditor'
 import CityAutocomplete from '../../components/CityAutocomplete'
@@ -72,7 +73,7 @@ function groupExperiencesByCompany(items) {
 }
 
 export default function OnboardingPage() {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const { user, refreshUser } = useAuth()
   const navigate = useNavigate()
 
@@ -91,6 +92,7 @@ export default function OnboardingPage() {
   const [profileFields, setProfileFields] = useState({
     summary: '',
     phone: '',
+    email: '',
     city: '',
     country_code: '',
     linkedin_url: '',
@@ -102,8 +104,8 @@ export default function OnboardingPage() {
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const CERTIFICATION_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const LANGUAGE_FIELDS = [
-    { name: 'language', label: t('onboarding.language') },
-    { name: 'level', label: t('onboarding.level') },
+    { name: 'language', label: t('onboarding.language'), options: getLanguageNameOptions(lang) },
+    { name: 'level', label: t('onboarding.level'), options: getLanguageLevelOptions(lang) },
   ]
 
   const SECTION_CONFIG = {
@@ -120,7 +122,7 @@ export default function OnboardingPage() {
     languages: [],
   })
 
-  const [search, setSearch] = useState({ keywords: '', city: '', country: '' })
+  const [search, setSearch] = useState({ search_type: 'job_role', keywords: '', city: '', country: '' })
 
   async function handlePreferencesSubmit(event) {
     event.preventDefault()
@@ -147,7 +149,8 @@ export default function OnboardingPage() {
       const structured = await importCv(file)
       setProfileFields({
         summary: structured.summary || '',
-        phone: '',
+        phone: structured.phone || '',
+        email: structured.email || '',
         city: '',
         country_code: '',
         linkedin_url: '',
@@ -425,6 +428,16 @@ export default function OnboardingPage() {
                     onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
                   />
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email">{t('onboarding.profileEmail')}</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder={t('onboarding.profileEmailPlaceholder')}
+                    value={profileFields.email}
+                    onChange={(event) => setProfileFields({ ...profileFields, email: event.target.value })}
+                  />
+                </div>
                 <CityAutocomplete
                   cityId="city"
                   countryId="country"
@@ -498,6 +511,23 @@ export default function OnboardingPage() {
               <CardDescription>{t('onboarding.firstSearchHint')}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
+              <fieldset className="flex items-center gap-4">
+                <legend className="sr-only">{t('account.searchTypeLabel')}</legend>
+                <RadioGroup
+                  value={search.search_type}
+                  onValueChange={(value) => setSearch({ ...search, search_type: value })}
+                  className="flex flex-row gap-4"
+                >
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="job_role" />
+                    {t('account.searchType_job_role')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value="company" />
+                    {t('account.searchType_company')}
+                  </label>
+                </RadioGroup>
+              </fieldset>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="search-keywords">{t('onboarding.searchKeywords')}</Label>
                 <Input

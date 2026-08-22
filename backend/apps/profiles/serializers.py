@@ -66,6 +66,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "summary",
             "photo",
             "phone",
+            "email",
             "city",
             "country_code",
             "linkedin_url",

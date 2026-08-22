@@ -17,7 +17,13 @@
     .header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        /* flex-end, non center: la foto (dimensione fissa) e il blocco
+        testo (altezza variabile in base a nome/qualifica/contatti) vanno
+        allineati al fondo, non centrati — altrimenti quando le due altezze
+        differiscono la foto sporge in modo asimmetrico oltre il filetto
+        sottostante, che segue solo l'altezza del testo (bug osservato in
+        produzione, Sprint 41). */
+        align-items: flex-end;
         text-align: center;
         border-bottom: 1pt solid #2f4a63;
         padding-bottom: {{ heading_gap }};

@@ -4,6 +4,8 @@ from datetime import timedelta
 from django.db.models import F, Q
 from django.utils import timezone as dj_timezone
 
+from apps.searches.models import SavedSearch
+
 from .models import Job
 
 # Le tre sezioni dipendono da origine e archiviazione, mai dallo stato
@@ -50,14 +52,44 @@ def _apply_status_filter(queryset, statuses):
     return queryset.filter(status__in=statuses) if statuses else queryset
 
 
-def list_jobs(user, section, period=DEFAULT_PERIOD, scores=None, statuses=None, query=""):
+def _apply_matched_search_filter(queryset, user, search_id):
+    """Filtra per la SavedSearch che ha prodotto il job.
+
+    `Job.matched_search` è testo libero, non una FK (vedi commento sul
+    campo in models.py): qui si ricostruisce la stringa che l'actor Apify
+    avrebbe restituito per la SavedSearch scelta e si confronta con quella.
+    `search_id="none"` isola i job senza ricerca di provenienza (import
+    manuale, o item Apify malformati — sprint-40)."""
+    if not search_id or search_id == "all":
+        return queryset
+    if search_id == "none":
+        return queryset.filter(matched_search="")
+
+    saved_search = SavedSearch.objects.filter(user=user, pk=search_id).first()
+    if saved_search is None:
+        return queryset.none()
+
+    if saved_search.search_type == SavedSearch.SearchType.COMPANY:
+        # Il nome azienda restituito da LinkedIn (risolto per ID tramite
+        # `companyInclude`) può differire per maiuscole/minuscole da come
+        # l'ha digitato l'utente.
+        return queryset.filter(matched_search__iexact=saved_search.keywords)
+
+    location = f"{saved_search.city}, {saved_search.country}"
+    return queryset.filter(matched_search=f"{saved_search.keywords} - {location}")
+
+
+def list_jobs(
+    user, section, period=DEFAULT_PERIOD, scores=None, statuses=None, query="", search_id=None
+):
     """Restituisce i Job di `user` per la sezione richiesta, ordinati per
     punteggio decrescente (01-specifiche-funzionali-v4.md §4.5).
 
     Se `query` è presente, la ricerca testuale (titolo/azienda/località)
     resta confinata alla sezione corrente e **ignora** ogni altro filtro
-    (temporale, score, stato) — così come richiesto esplicitamente dalle
-    specifiche."""
+    (temporale, score, stato, ricerca di provenienza) — così come richiesto
+    esplicitamente dalle specifiche. `search_id` (sprint-40) si combina
+    invece in AND con periodo/score/stato, come questi ultimi tra loro."""
     queryset = Job.objects.filter(user=user).filter(SECTION_FILTERS[section]).prefetch_related("cv_documents")
 
     if query:
@@ -68,6 +100,7 @@ def list_jobs(user, section, period=DEFAULT_PERIOD, scores=None, statuses=None, 
         queryset = _apply_period_filter(queryset, user, period)
         queryset = _apply_score_filter(queryset, scores)
         queryset = _apply_status_filter(queryset, statuses)
+        queryset = _apply_matched_search_filter(queryset, user, search_id)
 
     return queryset.order_by(F("score").desc(nulls_last=True), "-date_collected")
 

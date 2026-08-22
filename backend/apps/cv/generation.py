@@ -3,8 +3,10 @@ from django.utils import timezone
 
 from apps.jobs.models import RunLog
 
+from apps.profiles.language_options import LANGUAGE_LEVEL_LABELS, LANGUAGE_NAME_LABELS
+
 from .ai_content import generate_cv_content
-from .cv_parameters import MAX_OVERFLOW_ITERATIONS
+from .cv_parameters import FALLBACK_CV_LANGUAGE, MAX_OVERFLOW_ITERATIONS, SUPPORTED_CV_LANGUAGES
 from .models import CVDocument
 from .rendering import render_cv
 from .selection import (
@@ -21,8 +23,10 @@ class ProfileIncomplete(Exception):
     non è generabile un CV finché non è completo."""
 
 
-# Etichette fisse di sezione: seguono `cv_language_mode` come il resto del
-# contenuto del CV (Docs/03 §4), non restano fisse in una lingua.
+# Etichette fisse di sezione: seguono la lingua reale del contenuto generato
+# (Docs/03 §4), non restano fisse in una lingua — vedi `_resolve_html_lang`.
+# Stessi 5 codici di `SUPPORTED_CV_LANGUAGES` (Sprint 41: prima solo it/en,
+# causa del bug delle etichette in italiano su CV generati in altre lingue).
 SECTION_LABELS = {
     "it": {
         "summary": "Profilo",
@@ -46,7 +50,54 @@ SECTION_LABELS = {
         "technologies": "Technologies",
         "ongoing": "Present",
     },
+    "fr": {
+        "summary": "Profil",
+        "areas_of_expertise": "Domaines de compétence",
+        "experience": "Expérience professionnelle",
+        "education": "Formation",
+        "certified_in": "Certifications",
+        "skilled_in": "Compétences",
+        "languages": "Langues",
+        "technologies": "Technologies",
+        "ongoing": "Aujourd'hui",
+    },
+    "de": {
+        "summary": "Profil",
+        "areas_of_expertise": "Kompetenzbereiche",
+        "experience": "Berufserfahrung",
+        "education": "Ausbildung",
+        "certified_in": "Zertifizierungen",
+        "skilled_in": "Kenntnisse",
+        "languages": "Sprachen",
+        "technologies": "Technologien",
+        "ongoing": "Heute",
+    },
+    "es": {
+        "summary": "Perfil",
+        "areas_of_expertise": "Áreas de especialización",
+        "experience": "Experiencia laboral",
+        "education": "Formación",
+        "certified_in": "Certificaciones",
+        "skilled_in": "Habilidades",
+        "languages": "Idiomas",
+        "technologies": "Tecnologías",
+        "ongoing": "Actualidad",
+    },
 }
+
+
+def _resolve_html_lang(user, content):
+    """Lingua reale del contenuto generato, non la sola modalità impostata
+    dall'utente (Sprint 41): con `cv_language_mode="job_language"` il CV
+    esce nella lingua dell'offerta, che l'AI riporta in
+    `content["content_language"]` (vedi ai_content.py) — usarla è l'unico
+    modo corretto di scegliere le etichette fisse, a differenza del vecchio
+    `"en" if cv_language_mode == "english" else "it"` che le lasciava in
+    italiano per qualunque offerta non in inglese fisso."""
+    if user.cv_language_mode == "english":
+        return "en"
+    detected = content.get("content_language")
+    return detected if detected in SUPPORTED_CV_LANGUAGES else FALLBACK_CV_LANGUAGE
 
 
 def _format_date(value):
@@ -72,11 +123,14 @@ def _format_location(city, country_code):
     return ", ".join(part for part in [city, (country_code or "").upper()] if part)
 
 
-def _build_contact_parts(user, profile, translated_city):
+def _build_contact_parts(profile, translated_city):
     """Riga contatti nell'intestazione, ordine fisso (segnalato dal
     committente): Città, PAESE | telefono | email | LinkedIn. LinkedIn è
     l'unica parte con link ipertestuale (`is_link`), quindi il template
-    compone il markup invece di ricevere una stringa già concatenata."""
+    compone il markup invece di ricevere una stringa già concatenata.
+    L'email è `profile.email` (Sprint 41), non `user.email`: quella
+    dell'account di login può essere un alias tecnico mai pensato per
+    comparire su un CV (es. "nome+1@gmail.com")."""
     city_country = ", ".join(
         part for part in [translated_city, profile.country_code.upper()] if part
     )
@@ -85,8 +139,8 @@ def _build_contact_parts(user, profile, translated_city):
         parts.append({"text": city_country, "is_link": False})
     if profile.phone:
         parts.append({"text": profile.phone, "is_link": False})
-    if user.email:
-        parts.append({"text": user.email, "is_link": False})
+    if profile.email:
+        parts.append({"text": profile.email, "is_link": False})
     if profile.linkedin_url:
         parts.append({"text": "LinkedIn", "url": profile.linkedin_url, "is_link": True})
     return parts
@@ -114,8 +168,20 @@ def _build_shown_educations(profile, ongoing_label):
     ], len(shown)
 
 
-def _build_languages(profile):
-    return [{"language": lang.language, "level": lang.level} for lang in profile.languages.all()]
+def _build_languages(profile, html_lang):
+    """Traduce lingua/livello nella lingua di output del CV (Sprint 41): i
+    valori sono codici fissi (Language.language/.level, vedi
+    apps.profiles.language_options), mai passati all'AI né mostrati tali e
+    quali — prima venivano copiati letteralmente, senza traduzione. Se un
+    codice non è tra quelli tradotti (dato legacy non normalizzato dalla
+    migrazione 0007), si mostra il valore grezzo invece di perderlo."""
+    return [
+        {
+            "language": LANGUAGE_NAME_LABELS.get(lang.language, {}).get(html_lang, lang.language),
+            "level": LANGUAGE_LEVEL_LABELS.get(lang.level, {}).get(html_lang, lang.level),
+        }
+        for lang in profile.languages.all()
+    ]
 
 
 def _build_photo_url(user, profile):
@@ -196,7 +262,7 @@ def _build_shown_experiences(
 
 
 def _build_render_context(user, profile, content, protected_bullets, protected_experience_id):
-    html_lang = "en" if user.cv_language_mode == "english" else "it"
+    html_lang = _resolve_html_lang(user, content)
     ongoing_label = SECTION_LABELS[html_lang]["ongoing"]
     shown_educations, shown_education_count = _build_shown_educations(profile, ongoing_label)
     bullet_budget = compute_bullet_budget(shown_education_count)
@@ -207,7 +273,7 @@ def _build_render_context(user, profile, content, protected_bullets, protected_e
         "html_lang": html_lang,
         "labels": SECTION_LABELS[html_lang],
         "full_name": _build_full_name(user),
-        "contact_parts": _build_contact_parts(user, profile, content["translated_city"]),
+        "contact_parts": _build_contact_parts(profile, content["translated_city"]),
         "photo_url": _build_photo_url(user, profile),
         "qualification": content["qualification"],
         "summary": content["summary"],
@@ -218,7 +284,7 @@ def _build_render_context(user, profile, content, protected_bullets, protected_e
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
         "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
-        "languages": _build_languages(profile),
+        "languages": _build_languages(profile, html_lang),
     }
 
 

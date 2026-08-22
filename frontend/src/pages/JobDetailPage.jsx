@@ -6,6 +6,8 @@ import {
   generateCv,
   enrichAndGenerateCv,
   markApplicationDone,
+  generateCoverLetter,
+  fetchCoverLetterInstructions,
 } from '../api/jobs'
 import { fetchProfile } from '../api/profile'
 import { ApiError } from '../api/client'
@@ -15,6 +17,15 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import ChipInput from '@/components/ChipInput'
 
 const SCORE_STYLE = {
@@ -45,6 +56,12 @@ export default function JobDetailPage() {
   const [marking, setMarking] = useState(false)
   const [showEnrichment, setShowEnrichment] = useState(false)
   const [enrichment, setEnrichment] = useState(EMPTY_ENRICHMENT)
+
+  const [showCoverLetterDialog, setShowCoverLetterDialog] = useState(false)
+  const [coverLetterText, setCoverLetterText] = useState('')
+  const [pastInstructions, setPastInstructions] = useState([])
+  const [selectedPastInstructions, setSelectedPastInstructions] = useState([])
+  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -99,6 +116,42 @@ export default function JobDetailPage() {
       }
     } finally {
       setGenerating(false)
+    }
+  }
+
+  function openCoverLetterDialog() {
+    setCoverLetterText('')
+    setSelectedPastInstructions([])
+    setShowCoverLetterDialog(true)
+    fetchCoverLetterInstructions()
+      .then((data) => setPastInstructions(data.instructions || []))
+      .catch(() => setPastInstructions([]))
+  }
+
+  function togglePastInstruction(text) {
+    setSelectedPastInstructions((current) =>
+      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
+    )
+  }
+
+  async function handleGenerateCoverLetter() {
+    setGeneratingCoverLetter(true)
+    try {
+      const instructions = [...selectedPastInstructions, coverLetterText.trim()]
+        .filter(Boolean)
+        .join('\n\n')
+      await generateCoverLetter(id, instructions)
+      const updated = await fetchJob(id)
+      setJob(updated)
+      setShowCoverLetterDialog(false)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        showToast(err.data?.detail || t('jobs.generationConflict'))
+      } else {
+        showToast(t('jobs.coverLetterGenerationFailed'))
+      }
+    } finally {
+      setGeneratingCoverLetter(false)
     }
   }
 
@@ -304,8 +357,32 @@ export default function JobDetailPage() {
 
         {job.cv_pdf_url && (
           <Button variant="secondary" asChild>
-            <a href={job.cv_pdf_url} target="_blank" rel="noreferrer">
-              {t('jobs.downloadPdf')}
+            <a href={job.cv_pdf_url} download={job.cv_download_filename} target="_blank" rel="noreferrer">
+              {t('jobs.downloadCv')}
+            </a>
+          </Button>
+        )}
+
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={generatingCoverLetter || job.cover_letter_generation_in_progress}
+          onClick={openCoverLetterDialog}
+        >
+          {generatingCoverLetter || job.cover_letter_generation_in_progress
+            ? t('jobs.generatingCoverLetter')
+            : t('jobs.generateCoverLetter')}
+        </Button>
+
+        {job.cover_letter_pdf_url && (
+          <Button variant="secondary" asChild>
+            <a
+              href={job.cover_letter_pdf_url}
+              download={job.cover_letter_download_filename}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('jobs.downloadCoverLetter')}
             </a>
           </Button>
         )}
@@ -326,6 +403,55 @@ export default function JobDetailPage() {
           </Button>
         )}
       </div>
+
+      <Dialog open={showCoverLetterDialog} onOpenChange={setShowCoverLetterDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('jobs.coverLetterDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('jobs.coverLetterDialogHint')}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cover-letter-instructions">
+                {t('jobs.coverLetterInstructionsLabel')}
+              </Label>
+              <Textarea
+                id="cover-letter-instructions"
+                value={coverLetterText}
+                onChange={(event) => setCoverLetterText(event.target.value)}
+                placeholder={t('jobs.coverLetterInstructionsPlaceholder')}
+              />
+            </div>
+
+            {pastInstructions.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('jobs.coverLetterPastInstructionsLabel')}</Label>
+                <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
+                  {pastInstructions.map((text, index) => (
+                    <label key={index} className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={selectedPastInstructions.includes(text)}
+                        onCheckedChange={() => togglePastInstruction(text)}
+                      />
+                      <span className="text-foreground">{text}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setShowCoverLetterDialog(false)}>
+              {t('jobs.cancel')}
+            </Button>
+            <Button type="button" disabled={generatingCoverLetter} onClick={handleGenerateCoverLetter}>
+              {generatingCoverLetter ? t('jobs.generatingCoverLetter') : t('jobs.generateCoverLetter')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

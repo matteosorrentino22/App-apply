@@ -168,22 +168,29 @@ CELERY_TIMEZONE = TIME_ZONE
 # (02-specifiche-tecniche-v3.md §9) e verificabile senza un deploy.
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
-# API Anthropic (Claude) — scoring, generazione CV, parsing del CV caricato
-# (02-specifiche-tecniche-v3.md §3.5). Modello per lo step di strutturazione
-# del parsing CV configurabile a parte: dominio a basso volume, non richiede
-# necessariamente lo stesso modello usato per scoring/generazione CV.
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_CV_PARSING_MODEL = os.environ.get("ANTHROPIC_CV_PARSING_MODEL", "claude-opus-5")
+# Claude via AWS Bedrock — scoring, generazione CV, parsing del CV caricato
+# (02-specifiche-tecniche-v3.md §3.5). Non l'API Anthropic diretta: le
+# credenziali AWS (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY) sono lette
+# automaticamente da boto3 dall'ambiente, nessuna lettura esplicita qui.
+# Modello per lo step di strutturazione del parsing CV configurabile a
+# parte: dominio a basso volume, non richiede necessariamente lo stesso
+# modello usato per scoring/generazione CV.
+AWS_BEDROCK_REGION = os.environ.get("AWS_BEDROCK_REGION", "us-east-1")
+BEDROCK_CV_PARSING_MODEL = os.environ.get("BEDROCK_CV_PARSING_MODEL", "us.anthropic.claude-opus-5")
 # Scoring gira ogni notte su tutti i job raccolti di tutti gli utenti (alto
 # volume): famiglia di modello più economica di default, come indicato
 # esplicitamente da 02-specifiche-tecniche-v3.md §3.5 ("una famiglia più
 # economica per lo scoring ad alto volume, una più capace per il CV") — resta
 # comunque un parametro di configurazione, non un vincolo architetturale.
-ANTHROPIC_SCORING_MODEL = os.environ.get("ANTHROPIC_SCORING_MODEL", "claude-haiku-4-5")
+BEDROCK_SCORING_MODEL = os.environ.get(
+    "BEDROCK_SCORING_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+)
 # Generazione contenuti CV: dominio a basso volume (max 15 job/utente/notte
 # tenuti dal cap, più le generazioni manuali) rispetto allo scoring — famiglia
 # più capace di default, come indicato da 02-specifiche-tecniche-v3.md §3.5.
-ANTHROPIC_CV_GENERATION_MODEL = os.environ.get("ANTHROPIC_CV_GENERATION_MODEL", "claude-opus-5")
+BEDROCK_CV_GENERATION_MODEL = os.environ.get(
+    "BEDROCK_CV_GENERATION_MODEL", "us.anthropic.claude-opus-5"
+)
 
 # Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
 # configurazione sicura, mai cablato nell'URL come nel prototipo.
@@ -194,6 +201,9 @@ APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
 # definire" — placeholder di configurazione, da fissare prima del rilascio).
 PRICE_MANUAL_CV_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_CV_EXTRA", "1.50"))
 PRICE_IMPORT_EXTRA = Decimal(os.environ.get("PRICE_IMPORT_EXTRA", "0.50"))
+# Massimale giornaliero separato da quello del CV, stessi tetti Free/Pro
+# (Sprint 42): budget indipendente, prezzo a credito configurabile a parte.
+PRICE_COVER_LETTER_EXTRA = Decimal(os.environ.get("PRICE_COVER_LETTER_EXTRA", "1.50"))
 
 # Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
 # l'autenticazione standard del protocollo, nessun servizio a pagamento.

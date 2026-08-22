@@ -1,7 +1,6 @@
-import json
-
-from anthropic import Anthropic
 from django.conf import settings
+
+from apps.common.ai import call_claude_structured
 
 SCORE_JSON_SCHEMA = {
     "type": "object",
@@ -41,23 +40,13 @@ def score_job_with_claude(job, profile):
     chi chiama in caso di errore/timeout — la gestione del fallimento (Job
     scartato per la notte, traccia in RunLog) è responsabilità di
     `apps.jobs.scoring.score_job` (02-specifiche-tecniche-v3.md §5.1)."""
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     profile_summary = _build_profile_summary(profile)
     job_summary = f"Titolo: {job.title}\nAzienda: {job.company}\nDescrizione: {job.description}"
 
-    response = client.messages.create(
-        model=settings.ANTHROPIC_SCORING_MODEL,
-        max_tokens=2000,
-        output_config={
-            "format": {"type": "json_schema", "schema": SCORE_JSON_SCHEMA},
-        },
+    return call_claude_structured(
+        model=settings.BEDROCK_SCORING_MODEL,
         system=SCORING_SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"PROFILO CANDIDATO:\n{profile_summary}\n\nOFFERTA:\n{job_summary}",
-            }
-        ],
+        user_content=f"PROFILO CANDIDATO:\n{profile_summary}\n\nOFFERTA:\n{job_summary}",
+        schema=SCORE_JSON_SCHEMA,
+        max_tokens=2000,
     )
-    text_block = next(block.text for block in response.content if block.type == "text")
-    return json.loads(text_block)

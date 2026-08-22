@@ -1,6 +1,23 @@
+import re
+
 from rest_framework import serializers
 
 from .models import Job
+
+# Caratteri non ammessi nei nomi file sui filesystem/browser più comuni:
+# tolti dal nome suggerito per il download (Sprint 42), non dal nome reale
+# su disco (che resta quello interno, `cv_documents/cv_<job>_<doc>.pdf` —
+# vedi apps.cv.generation/cover_letter_generation — mai esposto lato UI).
+_FILENAME_UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|]')
+
+
+def _sanitize_filename_part(text):
+    return _FILENAME_UNSAFE_CHARS.sub("", text).strip()
+
+
+def _build_full_name_for_filename(user):
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    return full_name or user.email
 
 
 class JobSerializer(serializers.ModelSerializer):
@@ -9,6 +26,11 @@ class JobSerializer(serializers.ModelSerializer):
     # ("l'ultimo CV generato per questo job"), piuttosto che con una risorsa
     # separata che il frontend dovrebbe interrogare a parte (§4.7 funzionali).
     cv_pdf_url = serializers.SerializerMethodField()
+    cv_download_filename = serializers.SerializerMethodField()
+    # Stesso principio del CV, per la cover letter (Sprint 42): artefatto
+    # indipendente, mai generato automaticamente, sempre legato al job.
+    cover_letter_pdf_url = serializers.SerializerMethodField()
+    cover_letter_download_filename = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -26,6 +48,7 @@ class JobSerializer(serializers.ModelSerializer):
             "is_archived",
             "status",
             "cv_generation_in_progress",
+            "cover_letter_generation_in_progress",
             "score",
             "score_match",
             "score_gaps",
@@ -35,6 +58,9 @@ class JobSerializer(serializers.ModelSerializer):
             "date_cv_generated",
             "date_application_done",
             "cv_pdf_url",
+            "cv_download_filename",
+            "cover_letter_pdf_url",
+            "cover_letter_download_filename",
         ]
 
     def get_cv_pdf_url(self, job):
@@ -44,3 +70,19 @@ class JobSerializer(serializers.ModelSerializer):
         # generato a vincere, non uno arbitrario tra i due.
         latest = job.cv_documents.order_by("-generated_at", "-id").first()
         return latest.pdf_file.url if latest else None
+
+    def get_cv_download_filename(self, job):
+        if not job.cv_documents.exists():
+            return None
+        name = _build_full_name_for_filename(job.user)
+        return f"{_sanitize_filename_part(f'CV {name} - {job.title}')}.pdf"
+
+    def get_cover_letter_pdf_url(self, job):
+        latest = job.cover_letter_documents.order_by("-generated_at", "-id").first()
+        return latest.pdf_file.url if latest else None
+
+    def get_cover_letter_download_filename(self, job):
+        if not job.cover_letter_documents.exists():
+            return None
+        name = _build_full_name_for_filename(job.user)
+        return f"{_sanitize_filename_part(f'Cover letter {name} - {job.title}')}.pdf"

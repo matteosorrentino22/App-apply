@@ -26,7 +26,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import CityAutocomplete from '@/components/CityAutocomplete'
 import { SUPPORTED_LANGUAGES } from '../i18n/translations'
 
-const EMPTY_SEARCH = { keywords: '', city: '', country: '' }
+const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', city: '', country: '' }
 
 function formatCredit(value) {
   const amount = Number(value ?? 0)
@@ -122,7 +122,12 @@ export default function AccountPage() {
 
   function handleStartEdit(search) {
     setEditingSearchId(search.id)
-    setEditedSearch({ keywords: search.keywords, city: search.city, country: search.country })
+    setEditedSearch({
+      search_type: search.search_type,
+      keywords: search.keywords,
+      city: search.city,
+      country: search.country,
+    })
     setSearchError('')
   }
 
@@ -248,6 +253,25 @@ export default function AccountPage() {
                 onSubmit={handleSaveEdit}
                 className="flex flex-col gap-3 rounded-lg border border-border p-3"
               >
+                <fieldset className="flex items-center gap-4">
+                  <legend className="sr-only">{t('account.searchTypeLabel')}</legend>
+                  <RadioGroup
+                    value={editedSearch.search_type}
+                    onValueChange={(value) =>
+                      setEditedSearch({ ...editedSearch, search_type: value })
+                    }
+                    className="flex flex-row gap-4"
+                  >
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="job_role" />
+                      {t('account.searchType_job_role')}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="company" />
+                      {t('account.searchType_company')}
+                    </label>
+                  </RadioGroup>
+                </fieldset>
                 <div className="flex flex-wrap gap-3">
                   <div className="flex min-w-32 flex-1 flex-col gap-1.5">
                     <Label htmlFor={`edit-search-keywords-${search.id}`}>
@@ -289,6 +313,7 @@ export default function AccountPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-foreground">{search.keywords}</span>
+                    <Badge variant="neutral">{t(`account.searchType_${search.search_type}`)}</Badge>
                     {search.is_active && <Badge variant="primary">{t('account.activeBadge')}</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -331,6 +356,23 @@ export default function AccountPage() {
 
           <form onSubmit={handleCreateSearch} className="flex flex-col gap-3 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-foreground">{t('account.newSearch')}</h3>
+            <fieldset className="flex items-center gap-4">
+              <legend className="sr-only">{t('account.searchTypeLabel')}</legend>
+              <RadioGroup
+                value={newSearch.search_type}
+                onValueChange={(value) => setNewSearch({ ...newSearch, search_type: value })}
+                className="flex flex-row gap-4"
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="job_role" />
+                  {t('account.searchType_job_role')}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="company" />
+                  {t('account.searchType_company')}
+                </label>
+              </RadioGroup>
+            </fieldset>
             <div className="flex flex-wrap gap-3">
               <div className="flex min-w-32 flex-1 flex-col gap-1.5">
                 <Label htmlFor="new-search-keywords">{t('onboarding.searchKeywords')}</Label>

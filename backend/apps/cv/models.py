@@ -26,3 +26,25 @@ class CVDocument(models.Model):
 
     def __str__(self):
         return f"CV — {self.job} ({self.generated_at})"
+
+
+class CoverLetterDocument(models.Model):
+    """Mirror di CVDocument (Sprint 42): artefatto indipendente, mai generato
+    automaticamente, sempre su richiesta esplicita dell'utente per un job."""
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="cover_letter_documents")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_letter_documents"
+    )
+    html_source = models.TextField()
+    pdf_file = models.FileField(upload_to="cover_letter_documents/")
+    generated_at = models.DateTimeField(auto_now_add=True)
+    # Testo libero fornito dall'utente in questa generazione (indicazioni di
+    # tono/enfasi e/o dettagli reali non ancora nel profilo, sotto la sua
+    # responsabilità di veridicità — stesso principio dell'arricchimento
+    # CV): alimenta anche il menu "indicazioni precedenti" nel popup di
+    # generazione, tra tutti i job dell'utente.
+    instructions_used = models.TextField(blank=True, default="")
+
+    def __str__(self):
+        return f"Cover letter — {self.job} ({self.generated_at})"

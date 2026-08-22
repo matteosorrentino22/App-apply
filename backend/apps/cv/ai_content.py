@@ -1,9 +1,15 @@
 import json
 
-from anthropic import Anthropic
 from django.conf import settings
 
-from .cv_parameters import AREAS_OF_EXPERTISE_MAX, AREAS_OF_EXPERTISE_MIN
+from apps.common.ai import call_claude_structured
+
+from .cv_parameters import (
+    AREAS_OF_EXPERTISE_MAX,
+    AREAS_OF_EXPERTISE_MIN,
+    FALLBACK_CV_LANGUAGE,
+    SUPPORTED_CV_LANGUAGES,
+)
 
 CONTENT_JSON_SCHEMA = {
     "type": "object",
@@ -11,12 +17,17 @@ CONTENT_JSON_SCHEMA = {
         "summary": {"type": "string"},
         "qualification": {"type": "string"},
         "translated_city": {"type": "string"},
+        # Usato solo per scegliere le etichette fisse di sezione lato server
+        # (apps.cv.generation.SECTION_LABELS), mai mostrato all'utente finale.
+        "content_language": {"type": "string", "enum": SUPPORTED_CV_LANGUAGES},
         "areas_of_expertise": {
-            # Niente minItems/maxItems: l'API Anthropic per gli output
-            # strutturati non supporta valori diversi da 0/1 per un array
-            # (400 "minItems values other than 0 or 1 are not supported" —
-            # bug reale osservato in produzione). Il vincolo 4-6 resta solo
-            # nel prompt testuale, come già per experiences/bullets.
+            # Niente minItems/maxItems: con l'output strutturato nativo
+            # dell'API Anthropic (non più in uso, vedi apps.common.ai) un
+            # valore diverso da 0/1 dava 400 "minItems values other than
+            # 0 or 1 are not supported" — non re-introdotto per prudenza
+            # dopo il passaggio al tool-use forzato su Bedrock. Il vincolo
+            # 4-6 resta solo nel prompt testuale, come già per
+            # experiences/bullets.
             "type": "array",
             "items": {
                 "type": "object",
@@ -60,6 +71,7 @@ CONTENT_JSON_SCHEMA = {
         "summary",
         "qualification",
         "translated_city",
+        "content_language",
         "areas_of_expertise",
         "experiences",
         "skills",
@@ -76,6 +88,25 @@ CONTENT_SYSTEM_PROMPT = (
     "devi mai inventare esperienze, competenze o risultati non presenti nel "
     "profilo fornito (grounding), con un'unica eccezione controllata per "
     "'areas_of_expertise' (vedi sotto).\n\n"
+    "PRIORITÀ DELL'OFFERTA: prima di scrivere qualsiasi contenuto, individua "
+    "mentalmente le 3-5 priorità chiave dell'offerta (competenze/tool "
+    "richiesti, responsabilità principali, seniority, dominio/settore) e "
+    "usale per orientare in modo coerente sommario, aree di competenza e "
+    "bullet delle esperienze. Le sezioni non sono compartimenti stagni: se "
+    "una priorità dell'offerta è supportata da contenuto reale del profilo, "
+    "può e deve riflettersi in più punti del CV (es. sia nel sommario sia "
+    "nel bullet dell'esperienza pertinente), non solo in uno.\n\n"
+    "SOMMARIO ('summary'): il profilo master include già un breve sommario "
+    "scritto dal candidato — usalo come base indicativa, non come vincolo "
+    "rigido: puoi riorganizzarlo, tagliarlo o riscriverlo quasi per intero "
+    "se serve per aprirlo sulle priorità dell'offerta individuate sopra, "
+    "mantenendo comunque riconoscibile la figura professionale reale che "
+    "descrive. Usa la terminologia dell'offerta solo dove corrisponde "
+    "realmente a qualcosa già presente nel profilo (esperienze, skill, "
+    "risultati): mai per attribuire competenze che il candidato non ha. "
+    "Occupa per intero lo spazio naturale di un sommario di CV (un breve "
+    "paragrafo di alcune righe piene): evita sia una frase isolata troppo "
+    "corta sia un'ultima riga che si esaurisce dopo poche parole.\n\n"
     "QUALIFICA PROFESSIONALE ('qualification'): estrai dal titolo del job il "
     "nome del ruolo, spogliato di tecnologie/progetto/contesto (es. "
     "'Software Engineer for SSH/AWS and ERP systems' → 'Software Engineer'). "
@@ -89,6 +120,17 @@ CONTENT_SYSTEM_PROMPT = (
     "'Rome' in inglese). Se la città è già nella lingua richiesta o non è "
     "traducibile, restituiscila invariata. Non aggiungere il paese: solo il "
     "nome della città.\n\n"
+    "LINGUA DEL CONTENUTO ('content_language'): il codice, tra "
+    f"{SUPPORTED_CV_LANGUAGES}, che corrisponde alla lingua realmente usata "
+    "per scrivere summary/qualification/bullet/aree di competenza in questa "
+    "generazione. Se ti è stato richiesto l'inglese fisso, è sempre 'en'. Se "
+    "ti è stato chiesto di seguire la lingua dell'offerta, individua quella "
+    "lingua e restituisci il codice corrispondente tra quelli elencati; se "
+    "la lingua dell'offerta non è nessuna delle lingue elencate, scrivi "
+    f"comunque tutto il resto del contenuto in quella lingua reale (come "
+    f"richiesto) ma imposta 'content_language' su '{FALLBACK_CV_LANGUAGE}' "
+    "(le etichette fisse del CV, non generate da te, non hanno una "
+    "traduzione per altre lingue).\n\n"
     "AREAS OF EXPERTISE ('areas_of_expertise'): da 4 a 6 voci di soft skill / "
     "aree funzionali-trasversali (leadership, stakeholder management, "
     "problem solving...), distinte dalle hard skill di 'skills'. Puoi "
@@ -111,9 +153,21 @@ CONTENT_SYSTEM_PROMPT = (
     "crescenti per rilevanza decrescente, univoci solo all'interno della "
     "stessa esperienza. Marca 'highly_relevant'=true solo per esperienze "
     "che, pur non recentissime, sono particolarmente pertinenti a questa "
-    "offerta specifica.\n\n"
+    "offerta specifica. Se una competenza richiesta dall'offerta è presente "
+    "nel profilo solo come voce isolata in 'skills' ma è verosimilmente "
+    "riconducibile a un'esperienza specifica del candidato, valuta se "
+    "renderla esplicita in un bullet reale di quella esperienza invece di "
+    "lasciarla solo nell'elenco skills: la rende più contestualizzata e "
+    "credibile. Ogni bullet riformulato deve occupare per intero lo spazio "
+    "di 1 o 2 righe piene: mai una seconda riga che si esaurisce dopo poche "
+    "parole — se un bullet rischia di sforare di poco su una seconda riga "
+    "quasi vuota, accorcialo per stare su una riga sola, oppure espandilo "
+    "con un dettaglio reale in più (impatto, contesto, strumento usato) per "
+    "riempirla.\n\n"
     "SKILLS e CERTIFICATIONS: seleziona solo voci letteralmente presenti nel "
-    "profilo, per rilevanza rispetto all'offerta, senza inventarne di nuove."
+    "profilo, per rilevanza rispetto all'offerta, senza inventarne di nuove. "
+    "Una competenza già valorizzata in un bullet di esperienza (vedi sopra) "
+    "resta comunque elencabile qui: le due cose non si escludono a vicenda."
 )
 
 
@@ -155,7 +209,6 @@ def generate_cv_content(profile, job, cv_language_mode, enrichment=""):
     skills/certifications selezionate. Solleva l'eccezione a chi chiama in
     caso di errore/timeout — la gestione del fallimento è responsabilità del
     servizio di generazione (§5.2 tecniche madre)."""
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     profile_context = _build_profile_context(profile)
     language_instruction = _resolve_language(job, cv_language_mode)
 
@@ -170,16 +223,11 @@ def generate_cv_content(profile, job, cv_language_mode, enrichment=""):
         f"{AREAS_OF_EXPERTISE_MAX}."
     )
 
-    response = client.messages.create(
-        model=settings.ANTHROPIC_CV_GENERATION_MODEL,
-        max_tokens=4000,
-        thinking={"type": "disabled"},
-        output_config={
-            "effort": "medium",
-            "format": {"type": "json_schema", "schema": CONTENT_JSON_SCHEMA},
-        },
+    return call_claude_structured(
+        model=settings.BEDROCK_CV_GENERATION_MODEL,
         system=CONTENT_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
+        user_content=user_content,
+        schema=CONTENT_JSON_SCHEMA,
+        max_tokens=4000,
+        effort="medium",
     )
-    text_block = next(block.text for block in response.content if block.type == "text")
-    return json.loads(text_block)
