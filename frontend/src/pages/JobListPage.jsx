@@ -1,14 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
-import { fetchJobs, fetchJob, generateCv, archiveJob, unarchiveJob, importJob } from '../api/jobs'
+import {
+  fetchJobs,
+  fetchJob,
+  generateCv,
+  archiveJob,
+  unarchiveJob,
+  importJob,
+  createManualJob,
+} from '../api/jobs'
 import { fetchSearches } from '../api/searches'
 import { ApiError } from '../api/client'
+import { formatApiErrorDetail } from '../utils/apiErrors'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import JobCard from '@/components/JobCard'
+import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
+
+const EMPTY_MANUAL_JOB = {
+  title: '',
+  company: '',
+  location: '',
+  description: '',
+  published_at: '',
+  apply_url: '',
+}
 
 const SECTIONS = ['main', 'imported', 'archived']
 const PERIODS = ['today', 'week', 'month', 'all']
@@ -37,6 +66,11 @@ export default function JobListPage() {
   const [importUrl, setImportUrl] = useState('')
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
+
+  const [showManualJobDialog, setShowManualJobDialog] = useState(false)
+  const [manualJobFields, setManualJobFields] = useState(EMPTY_MANUAL_JOB)
+  const [creatingManualJob, setCreatingManualJob] = useState(false)
+  const [manualJobError, setManualJobError] = useState('')
 
   const debounceRef = useRef(null)
 
@@ -140,6 +174,31 @@ export default function JobListPage() {
     }
   }
 
+  function openManualJobDialog() {
+    setManualJobFields(EMPTY_MANUAL_JOB)
+    setManualJobError('')
+    setShowManualJobDialog(true)
+  }
+
+  async function handleCreateManualJob(event) {
+    event.preventDefault()
+    setManualJobError('')
+    setCreatingManualJob(true)
+    try {
+      await createManualJob(manualJobFields)
+      setShowManualJobDialog(false)
+      showToast(t('jobs.manualJobSuccess'))
+      load()
+    } catch (err) {
+      const detail = formatApiErrorDetail(err)
+      setManualJobError(
+        detail || (err instanceof ApiError && err.data?.detail) || t('jobs.manualJobError'),
+      )
+    } finally {
+      setCreatingManualJob(false)
+    }
+  }
+
   const searching = query.length > 0
   const swipeProps =
     section === 'archived'
@@ -174,7 +233,7 @@ export default function JobListPage() {
       </div>
 
       {section === 'imported' && (
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           {user?.plan === 'pro' ? (
             <form onSubmit={handleImport} className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-2">
@@ -199,6 +258,10 @@ export default function JobListPage() {
           ) : (
             <p className="text-sm text-muted-foreground">{t('jobs.importProOnly')}</p>
           )}
+
+          <Button type="button" variant="secondary" size="sm" onClick={openManualJobDialog} className="w-fit">
+            {t('jobs.addManualJobButton')}
+          </Button>
         </div>
       )}
 
@@ -308,6 +371,92 @@ export default function JobListPage() {
           />
         ))}
       </div>
+
+      <Dialog open={showManualJobDialog} onOpenChange={setShowManualJobDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('jobs.addManualJobDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('jobs.addManualJobDialogHint')}</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateManualJob} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="manual-job-title">{t('jobs.manualJobTitle')}</Label>
+              <Input
+                id="manual-job-title"
+                value={manualJobFields.title}
+                onChange={(e) => setManualJobFields({ ...manualJobFields, title: e.target.value })}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="manual-job-company">{t('jobs.manualJobCompany')}</Label>
+              <Input
+                id="manual-job-company"
+                value={manualJobFields.company}
+                onChange={(e) => setManualJobFields({ ...manualJobFields, company: e.target.value })}
+                required
+              />
+            </div>
+            <CityOnlyAutocomplete
+              cityId="manual-job-location"
+              label={t('jobs.manualJobLocation')}
+              city={manualJobFields.location}
+              onChange={({ city }) => setManualJobFields({ ...manualJobFields, location: city })}
+              required
+            />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="manual-job-description">{t('jobs.manualJobDescription')}</Label>
+              <Textarea
+                id="manual-job-description"
+                value={manualJobFields.description}
+                onChange={(e) =>
+                  setManualJobFields({ ...manualJobFields, description: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="manual-job-published-at">{t('jobs.manualJobPublishedAt')}</Label>
+              <Input
+                id="manual-job-published-at"
+                type="datetime-local"
+                value={manualJobFields.published_at}
+                onChange={(e) =>
+                  setManualJobFields({ ...manualJobFields, published_at: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="manual-job-apply-url">{t('jobs.manualJobApplyUrl')}</Label>
+              <Input
+                id="manual-job-apply-url"
+                type="url"
+                value={manualJobFields.apply_url}
+                onChange={(e) =>
+                  setManualJobFields({ ...manualJobFields, apply_url: e.target.value })
+                }
+              />
+            </div>
+
+            {manualJobError && (
+              <p role="alert" className="text-sm text-destructive">
+                {manualJobError}
+              </p>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setShowManualJobDialog(false)}>
+                {t('jobs.cancel')}
+              </Button>
+              <Button type="submit" disabled={creatingManualJob}>
+                {creatingManualJob ? t('jobs.manualJobSubmitting') : t('jobs.manualJobSubmit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

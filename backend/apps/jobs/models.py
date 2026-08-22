@@ -6,6 +6,7 @@ from django.db import models
 class Job(models.Model):
     class Source(models.TextChoices):
         LINKEDIN = "linkedin", "LinkedIn"
+        MANUAL = "manual", "Manuale"
 
     class Origin(models.TextChoices):
         COLLECTED = "collected", "Raccolto"
@@ -31,7 +32,10 @@ class Job(models.Model):
     # eliminata in seguito, mentre l'attribuzione del job resta uno storico
     # immutabile di ciò che l'ha prodotto quella notte.
     matched_search = models.CharField(max_length=255, blank=True, default="")
-    apply_url = models.URLField(max_length=1000)
+    # Opzionale (Sprint 43): per un job inserito manualmente l'utente può non
+    # avere ancora un link di candidatura (es. si candida di persona/via
+    # email) — per LinkedIn/raccolta notturna resta sempre popolato.
+    apply_url = models.URLField(max_length=1000, blank=True, default="")
     published_at = models.DateTimeField(null=True, blank=True)
     salary = models.CharField(max_length=255, blank=True, default="")
 
@@ -87,6 +91,10 @@ class DailyQuota(models.Model):
     # 42): generare CV e cover letter sono due budget indipendenti, l'uno
     # non consuma l'altro.
     cover_letter_count = models.PositiveIntegerField(default=0)
+    # Massimale separato da `import_count` (Sprint 43): creare un job a mano
+    # e importarlo da un link LinkedIn sono due budget indipendenti, anche
+    # se numericamente identici (3/giorno, stesso credito di sblocco).
+    manual_job_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [

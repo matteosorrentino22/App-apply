@@ -20,6 +20,21 @@ def _build_full_name_for_filename(user):
     return full_name or user.email
 
 
+class ManualJobCreateSerializer(serializers.Serializer):
+    """Input della creazione manuale di un job (Sprint 43): stessi campi
+    obbligatori di un job raccolto/importato (titolo, azienda, località,
+    descrizione, data/ora di riferimento → `published_at`), link di
+    candidatura opzionale — a differenza dell'import da LinkedIn non c'è una
+    fonte esterna da cui recuperarlo per forza."""
+
+    title = serializers.CharField(max_length=255)
+    company = serializers.CharField(max_length=255)
+    location = serializers.CharField(max_length=255)
+    description = serializers.CharField()
+    published_at = serializers.DateTimeField()
+    apply_url = serializers.URLField(max_length=1000, required=False, allow_blank=True, default="")
+
+
 class JobSerializer(serializers.ModelSerializer):
     # Nessun endpoint dedicato ai CVDocument nelle specifiche tecniche: il
     # link di download è più semplice da esporre qui, dato dal job stesso

@@ -51,3 +51,7 @@ export function markApplicationDone(id) {
 export function importJob(url) {
   return apiFetch('/api/jobs/import/', { method: 'POST', body: { url } })
 }
+
+export function createManualJob(payload) {
+  return apiFetch('/api/jobs/manual/', { method: 'POST', body: payload })
+}

@@ -25,6 +25,11 @@ from .import_service import (
 )
 from .intake import INTAKE_CAP, apply_intake_cap
 from .list_service import list_jobs
+from .manual_job_service import (
+    MANUAL_JOB_DAILY_LIMIT,
+    ManualJobRejected,
+    create_manual_job,
+)
 from .models import DailyQuota, Job, RunLog
 from .scoring import score_job, score_jobs
 from .tasks import run_nightly_cycle_for_user
@@ -722,6 +727,161 @@ class ImportJobApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 409)
+
+
+def _manual_job_data(**overrides):
+    data = {
+        "title": "Business Analyst",
+        "company": "Acme S.p.A.",
+        "location": "Roma",
+        "description": "Descrizione della posizione inserita a mano.",
+        "published_at": timezone.now(),
+    }
+    data.update(overrides)
+    return data
+
+
+@override_settings(PRICE_MANUAL_JOB_EXTRA=Decimal("0.50"))
+class ManualJobCreationTests(TestCase):
+    def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
+        return User.objects.create_user(
+            username=f"manual-job-{plan}-{extra_credit}@example.com",
+            email=f"manual-job-{plan}-{extra_credit}@example.com",
+            password="pw-ManualJob-12345!",
+            plan=plan,
+            extra_credit=extra_credit,
+        )
+
+    def test_free_user_can_create_a_manual_job_scored_without_automatic_cv(self):
+        # A differenza dell'import da LinkedIn, la creazione manuale non è
+        # riservata al piano Pro.
+        user = self._make_user(plan=User.Plan.FREE)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            job = create_manual_job(user, _manual_job_data())
+
+        self.assertEqual(job.source, Job.Source.MANUAL)
+        self.assertEqual(job.origin, Job.Origin.IMPORTED)
+        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertEqual(job.score, FAKE_SCORE_RESULT["score"])
+        self.assertEqual(job.apply_url, "")
+        self.assertFalse(CVDocument.objects.filter(job=job).exists())
+
+    def test_apply_url_is_optional_but_saved_when_provided(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            job = create_manual_job(
+                user, _manual_job_data(apply_url="https://example.com/apply")
+            )
+
+        self.assertEqual(job.apply_url, "https://example.com/apply")
+
+    def test_external_id_is_unique_per_job_avoiding_constraint_collisions(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            first = create_manual_job(user, _manual_job_data())
+            second = create_manual_job(user, _manual_job_data())
+
+        self.assertNotEqual(first.external_id, second.external_id)
+
+    def _create_n(self, user, count):
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            for _ in range(count):
+                create_manual_job(user, _manual_job_data())
+
+    def test_fourth_manual_job_without_credit_is_rejected(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("0"))
+        self._create_n(user, MANUAL_JOB_DAILY_LIMIT)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_job_count, MANUAL_JOB_DAILY_LIMIT)
+
+        with self.assertRaises(ManualJobRejected):
+            create_manual_job(user, _manual_job_data())
+
+        quota.refresh_from_db()
+        self.assertEqual(quota.manual_job_count, MANUAL_JOB_DAILY_LIMIT)
+
+    def test_fourth_manual_job_with_enough_credit_proceeds_and_scales_price(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("5.00"))
+        self._create_n(user, MANUAL_JOB_DAILY_LIMIT)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            create_manual_job(user, _manual_job_data())
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_job_count, MANUAL_JOB_DAILY_LIMIT)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("4.50"))
+
+    def test_manual_job_creation_and_linkedin_import_consume_separate_counters(self):
+        user = self._make_user(plan=User.Plan.PRO)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            create_manual_job(user, _manual_job_data())
+
+        with patch("apps.jobs.import_service.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(
+                fetch_by_url=MagicMock(return_value=_import_offer())
+            )
+            import_job_from_url(user, VALID_LINKEDIN_URL)
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.manual_job_count, 1)
+        self.assertEqual(quota.import_count, 1)
+
+
+class CreateManualJobApiTests(APITestCase):
+    def _make_user(self, plan=User.Plan.FREE):
+        return User.objects.create_user(
+            username=f"manual-job-api-{plan}@example.com",
+            email=f"manual-job-api-{plan}@example.com",
+            password="pw-ManualJobApi-12345!",
+            plan=plan,
+        )
+
+    def test_free_user_creates_a_manual_job_via_api(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        self.client.force_authenticate(user)
+
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT):
+            response = self.client.post(
+                "/api/jobs/manual/",
+                {
+                    "title": "Business Analyst",
+                    "company": "Acme S.p.A.",
+                    "location": "Roma",
+                    "description": "Descrizione della posizione.",
+                    "published_at": timezone.now().isoformat(),
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Job.objects.filter(pk=response.data["job_id"]).exists())
+
+    def test_missing_required_field_is_rejected_with_400(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            "/api/jobs/manual/",
+            {
+                "title": "Business Analyst",
+                "company": "Acme S.p.A.",
+                # "location" mancante.
+                "description": "Descrizione della posizione.",
+                "published_at": timezone.now().isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("location", response.data)
 
 
 class JobListTests(TestCase):
