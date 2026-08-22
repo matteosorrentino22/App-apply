@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="{{ html_lang }}">
+<head>
+<meta charset="utf-8">
+<title>{{ full_name }}</title>
+<style>
+    @page {
+        size: A4;
+        margin: {{ page_margin }};
+    }
+    body {
+        font-family: "Helvetica", "Arial", sans-serif;
+        font-size: {{ base_font_size }}pt;
+        line-height: {{ line_height }};
+        color: #1a1a1a;
+    }
+    .header {
+        margin-bottom: {{ paragraph_gap }};
+    }
+    h1 {
+        font-size: {{ base_font_size|add:5 }}pt;
+        font-weight: bold;
+        margin: 0 0 3pt 0;
+    }
+    .contact-line {
+        font-size: {{ base_font_size|add:-1 }}pt;
+        color: #444;
+        margin: 0;
+    }
+    .subject-line {
+        font-weight: bold;
+        margin: {{ paragraph_gap }} 0;
+    }
+    p {
+        margin: 0 0 {{ paragraph_gap }} 0;
+    }
+    .signature {
+        margin-top: {{ paragraph_gap }};
+    }
+    .signature p {
+        margin: 0;
+    }
+</style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ full_name }}</h1>
+        <p class="contact-line">{{ contact_line }}</p>
+    </div>
+
+    <p class="subject-line">{{ subject_line }}</p>
+
+    <p>{{ salutation }}</p>
+
+    {% for paragraph in paragraphs %}
+    <p>{{ paragraph }}</p>
+    {% endfor %}
+
+    <div class="signature">
+        <p>{{ closing }}</p>
+        <p>{{ full_name }}</p>
+    </div>
+</body>
+</html>

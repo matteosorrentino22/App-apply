@@ -744,6 +744,7 @@ class JobListTests(TestCase):
         title="Project Manager",
         company="Acme S.p.A.",
         location="Roma",
+        matched_search="",
     ):
         job = Job.objects.create(
             user=self.user,
@@ -758,6 +759,7 @@ class JobListTests(TestCase):
             is_archived=is_archived,
             status=status,
             score=score,
+            matched_search=matched_search,
         )
         if days_ago:
             Job.objects.filter(pk=job.pk).update(
@@ -908,6 +910,112 @@ class JobListTests(TestCase):
         )
 
         self.assertEqual({job.pk for job in results}, {main_match.pk})
+
+    def test_search_filter_matches_job_role_saved_search_by_reconstructed_string(self):
+        job_role_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.JOB_ROLE,
+            keywords="Business analyst",
+            city="Zurich",
+            country="Switzerland",
+        )
+        match = self._make_job(
+            "search-jobrole-match", matched_search="Business analyst - Zurich, Switzerland"
+        )
+        self._make_job("search-jobrole-other", matched_search="IT Project manager - Zurich, Switzerland")
+
+        results = list_jobs(self.user, "main", period="all", search_id=str(job_role_search.pk))
+
+        self.assertEqual({job.pk for job in results}, {match.pk})
+
+    def test_search_filter_matches_company_saved_search_case_insensitively(self):
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        # Il nome restituito da LinkedIn può avere una capitalizzazione
+        # diversa da quella digitata dall'utente nella ricerca salvata.
+        match = self._make_job("search-company-match", matched_search="ubs")
+        self._make_job("search-company-other", matched_search="Deloitte")
+
+        results = list_jobs(self.user, "main", period="all", search_id=str(company_search.pk))
+
+        self.assertEqual({job.pk for job in results}, {match.pk})
+
+    def test_search_filter_none_isolates_jobs_without_matched_search(self):
+        imported_like = self._make_job("search-none-match", matched_search="")
+        self._make_job("search-none-other", matched_search="UBS")
+
+        results = list_jobs(self.user, "main", period="all", search_id="none")
+
+        self.assertEqual({job.pk for job in results}, {imported_like.pk})
+
+    def test_search_filter_all_returns_everything(self):
+        job_a = self._make_job("search-all-a", matched_search="UBS")
+        job_b = self._make_job("search-all-b", matched_search="")
+
+        results = list_jobs(self.user, "main", period="all", search_id="all")
+
+        self.assertEqual({job.pk for job in results}, {job_a.pk, job_b.pk})
+
+    def test_search_filter_with_unknown_id_returns_no_results(self):
+        self._make_job("search-unknown", matched_search="UBS")
+
+        results = list_jobs(self.user, "main", period="all", search_id="999999")
+
+        self.assertEqual(list(results), [])
+
+    def test_search_filter_does_not_match_another_users_saved_search(self):
+        other_user = User.objects.create_user(
+            username="other-search@example.com",
+            email="other-search@example.com",
+            password="pw-Other-12345!",
+        )
+        other_search = SavedSearch.objects.create(
+            user=other_user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        self._make_job("search-other-user", matched_search="UBS")
+
+        results = list_jobs(self.user, "main", period="all", search_id=str(other_search.pk))
+
+        self.assertEqual(list(results), [])
+
+    def test_search_filter_combines_in_and_with_score_and_status(self):
+        match = self._make_job(
+            "search-and-match", matched_search="UBS", score=5, status=Job.Status.NEW
+        )
+        self._make_job("search-and-wrong-score", matched_search="UBS", score=3, status=Job.Status.NEW)
+        wrong_search = self._make_job(
+            "search-and-wrong-search", matched_search="Deloitte", score=5, status=Job.Status.NEW
+        )
+
+        results = list_jobs(
+            self.user, "main", period="all", scores=[5], statuses=[Job.Status.NEW], search_id="none"
+        )
+        # Nessuno dei tre ha matched_search vuoto: il filtro "none" combinato
+        # in AND con score/stato deve restituire l'insieme vuoto, non
+        # ignorare gli altri filtri né ignorare se stesso.
+        self.assertEqual(list(results), [])
+
+        results = list_jobs(
+            self.user,
+            "main",
+            period="all",
+            scores=[5],
+            statuses=[Job.Status.NEW],
+            search_id=None,
+        )
+        # Senza filtro ricerca, contano solo score/stato: entrambi i job con
+        # score 5 e stato "new" devono uscire, indipendentemente dalla loro
+        # ricerca di provenienza.
+        self.assertEqual({job.pk for job in results}, {match.pk, wrong_search.pk})
 
 
 class ArchiveJobApiTests(APITestCase):

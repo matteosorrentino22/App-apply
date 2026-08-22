@@ -67,8 +67,9 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 
 ### Ricerche
 - Come utente, voglio **creare una o più ricerche salvate con filtri di *keywords* e *location***, per raccogliere solo le offerte pertinenti.
+- Come utente, voglio **scegliere se una ricerca è per ruolo (*Job role keyword*) o per azienda (*Company*)**, per distinguere "voglio questo tipo di ruolo" da "voglio lavorare in questa azienda" *(introdotto sprint-39, vedi §4.2 e nota di deviazione)*.
 - Come utente, voglio **attivare o disattivare una ricerca senza cancellarla**, per controllare quali ricerche girano ogni notte.
-- Come utente Free, voglio **capire che attivando una nuova ricerca quella precedentemente attiva si disattiva** (posso tenerne attiva 1 sola), per non avere sorprese su cosa gira di notte.
+- Come utente Free, voglio **capire che attivando una nuova ricerca dello stesso tipo (ruolo o azienda) quella precedentemente attiva di quel tipo si disattiva** (posso tenerne attiva 1 per tipo, quindi fino a 2 in totale), per non avere sorprese su cosa gira di notte.
 
 ### Ciclo quotidiano
 - Come utente, voglio **ricevere una notifica al mattino (ore 10:00 locali)** quando ci sono nuovi job, per sapere che c'è materiale nuovo da valutare.
@@ -107,14 +108,16 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 - Profilo modificabile in ogni momento, con effetto sulle generazioni future. **I CV già generati non vengono modificati** da una successiva modifica del profilo master.
 
 ### 4.2 Ricerche
-- Una o più ricerche salvate, ognuna definita da due soli filtri: **keywords** e **location**.
-  - Esempi: *keywords = "IT Project Manager", location = "Rome, Italy"* — oppure — *keywords = "Enel", location = "Milan, Italy"*.
+- Una o più ricerche salvate, ognuna definita da tre filtri: **tipo** (*Job role keyword* o *Company*), **keywords** e **location**. *(Il tipo è stato introdotto nello sprint-39 come deviazione esplicita dal vincolo originale "solo keywords e location" — vedi nota di deviazione più sotto — per distinguere in raccolta le ricerche per ruolo da quelle per azienda, che richiedono un filtro diverso lato fonte.)*
+  - Esempi: *tipo = Job role, keywords = "IT Project Manager", location = "Rome, Italy"* — oppure — *tipo = Company, keywords = "Enel", location = "Milan, Italy"*.
 - Ogni ricerca è attivabile/disattivabile senza essere cancellata. Solo le ricerche **attive** producono job nella raccolta notturna.
 - **Limiti per piano:**
-  - **Free:** fino a **10 ricerche salvate**, di cui **1 sola attiva** alla volta. Attivandone una nuova, l'app **disattiva automaticamente** quella precedentemente attiva e **avvisa l'utente** del cambio.
-  - **Pro:** fino a **100 ricerche salvate**, di cui fino a **50 attive** contemporaneamente.
-- **Downgrade Pro→Free:** al passaggio da Pro a Free **tutte le ricerche vengono disattivate**. Non c'è alcuna selezione automatica: l'utente dovrà rientrare nell'app e attivarne una (entro il limite Free di 1 attiva).
-  - Le ricerche salvate **restano tutte**, anche se superano le 10. In questo stato di eccedenza l'utente **non può aggiungere nuove ricerche** finché non ne elimina abbastanza da **scendere sotto la soglia di 10**. Le ricerche esistenti restano comunque attivabili/disattivabili (entro il limite Free di 1 attiva). *(Vedi §8.)*
+  - **Free:** fino a **10 ricerche salvate** (pool unico, indipendente dal tipo), di cui **1 sola attiva per tipo** (quindi fino a **2 attive in totale**: 1 Job role + 1 Company). Attivandone una nuova dello stesso tipo, l'app **disattiva automaticamente** quella precedentemente attiva di quel tipo e **avvisa l'utente** del cambio; l'eventuale ricerca attiva dell'altro tipo non viene toccata.
+  - **Pro:** fino a **100 ricerche salvate**, di cui fino a **50 attive** contemporaneamente in totale, **liberamente divisibili tra i due tipi** (es. 30 Job role + 20 Company).
+- **Downgrade Pro→Free:** al passaggio da Pro a Free **tutte le ricerche vengono disattivate**, di entrambi i tipi. Non c'è alcuna selezione automatica: l'utente dovrà rientrare nell'app e attivarne (entro il limite Free di 1 per tipo).
+  - Le ricerche salvate **restano tutte**, anche se superano le 10. In questo stato di eccedenza l'utente **non può aggiungere nuove ricerche** finché non ne elimina abbastanza da **scendere sotto la soglia di 10**. Le ricerche esistenti restano comunque attivabili/disattivabili (entro il limite Free di 1 attiva per tipo). *(Vedi §8.)*
+
+**Nota sulla deviazione dal vincolo "solo keywords e location" (sprint-39):** distinguere le ricerche per tipo permette alla fonte di usare, per le ricerche Company, il filtro nativo dell'actor Apify che risolve il nome azienda in un ID LinkedIn (`companyInclude`) invece della corrispondenza testuale su `keywords` — che da sola tornava risultati di aziende non pertinenti (bug osservato, sprint-23 "Bug 2"). Dettaglio tecnico completo in `sprints/sprint-39.md`.
 
 ### 4.3 Fonte delle offerte
 - Unica fonte nell'MVP: **LinkedIn**.
@@ -236,8 +239,8 @@ Ogni generazione manuale (inclusa la rigenerazione di un 4–5) **consuma un'uni
 ### 4.11 Monetizzazione
 
 **Livelli.**
-- **Free:** CV automatico sui job raccolti 4–5 (senza tetto proprio, limitato di fatto dai 15 job/giorno di intake); **1 generazione manuale di CV al giorno**, oltre la quale può proseguire **a credito**; **10 ricerche salvate, 1 attiva**; limite di raccolta **50 job/notte**. Attivabile anche via codice sconto. **Nessun import manuale** (nemmeno a credito).
-- **Pro:** tutte le funzionalità; **10 generazioni manuali di CV al giorno** (oltre, a credito); **import manuale 3/giorno** (oltre, a credito); **100 ricerche salvate, 50 attive**; limite di raccolta **100 job/notte**.
+- **Free:** CV automatico sui job raccolti 4–5 (senza tetto proprio, limitato di fatto dai 15 job/giorno di intake); **1 generazione manuale di CV al giorno**, oltre la quale può proseguire **a credito**; **10 ricerche salvate, 1 attiva per tipo (Job role + Company, fino a 2 in totale)**; limite di raccolta **50 job/notte**. Attivabile anche via codice sconto. **Nessun import manuale** (nemmeno a credito).
+- **Pro:** tutte le funzionalità; **10 generazioni manuali di CV al giorno** (oltre, a credito); **import manuale 3/giorno** (oltre, a credito); **100 ricerche salvate, 50 attive in totale (divisibili liberamente tra i due tipi)**; limite di raccolta **100 job/notte**.
 - **Credito extra:** un **saldo in denaro (€)** caricato sull'account, spendibile per operazioni oltre i massimali del piano.
 
 **Come funziona il credito.**

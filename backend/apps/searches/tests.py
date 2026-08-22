@@ -56,6 +56,84 @@ class SavedSearchPlanLimitsApiTests(APITestCase):
         self.assertFalse(search_a.is_active)
         self.assertTrue(search_b.is_active)
 
+    def test_free_user_can_have_one_active_job_role_and_one_active_company_search(self):
+        job_role = SavedSearch.objects.create(
+            user=self.free_user, keywords="PM", city="Roma", country="Italia"
+        )
+        company = SavedSearch.objects.create(
+            user=self.free_user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Roma",
+            country="Italia",
+        )
+
+        services.activate_search(job_role)
+        deactivated = services.activate_search(company)
+
+        self.assertIsNone(deactivated)
+        job_role.refresh_from_db()
+        company.refresh_from_db()
+        self.assertTrue(job_role.is_active)
+        self.assertTrue(company.is_active)
+
+    def test_activating_a_second_company_search_on_free_plan_deactivates_the_first_one_only(self):
+        job_role = SavedSearch.objects.create(
+            user=self.free_user, keywords="PM", city="Roma", country="Italia", is_active=True
+        )
+        company_a = SavedSearch.objects.create(
+            user=self.free_user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Roma",
+            country="Italia",
+            is_active=True,
+        )
+        company_b = SavedSearch.objects.create(
+            user=self.free_user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="Deloitte",
+            city="Roma",
+            country="Italia",
+        )
+
+        deactivated = services.activate_search(company_b)
+
+        self.assertEqual(deactivated, company_a)
+        job_role.refresh_from_db()
+        company_a.refresh_from_db()
+        company_b.refresh_from_db()
+        self.assertTrue(job_role.is_active)
+        self.assertFalse(company_a.is_active)
+        self.assertTrue(company_b.is_active)
+
+    def test_pro_user_active_limit_is_shared_across_both_search_types(self):
+        job_role_searches = [
+            SavedSearch.objects.create(
+                user=self.pro_user, keywords="PM", city="Roma", country="Italia"
+            )
+            for _ in range(25)
+        ]
+        company_searches = [
+            SavedSearch.objects.create(
+                user=self.pro_user,
+                search_type=SavedSearch.SearchType.COMPANY,
+                keywords="UBS",
+                city="Roma",
+                country="Italia",
+            )
+            for _ in range(26)
+        ]
+        for search in job_role_searches + company_searches[:25]:
+            self.assertIsNone(services.activate_search(search))
+
+        with self.assertRaises(services.PlanLimitExceeded):
+            services.activate_search(company_searches[25])
+
+        self.assertEqual(
+            SavedSearch.objects.filter(user=self.pro_user, is_active=True).count(), 50
+        )
+
     def test_pro_user_can_activate_up_to_fifty_searches(self):
         searches = [
             SavedSearch.objects.create(

@@ -33,6 +33,23 @@ LINKEDIN_GUEST_TIMEOUT_SECONDS = 15
 REQUEST_TIMEOUT_SECONDS = 180
 MAX_ATTEMPTS = 2
 
+# 150 è il minimo consentito dall'actor quando si usa la fatturazione
+# pay-per-result (sotto quella soglia il campo verrebbe comunque forzato a
+# 150 dall'actor stesso): è quindi anche il valore più economico possibile,
+# usato su ogni chiamata per limitare la spesa (sprint-39).
+MAX_ITEMS_PER_CALL = 150
+
+# Per le ricerche di tipo Company, `keyword` resta un termine neutro fisso
+# invece dei nomi azienda: verificato con chiamate reali (2026-08-15) che
+# metterci anche i nomi azienda fa scattare la ricerca semantica di LinkedIn,
+# che aggira `companyInclude` e torna aziende non pertinenti (solo ~25% dei
+# risultati erano dell'azienda cercata — lo stesso identico problema di
+# sprint-23 "Bug 2"). Con keyword neutro, `companyInclude` filtra al 100%.
+# Due termini invece di uno solo per un recall leggermente migliore (testato:
+# "jobs" da solo 37 risultati, "jobs"+"hiring" uniti 38, entrambi al 100% di
+# pertinenza) — l'actor unisce i risultati dei singoli termini deduplicando.
+COMPANY_SEARCH_KEYWORDS = ["jobs", "hiring"]
+
 
 class ApifyLinkedInSource:
     """Fonte offerte LinkedIn via Apify.
@@ -44,15 +61,47 @@ class ApifyLinkedInSource:
 
     def fetch(self, searches, window_hours, limit):
         items = []
-        for search in searches:
+        for group in self._group_by_type_and_location(searches):
+            company_names = [search.keywords for search in group["searches"]]
+            is_company = group["search_type"] == "company"
             payload = {
-                "keyword": [search.keywords],
-                "location": f"{search.city}, {search.country}",
+                "keyword": COMPANY_SEARCH_KEYWORDS if is_company else company_names,
+                "location": f"{group['city']}, {group['country']}",
                 "publishedAt": self._published_at_filter(window_hours),
+                "maxItems": MAX_ITEMS_PER_CALL,
+                "saveOnlyUniqueItems": True,
             }
+            if is_company:
+                payload["companyInclude"] = company_names
             response = self._post_with_retry(payload)
-            items.extend(response.json())
+            raw_items = response.json()
+            if is_company:
+                # `searchString` varrebbe qui "jobs"/"hiring" (il keyword
+                # neutro), non il nome azienda: sovrascritto con l'azienda
+                # reale del job (già garantita da `companyInclude`) prima
+                # della normalizzazione, così `matched_search` resta utile.
+                for item in raw_items:
+                    item["searchString"] = item.get("companyName") or item.get("company") or ""
+            items.extend(raw_items)
         return [self._normalize_item(item) for item in items]
+
+    def _group_by_type_and_location(self, searches):
+        """Raggruppa le ricerche per (tipo, città, paese): una chiamata per
+        gruppo invece di una per ricerca, per risparmiare sul costo Apify
+        (sprint-39). Le ricerche con città/paese diversi restano in gruppi
+        (quindi chiamate) separati anche se dello stesso tipo."""
+        groups = {}
+        for search in searches:
+            key = (search.search_type, search.city, search.country)
+            if key not in groups:
+                groups[key] = {
+                    "search_type": search.search_type,
+                    "city": search.city,
+                    "country": search.country,
+                    "searches": [],
+                }
+            groups[key]["searches"].append(search)
+        return list(groups.values())
 
     def fetch_by_url(self, url):
         """Recupera i dettagli di una singola offerta a partire dal suo link

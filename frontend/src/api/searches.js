@@ -4,12 +4,15 @@ export function fetchSearches() {
   return apiFetch('/api/searches/')
 }
 
-export function createSearch({ keywords, city, country }) {
-  return apiFetch('/api/searches/', { method: 'POST', body: { keywords, city, country } })
+export function createSearch({ search_type, keywords, city, country }) {
+  return apiFetch('/api/searches/', { method: 'POST', body: { search_type, keywords, city, country } })
 }
 
-export function updateSearch(id, { keywords, city, country }) {
-  return apiFetch(`/api/searches/${id}/`, { method: 'PATCH', body: { keywords, city, country } })
+export function updateSearch(id, { search_type, keywords, city, country }) {
+  return apiFetch(`/api/searches/${id}/`, {
+    method: 'PATCH',
+    body: { search_type, keywords, city, country },
+  })
 }
 
 export function deleteSearch(id) {

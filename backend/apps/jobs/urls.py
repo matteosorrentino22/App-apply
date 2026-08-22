@@ -2,7 +2,9 @@ from django.urls import path
 
 from .views import (
     ArchiveJobView,
+    CoverLetterInstructionsView,
     EnrichAndGenerateCvView,
+    GenerateCoverLetterView,
     GenerateCvView,
     ImportJobView,
     JobDetailView,
@@ -20,6 +22,16 @@ urlpatterns = [
         "jobs/<int:pk>/enrich-and-generate-cv/",
         EnrichAndGenerateCvView.as_view(),
         name="job-enrich-and-generate-cv",
+    ),
+    path(
+        "jobs/<int:pk>/generate-cover-letter/",
+        GenerateCoverLetterView.as_view(),
+        name="job-generate-cover-letter",
+    ),
+    path(
+        "cover-letter-instructions/",
+        CoverLetterInstructionsView.as_view(),
+        name="cover-letter-instructions",
     ),
     path("jobs/<int:pk>/archive/", ArchiveJobView.as_view(), name="job-archive"),
     path("jobs/<int:pk>/unarchive/", UnarchiveJobView.as_view(), name="job-unarchive"),

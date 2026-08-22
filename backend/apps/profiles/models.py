@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .language_options import LANGUAGE_CHOICES, LANGUAGE_LEVEL_CHOICES
+
 
 class Profile(models.Model):
     user = models.OneToOneField(
@@ -13,6 +15,11 @@ class Profile(models.Model):
     # da 02-specifiche-tecniche-v3.md §6.3 ("nome, contatti, città, link
     # LinkedIn stanno in User/Profile e vengono iniettati nell'HTML").
     phone = models.CharField(max_length=50, blank=True, default="")
+    # Email mostrata sul CV (Sprint 41): prima si usava `user.email` (login),
+    # non necessariamente l'indirizzo che il candidato vuole mostrare (es.
+    # alias tecnici del tipo "nome+1@gmail.com"). Come `phone`, campo libero
+    # separato dall'account, pre-compilabile dall'import CV.
+    email = models.EmailField(max_length=254, blank=True, default="")
     city = models.CharField(max_length=255, blank=True, default="")
     # Acronimo ISO 3166-1 alpha-2 (2 lettere, es. "IT"), derivato
     # dall'autocomplete città/paese: mostrato nell'intestazione del CV come
@@ -90,8 +97,12 @@ class Certification(models.Model):
 
 class Language(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="languages")
-    language = models.CharField(max_length=100)
-    level = models.CharField(max_length=50, blank=True, default="")
+    # Codici fissi (non più testo libero, Sprint 41): valori disomogenei
+    # ("fluent"/"Fluent"/"fluente"...) impedivano una traduzione affidabile
+    # nel CV generato in altre lingue (apps.profiles.language_options ha le
+    # traduzioni usate in fase di rendering, in apps.cv.generation).
+    language = models.CharField(max_length=100, choices=LANGUAGE_CHOICES)
+    level = models.CharField(max_length=50, blank=True, default="", choices=LANGUAGE_LEVEL_CHOICES)
 
     def __str__(self):
         return f"{self.language} ({self.level})" if self.level else self.language

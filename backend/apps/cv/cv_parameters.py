@@ -31,3 +31,13 @@ AREAS_OF_EXPERTISE_MAX = 6
 # un bullet alla volta con rirenderizzazione, oltre il quale si accetta il
 # caso residuale (PDF multi-pagina, nessun errore mostrato — §6, §11.6).
 MAX_OVERFLOW_ITERATIONS = 4
+
+# Lingue di output supportate per le etichette fisse del CV (Sprint 41):
+# usate sia dal modello (per riportare in che lingua ha scritto il contenuto,
+# vedi CONTENT_JSON_SCHEMA in ai_content.py) sia da SECTION_LABELS in
+# generation.py. Se la job description è in una lingua diversa da queste,
+# il contenuto testuale viene comunque generato in quella lingua reale (come
+# da prompt), ma le etichette fisse ricadono su "en" per mancanza di una
+# traduzione dedicata.
+SUPPORTED_CV_LANGUAGES = ["it", "en", "fr", "de", "es"]
+FALLBACK_CV_LANGUAGE = "en"

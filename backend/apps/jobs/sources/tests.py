@@ -48,6 +48,123 @@ class ApifyLinkedInSourceTests(TestCase):
         payload = mock_post.call_args.kwargs["json"]
         self.assertEqual(payload["location"], "Zurich, Switzerland")
 
+    def test_fetch_sets_max_items_and_save_only_unique_items_on_every_call(self):
+        source = ApifyLinkedInSource()
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([self.search], window_hours=24, limit=50)
+
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["maxItems"], 150)
+        self.assertIs(payload["saveOnlyUniqueItems"], True)
+
+    def test_fetch_groups_searches_of_the_same_type_and_location_into_one_call(self):
+        source = ApifyLinkedInSource()
+        other_search = SavedSearch.objects.create(
+            user=self.user, keywords="IT Project manager", city="Zurich", country="Switzerland"
+        )
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([self.search, other_search], window_hours=24, limit=50)
+
+        self.assertEqual(mock_post.call_count, 1)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["keyword"], ["Business analyst", "IT Project manager"])
+
+    def test_fetch_makes_a_separate_call_per_distinct_location(self):
+        source = ApifyLinkedInSource()
+        other_search = SavedSearch.objects.create(
+            user=self.user, keywords="Business analyst", city="Milan", country="Italy"
+        )
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([self.search, other_search], window_hours=24, limit=50)
+
+        self.assertEqual(mock_post.call_count, 2)
+        locations = {call.kwargs["json"]["location"] for call in mock_post.call_args_list}
+        self.assertEqual(locations, {"Zurich, Switzerland", "Milan, Italy"})
+
+    def test_fetch_makes_a_separate_call_per_search_type_even_at_the_same_location(self):
+        source = ApifyLinkedInSource()
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([self.search, company_search], window_hours=24, limit=50)
+
+        self.assertEqual(mock_post.call_count, 2)
+        payloads = [call.kwargs["json"] for call in mock_post.call_args_list]
+        self.assertIn(["Business analyst"], [p["keyword"] for p in payloads])
+        self.assertIn(["UBS"], [p.get("companyInclude") for p in payloads])
+
+    def test_fetch_adds_company_include_only_for_company_type_searches(self):
+        source = ApifyLinkedInSource()
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([self.search, company_search], window_hours=24, limit=50)
+
+        payloads = [call.kwargs["json"] for call in mock_post.call_args_list]
+        job_role_payload = next(p for p in payloads if p["keyword"] == ["Business analyst"])
+        company_payload = next(p for p in payloads if "companyInclude" in p)
+        self.assertNotIn("companyInclude", job_role_payload)
+        self.assertEqual(company_payload["companyInclude"], ["UBS"])
+
+    def test_fetch_uses_a_neutral_keyword_for_company_type_searches(self):
+        """Metterci i nomi azienda (invece di un termine neutro) fa scattare
+        la ricerca semantica di LinkedIn, che aggira `companyInclude` e torna
+        aziende non pertinenti — verificato con chiamate reali il 2026-08-15
+        (sprint-39): solo un keyword neutro mantiene `companyInclude`
+        selettivo al 100%."""
+        source = ApifyLinkedInSource()
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([])
+            source.fetch([company_search], window_hours=24, limit=50)
+
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertNotIn("UBS", payload["keyword"])
+        self.assertEqual(payload["companyInclude"], ["UBS"])
+
+    def test_fetch_overrides_matched_search_with_the_real_company_for_company_type_items(self):
+        source = ApifyLinkedInSource()
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        raw_item = {
+            "id": "1",
+            "title": "Analyst",
+            "companyName": "UBS",
+            "jobUrl": "https://linkedin.com/jobs/view/1",
+            "searchString": "jobs - Zurich, Switzerland",
+        }
+        with patch("apps.jobs.sources.apify_linkedin.requests.post") as mock_post:
+            mock_post.return_value = _fake_response([raw_item])
+            offers = source.fetch([company_search], window_hours=24, limit=50)
+
+        self.assertEqual(offers[0]["matched_search"], "UBS")
+
     def test_normalize_item_extracts_matched_search_from_search_string(self):
         source = ApifyLinkedInSource()
         item = {

@@ -1,6 +1,6 @@
 import { apiFetch } from './client'
 
-export function fetchJobs({ section = 'main', period, scores, statuses, q }) {
+export function fetchJobs({ section = 'main', period, scores, statuses, q, searchId }) {
   const params = new URLSearchParams({ section })
   if (q) {
     params.set('q', q)
@@ -8,6 +8,7 @@ export function fetchJobs({ section = 'main', period, scores, statuses, q }) {
     if (period) params.set('period', period)
     if (scores && scores.length) params.set('score', scores.join(','))
     if (statuses && statuses.length) params.set('status', statuses.join(','))
+    if (searchId) params.set('search', searchId)
   }
   return apiFetch(`/api/jobs/?${params.toString()}`)
 }
@@ -22,6 +23,17 @@ export function generateCv(id) {
 
 export function enrichAndGenerateCv(id, detail) {
   return apiFetch(`/api/jobs/${id}/enrich-and-generate-cv/`, { method: 'POST', body: detail })
+}
+
+export function generateCoverLetter(id, instructions) {
+  return apiFetch(`/api/jobs/${id}/generate-cover-letter/`, {
+    method: 'POST',
+    body: { instructions },
+  })
+}
+
+export function fetchCoverLetterInstructions() {
+  return apiFetch('/api/cover-letter-instructions/')
 }
 
 export function archiveJob(id) {

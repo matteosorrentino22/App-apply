@@ -1,9 +1,10 @@
-import json
-
 import docx
 import pdfplumber
-from anthropic import Anthropic
 from django.conf import settings
+
+from apps.common.ai import call_claude_structured
+
+from .language_options import LANGUAGE_CHOICES, LANGUAGE_LEVEL_CHOICES
 
 DOCX_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -14,6 +15,9 @@ DOCX_CONTENT_TYPES = {
 # (02-specifiche-tecniche-v3.md §3.5, §5.4).
 MIN_TEXT_LENGTH = 40
 
+_LANGUAGE_CODES = [code for code, _ in LANGUAGE_CHOICES]
+_LEVEL_CODES = [code for code, _ in LANGUAGE_LEVEL_CHOICES]
+
 STRUCTURING_SYSTEM_PROMPT = (
     "Riorganizzi il testo grezzo di un CV nelle sezioni del profilo master di "
     "un'app di ricerca lavoro: sommario professionale, esperienze, istruzione, "
@@ -22,13 +26,28 @@ STRUCTURING_SYSTEM_PROMPT = (
     "restituiscila vuota (stringa vuota o lista vuota). Le date di istruzione "
     "ed esperienza vanno restituite in formato ISO (YYYY-MM-DD); se il testo "
     "riporta solo mese/anno, usa il primo giorno del mese; se manca del tutto "
-    "una data di fine istruzione ricavabile dal testo, restituisci null."
+    "una data di fine istruzione ricavabile dal testo, restituisci null.\n\n"
+    "CONTATTI ('phone', 'email'): estrai il numero di telefono e l'indirizzo "
+    "email SOLO se scritti letteralmente nel testo del CV (mai inventarli, "
+    "mai usare altri dati); restituisci stringa vuota se assenti.\n\n"
+    "LINGUE ('languages'): per ciascuna lingua individuata nel testo (in "
+    "qualunque lingua/grafia sia scritta nel CV originale, es. 'Italiano', "
+    "'Anglais', 'Deutsch (Muttersprache)'), restituisci 'language' come "
+    "codice ISO a due lettere tra quelli elencati nello schema e 'level' "
+    "mappandolo al più vicino tra i 4 livelli previsti nello schema — "
+    "mappa scale diverse a quei 4 livelli (es. CEFR A1/A2 → 'elementary', "
+    "B1/B2 → 'intermediate', C1 → 'fluent', C2/'nativo'/'madrelingua'/"
+    "'native' → 'mother_tongue'). Se una lingua o un livello nel testo non "
+    "è riconducibile con sufficiente certezza a un codice ammesso, ometti "
+    "quella voce piuttosto che indovinare."
 )
 
 PROFILE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
+        "phone": {"type": "string"},
+        "email": {"type": "string"},
         "experiences": {
             "type": "array",
             "items": {
@@ -100,8 +119,8 @@ PROFILE_JSON_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "language": {"type": "string"},
-                    "level": {"type": "string"},
+                    "language": {"type": "string", "enum": _LANGUAGE_CODES},
+                    "level": {"type": "string", "enum": _LEVEL_CODES},
                 },
                 "required": ["language", "level"],
                 "additionalProperties": False,
@@ -110,6 +129,8 @@ PROFILE_JSON_SCHEMA = {
     },
     "required": [
         "summary",
+        "phone",
+        "email",
         "experiences",
         "educations",
         "skills",
@@ -161,17 +182,11 @@ def has_sufficient_text(text):
 
 def structure_with_claude(raw_text):
     """Passa a Claude solo il testo estratto (mai il file binario) per la strutturazione."""
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model=settings.ANTHROPIC_CV_PARSING_MODEL,
-        max_tokens=8000,
-        thinking={"type": "disabled"},
-        output_config={
-            "effort": "medium",
-            "format": {"type": "json_schema", "schema": PROFILE_JSON_SCHEMA},
-        },
+    return call_claude_structured(
+        model=settings.BEDROCK_CV_PARSING_MODEL,
         system=STRUCTURING_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": raw_text}],
+        user_content=raw_text,
+        schema=PROFILE_JSON_SCHEMA,
+        max_tokens=8000,
+        effort="medium",
     )
-    text_block = next(block.text for block in response.content if block.type == "text")
-    return json.loads(text_block)

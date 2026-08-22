@@ -3,6 +3,12 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.cv.cover_letter_manual_generation import (
+    CoverLetterGenerationFailed,
+    CoverLetterGenerationRejected,
+    get_recent_instructions,
+    request_cover_letter_generation,
+)
 from apps.cv.enrichment import EnrichmentExperienceNotFound, generate_cv_with_enrichment
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
@@ -50,6 +56,39 @@ class GenerateCvView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+
+
+class GenerateCoverLetterView(APIView):
+    """Generazione (o rigenerazione) manuale di una cover letter per un Job
+    dell'utente autenticato (Sprint 42): sempre manuale, mai automatica,
+    budget quota/credito indipendente da quello del CV."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        instructions = request.data.get("instructions", "")
+
+        try:
+            document = request_cover_letter_generation(job, instructions=instructions)
+        except CoverLetterGenerationRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except CoverLetterGenerationFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
+
+
+class CoverLetterInstructionsView(APIView):
+    """Indicazioni testuali distinte usate nelle generazioni passate di
+    cover letter dell'utente, più recenti in cima (Sprint 42) — alimenta il
+    menu a tendina nel popup di generazione, non è legato a un job
+    specifico (le indicazioni sono riusabili tra job diversi)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response({"instructions": get_recent_instructions(request.user)})
 
 
 class ImportJobView(APIView):
@@ -169,8 +208,21 @@ class JobListView(APIView):
 
         query = request.query_params.get("q", "")
 
+        search_id = request.query_params.get("search")
+        if search_id and search_id not in ("all", "none") and not search_id.isdigit():
+            return Response(
+                {"detail": 'Il filtro ricerca deve essere "all", "none" o l\'id di una ricerca salvata.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         jobs = list_jobs(
-            request.user, section, period=period, scores=scores, statuses=statuses, query=query
+            request.user,
+            section,
+            period=period,
+            scores=scores,
+            statuses=statuses,
+            query=query,
+            search_id=search_id,
         )
         return Response(JobSerializer(jobs, many=True).data)
 

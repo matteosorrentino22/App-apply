@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
 import { fetchJobs, fetchJob, generateCv, archiveJob, unarchiveJob, importJob } from '../api/jobs'
+import { fetchSearches } from '../api/searches'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,8 @@ export default function JobListPage() {
   const [period, setPeriod] = useState('today')
   const [scores, setScores] = useState([])
   const [statuses, setStatuses] = useState([])
+  const [searchFilter, setSearchFilter] = useState('all')
+  const [savedSearches, setSavedSearches] = useState([])
   const [query, setQuery] = useState('')
   const [queryInput, setQueryInput] = useState('')
 
@@ -41,18 +44,29 @@ export default function JobListPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchJobs({ section, period, scores, statuses, q: query })
+      // Il filtro ricerca non ha senso per i job importati (nessuno ha una
+      // ricerca di provenienza): ignorato lato client per questa sezione,
+      // anche se resta selezionato per quando l'utente torna su Raccolti/
+      // Archiviati.
+      const searchId = section === 'imported' ? undefined : searchFilter
+      const data = await fetchJobs({ section, period, scores, statuses, q: query, searchId })
       setJobs(data)
     } catch {
       setError(t('jobs.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [section, period, scores, statuses, query, t])
+  }, [section, period, scores, statuses, searchFilter, query, t])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    fetchSearches()
+      .then(setSavedSearches)
+      .catch(() => {})
+  }, [])
 
   function handleSearchChange(value) {
     setQueryInput(value)
@@ -208,6 +222,24 @@ export default function JobListPage() {
             ))}
           </SelectContent>
         </Select>
+
+        {section !== 'imported' && (
+          <Select value={searchFilter} onValueChange={setSearchFilter} disabled={searching}>
+            <SelectTrigger aria-label={t('jobs.searchFilterLabel')} className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('jobs.searchFilter_all')}</SelectItem>
+              {savedSearches.map((search) => (
+                <SelectItem key={search.id} value={String(search.id)}>
+                  {t(`account.searchType_${search.search_type}`)}: {search.keywords} — {search.city},{' '}
+                  {search.country}
+                </SelectItem>
+              ))}
+              <SelectItem value="none">{t('jobs.searchFilter_none')}</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t('jobs.scoreLabel')}</span>

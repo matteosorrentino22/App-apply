@@ -41,6 +41,10 @@ class Job(models.Model):
     # Stato transitorio "CV in generazione": non un valore di status, ma un flag
     # a parte che funge anche da guardia di concorrenza (§4.6, §5.2 tecniche).
     cv_generation_in_progress = models.BooleanField(default=False)
+    # Stessa natura di `cv_generation_in_progress`, ma indipendente: generare
+    # una cover letter non tocca lo status del job né interferisce con una
+    # generazione di CV in corso sullo stesso job (Sprint 42).
+    cover_letter_generation_in_progress = models.BooleanField(default=False)
     # Scartato definitivamente dal cap di intake giornaliero (15 job/utente/
     # giorno, §4.4 funzionali): dimensione ortogonale allo status, come
     # is_archived — non è uno dei tre stati stabili, serve solo a escludere il
@@ -79,6 +83,10 @@ class DailyQuota(models.Model):
     date = models.DateField()
     manual_cv_count = models.PositiveIntegerField(default=0)
     import_count = models.PositiveIntegerField(default=0)
+    # Massimale separato da `manual_cv_count` (stessi tetti Free/Pro, Sprint
+    # 42): generare CV e cover letter sono due budget indipendenti, l'uno
+    # non consuma l'altro.
+    cover_letter_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [
@@ -94,6 +102,7 @@ class RunLog(models.Model):
         COLLECTION = "collection", "Raccolta"
         SCORING = "scoring", "Scoring"
         CV_GENERATION = "cv_generation", "Generazione CV"
+        COVER_LETTER_GENERATION = "cover_letter_generation", "Generazione cover letter"
 
     class Status(models.TextChoices):
         SUCCESS = "success", "Successo"
@@ -105,7 +114,7 @@ class RunLog(models.Model):
     job = models.ForeignKey(
         Job, on_delete=models.SET_NULL, null=True, blank=True, related_name="run_logs"
     )
-    task_type = models.CharField(max_length=20, choices=TaskType.choices)
+    task_type = models.CharField(max_length=25, choices=TaskType.choices)
     status = models.CharField(max_length=10, choices=Status.choices)
     message = models.TextField(blank=True, default="")
     started_at = models.DateTimeField()

@@ -10,8 +10,8 @@ Riferimenti: `01-specifiche-funzionali-v4.md`, `02-specifiche-tecniche-v3.md`
 - **Scheduler:** Celery Beat (batch notturno alle 02:00 Europe/Rome, controllo notifiche 10:00 locali, promemoria inattività)
 - **Frontend:** React come PWA (no pubblicazione store, no cache offline — solo reattività dell'API)
 - **Database:** PostgreSQL
-- **Fonte offerte:** Apify (LinkedIn), dietro un'interfaccia interna sostituibile — una chiamata per utente/notte, limite 50 (Free) / 100 (Pro) job/notte
-- **Motore AI:** API Anthropic (Claude) — scoring, generazione CV, parsing del CV caricato in onboarding
+- **Fonte offerte:** Apify (LinkedIn), dietro un'interfaccia interna sostituibile — una chiamata per gruppo (tipo ricerca × location) per utente/notte, non per singola ricerca salvata (sprint-39); limite 50 (Free) / 100 (Pro) job/notte
+- **Motore AI:** Claude via AWS Bedrock (SDK `anthropic`, client `AnthropicBedrock`, non l'API Anthropic diretta — passaggio 18/08/2026 per credito esaurito sulla chiave Anthropic) — scoring, generazione CV, parsing del CV caricato in onboarding. Bedrock non supporta l'output strutturato nativo (`output_config.format`): l'helper condiviso `apps/common/ai.py` forza lo schema via tool-use (`tool_choice`), unico punto da toccare per tutte le chiamate AI
 - **Generazione CV:** template HTML/CSS → PDF (WeasyPrint). Solo PDF nell'MVP, nessuna pipeline Word
 - **Credito extra:** saldo in euro (`Decimal`) con listino prezzi unitari configurabile per azione
 - **Autenticazione:** email/password (nativa Django) + login Google (django-allauth)
@@ -38,13 +38,42 @@ Proposte nello Sprint 01, in vigore da qui in avanti:
 - **Docker:** un'unica immagine (`backend/Dockerfile`) condivisa da `web`/`worker`/`beat`, differenziati solo dal comando lanciato in `docker-compose.yml`.
 - **Stile Python:** niente docstring multi-riga salvo motivare un vincolo non ovvio (es. perché `AUTH_USER_MODEL` punta a un modello custom fin dal primo sprint); niente helper/astrazioni introdotte in anticipo su bisogni futuri.
 
+## Deploy — non mescolare mai `docker-compose.yml` e `docker-compose.prod.yml`
+
+Incidente reale (17/08/2026): sul VPS, `caddy` girava da `docker-compose.prod.yml`
+(volumi Docker `static_data`/`media_data`/`frontend_dist`), mentre
+`web`/`worker`/`beat`/`frontend` erano stati avviati da `docker-compose.yml`
+(dev, bind-mount locale). I due stack non condividono lo storage: i CV
+generati finivano nella cartella locale del bind-mount, invisibile a Caddy,
+che serve `/media/*` e `/static/*` direttamente dai volumi Docker (vedi
+`Caddyfile.prod`) — risultato: PDF generato ma introvabile, pagina bianca al
+download, apparentemente casuale/legato al dispositivo ma in realtà
+100% lato server.
+
+Regola: su questo VPS pubblico (dominio con TLS reale) **tutti** i servizi
+vanno avviati da un solo file compose — sempre `docker-compose.prod.yml`
+(procedura in `DEPLOY.md`), mai un mix. Prima di ogni deploy o intervento sul
+VPS, verificare la coerenza dello stack in esecuzione:
+
+```
+docker inspect <container> --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+```
+
+Deve restituire lo stesso path (`.../docker-compose.prod.yml`) per **tutti**
+i container del progetto. Se qualcuno avvia `docker-compose.yml` (dev) sul
+VPS per debug rapido, va sempre riportato a `docker-compose.prod.yml` con
+`build` + `up -d` prima di lasciare il server, non lasciato "per ora così".
+
 ## Cosa NON fare
 - Non introdurre dipendenze/librerie non necessarie senza chiedere
 - Non modificare l'architettura decisa nelle specifiche tecniche
   senza segnalarlo esplicitamente
 - Non reintrodurre il download CV in Word (escluso dall'MVP — solo PDF)
 - Non implementare cache offline o sincronizzazione dati sul dispositivo nella PWA ("apertura lista immediata" = reattività dell'API, non cache locale)
-- Non introdurre filtri di ricerca oltre keywords e location
+- Non introdurre filtri di ricerca oltre keywords, location e tipo ricerca
+  (Job role keyword / Company — introdotto sprint-39, unica deviazione
+  esplicita accettata da questo vincolo, per poter usare `companyInclude`
+  lato Apify sulle ricerche Company: vedi `sprints/sprint-39.md`)
 - Non aggiungere stati del job oltre ai tre stabili (nuovo, CV generato, candidatura fatta) più il transitorio (CV in generazione)
 - Non far scalare due volte lo stesso massimale/credito per la stessa azione (vedi guardia di concorrenza sulla generazione CV, §5.2 tecniche)
 

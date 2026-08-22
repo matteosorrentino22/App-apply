@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 let nextKey = 0
 function makeKey() {
@@ -24,6 +25,10 @@ export function emptyRow(fields) {
  * quattro volte la stessa logica di gestione lista. Le esperienze hanno un
  * editor dedicato (ExperienceGroupEditor) perché vanno raggruppate per
  * azienda, non trattate come righe indipendenti.
+ *
+ * `field.options` (array `{value, label}`) rende un menu a tendina invece
+ * del testo libero — usato per lingua/livello (Sprint 41: valori fissi,
+ * non più testo libero disomogeneo).
  */
 export default function ListSectionEditor({ title, addLabel, fields, rows, onChange, removeLabel }) {
   function updateRow(key, fieldName, value) {
@@ -49,13 +54,31 @@ export default function ListSectionEditor({ title, addLabel, fields, rows, onCha
                 {field.label}
                 {field.required && ' *'}
               </Label>
-              <Input
-                id={`${row._key}-${field.name}`}
-                type={field.type || 'text'}
-                required={field.required}
-                value={row[field.name] || ''}
-                onChange={(event) => updateRow(row._key, field.name, event.target.value)}
-              />
+              {field.options ? (
+                <Select
+                  value={row[field.name] || undefined}
+                  onValueChange={(value) => updateRow(row._key, field.name, value)}
+                >
+                  <SelectTrigger id={`${row._key}-${field.name}`} aria-label={field.label}>
+                    <SelectValue placeholder={field.label} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {field.options.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id={`${row._key}-${field.name}`}
+                  type={field.type || 'text'}
+                  required={field.required}
+                  value={row[field.name] || ''}
+                  onChange={(event) => updateRow(row._key, field.name, event.target.value)}
+                />
+              )}
             </div>
           ))}
           <Button

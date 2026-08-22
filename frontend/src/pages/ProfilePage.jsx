@@ -11,6 +11,7 @@ import {
   deleteSectionItem,
 } from '../api/profile'
 import ListSectionEditor, { emptyRow } from '../components/ListSectionEditor'
+import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
 import ExperienceGroupEditor from '../components/ExperienceGroupEditor'
 import EducationListEditor from '../components/EducationListEditor'
 import CityAutocomplete from '../components/CityAutocomplete'
@@ -154,7 +155,7 @@ async function saveSection(section, currentRows, initialIds) {
 }
 
 export default function ProfilePage() {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const { user, refreshUser } = useAuth()
 
   const [loading, setLoading] = useState(true)
@@ -169,6 +170,7 @@ export default function ProfilePage() {
   const [profileFields, setProfileFields] = useState({
     summary: '',
     phone: '',
+    email: '',
     city: '',
     country_code: '',
     linkedin_url: '',
@@ -193,8 +195,8 @@ export default function ProfilePage() {
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const CERTIFICATION_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const LANGUAGE_FIELDS = [
-    { name: 'language', label: t('onboarding.language') },
-    { name: 'level', label: t('onboarding.level') },
+    { name: 'language', label: t('onboarding.language'), options: getLanguageNameOptions(lang) },
+    { name: 'level', label: t('onboarding.level'), options: getLanguageLevelOptions(lang) },
   ]
 
   const SECTION_CONFIG = {
@@ -213,6 +215,7 @@ export default function ProfilePage() {
     setProfileFields({
       summary: data.summary || '',
       phone: data.phone || '',
+      email: data.email || '',
       city: data.city || '',
       country_code: data.country_code || '',
       linkedin_url: data.linkedin_url || '',
@@ -361,6 +364,16 @@ export default function ProfilePage() {
                 placeholder={t('onboarding.profilePhonePlaceholder')}
                 value={profileFields.phone}
                 onChange={(event) => setProfileFields({ ...profileFields, phone: event.target.value })}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">{t('profile.email')}</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder={t('onboarding.profileEmailPlaceholder')}
+                value={profileFields.email}
+                onChange={(event) => setProfileFields({ ...profileFields, email: event.target.value })}
               />
             </div>
             <CityAutocomplete
