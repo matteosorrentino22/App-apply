@@ -210,7 +210,7 @@
         <h2>{{ labels.experience }}</h2>
         {% for exp in experiences %}
         <div class="experience">
-            <div class="experience-company">{{ exp.company }}</div>
+            {% ifchanged exp.company %}<div class="experience-company">{{ exp.company }}</div>{% endifchanged %}
             <div class="experience-role">
                 <span>{{ exp.role }}</span>
                 <span class="experience-role-meta">{{ exp.location }}{% if exp.location and exp.dates %} | {% endif %}<strong>{{ exp.dates }}</strong></span>

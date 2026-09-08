@@ -11,7 +11,12 @@ EDU_MAX_SHOWN = 3
 
 # Budget bullet totale (B) in funzione del numero di voci di istruzione
 # mostrate: più istruzione mostrata, meno spazio per i bullet (§5.4).
-BULLET_BUDGET_BY_EDU_COUNT = {1: 12, 2: 10, 3: 9}
+# Valori rialzati (Sprint 43): con la tabella originale (12/10/9) un profilo
+# reale con 4 esperienze e 3+ voci di istruzione risultava con metà pagina
+# vuota ed esperienze molto pertinenti tagliate da 9 bullet reali a 2 —
+# osservato in produzione (CV per EY, esperienza "Digital Transformation
+# Specialist" gonfiata a torto).
+BULLET_BUDGET_BY_EDU_COUNT = {1: 18, 2: 16, 3: 14}
 
 # Numero massimo di esperienze mostrate nel CV, con eventuale swap singolo
 # per rilevanza (§5.4).

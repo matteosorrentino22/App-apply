@@ -1,6 +1,7 @@
 from django.conf import settings
 
 from apps.common.ai import call_claude_structured
+from apps.profiles.language_options import LANGUAGE_LEVEL_LABELS, LANGUAGE_NAME_LABELS
 
 SCORE_JSON_SCHEMA = {
     "type": "object",
@@ -19,8 +20,24 @@ SCORING_SYSTEM_PROMPT = (
     "lavoro. Assegni un punteggio intero da 1 a 5 (5 = massima affinità), "
     "elenchi i punti di affinità (score_match) e le lacune principali "
     "(score_gaps) rispetto ai requisiti dell'offerta, con una breve "
-    "motivazione (score_reasoning). Non inventare competenze non presenti "
-    "nel profilo."
+    "motivazione (score_reasoning).\n"
+    "Regole vincolanti:\n"
+    "1. Ogni voce di score_match e di score_gaps deve corrispondere a un "
+    "requisito o un'informazione esplicita e individuabile nel testo "
+    "dell'offerta (sezione OFFERTA). Non elencare punti di forza o lacune "
+    "generiche del candidato che non siano riferiti a un requisito "
+    "realmente presente nel testo.\n"
+    "2. Se la descrizione dell'offerta è vuota, segnaposto (es. lorem "
+    "ipsum), troppo generica o comunque priva di requisiti valutabili, "
+    "score_match e score_gaps devono essere entrambi array vuoti: non "
+    "riversarci il profilo del candidato. In questo caso assegna un "
+    "punteggio prudenziale (non superiore a 3) e spiega la non "
+    "valutabilità in score_reasoning.\n"
+    "3. Non inventare competenze non presenti nel profilo (score_match).\n"
+    "4. Non citare in score_gaps una competenza, esperienza, certificazione "
+    "o lingua che è già presente nel profilo candidato riportato sopra: "
+    "verifica il profilo per intero (esperienze, competenze, "
+    "certificazioni, lingue, istruzione) prima di segnalarla come lacuna."
 )
 
 
@@ -32,7 +49,27 @@ def _build_profile_summary(profile):
         for exp in profile.experiences.all()
     ) or "Nessuna esperienza in profilo."
     skills = ", ".join(skill.name for skill in profile.skills.all()) or "Nessuna competenza in profilo."
-    return f"Sommario: {profile.summary}\nEsperienze:\n{experiences}\nCompetenze: {skills}"
+    educations = "\n".join(
+        f"- {edu.title} presso {edu.institution}" for edu in profile.educations.all()
+    ) or "Nessuna istruzione in profilo."
+    certifications = ", ".join(
+        cert.name for cert in profile.certifications.all()
+    ) or "Nessuna certificazione in profilo."
+    languages = ", ".join(
+        f"{LANGUAGE_NAME_LABELS.get(lang.language, {}).get('it', lang.language)}"
+        f" ({LANGUAGE_LEVEL_LABELS.get(lang.level, {}).get('it', lang.level)})"
+        if lang.level
+        else LANGUAGE_NAME_LABELS.get(lang.language, {}).get("it", lang.language)
+        for lang in profile.languages.all()
+    ) or "Nessuna lingua in profilo."
+    return (
+        f"Sommario: {profile.summary}\n"
+        f"Esperienze:\n{experiences}\n"
+        f"Competenze: {skills}\n"
+        f"Istruzione:\n{educations}\n"
+        f"Certificazioni: {certifications}\n"
+        f"Lingue: {languages}"
+    )
 
 
 def score_job_with_claude(job, profile):

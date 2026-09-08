@@ -1,13 +1,16 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { ToastProvider } from './components/ToastProvider'
+import { buttonVariants } from './components/ui/button'
+import { cn } from './lib/utils'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/onboarding/OnboardingPage'
+import HomePage from './pages/HomePage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
 import AccountPage from './pages/AccountPage'
@@ -29,16 +32,39 @@ function AccountLanguageSync() {
   return null
 }
 
+function NavItem({ to, label }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          buttonVariants({ variant: isActive ? 'primary' : 'ghost', size: 'sm' }),
+          'rounded-full px-4',
+        )
+      }
+    >
+      {label}
+    </NavLink>
+  )
+}
+
 function Topbar() {
   const { user } = useAuth()
   const { t } = useLanguage()
 
   return (
-    <div className="mx-auto flex max-w-2xl items-center justify-end gap-4 px-4 pt-4">
+    <div
+      className={cn(
+        'mx-auto flex max-w-2xl items-center gap-4 px-4 pt-4',
+        user ? 'justify-between' : 'justify-end',
+      )}
+    >
       {user && (
-        <Link to="/account" className="text-sm font-medium text-primary hover:underline">
-          {t('account.navLink')}
-        </Link>
+        <nav className="flex items-center gap-1 rounded-full bg-muted p-1">
+          <NavItem to="/home" label={t('home.navLink')} />
+          <NavItem to="/list" label={t('jobs.navLink')} />
+          <NavItem to="/account" label={t('account.navLink')} />
+        </nav>
       )}
       <LanguageSwitcher />
     </div>
@@ -62,6 +88,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <OnboardingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/home"
+                element={
+                  <ProtectedRoute>
+                    <HomePage />
                   </ProtectedRoute>
                 }
               />

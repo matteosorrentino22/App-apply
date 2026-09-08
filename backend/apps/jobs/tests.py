@@ -1,5 +1,7 @@
 import random
 import tempfile
+import threading
+import time
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -32,7 +34,13 @@ from .manual_job_service import (
 )
 from .models import DailyQuota, Job, RunLog
 from .scoring import score_job, score_jobs
-from .tasks import run_nightly_cycle_for_user
+from .tasks import (
+    CollectionAlreadyInProgress,
+    CollectionDailyLimitReached,
+    ManualCollectionFailed,
+    run_manual_collection_for_user,
+    run_nightly_cycle_for_user,
+)
 
 User = get_user_model()
 
@@ -207,6 +215,33 @@ class ScoreJobTests(TestCase):
         job_ok_1.refresh_from_db()
         self.assertEqual(job_ok_1.score, 4)
 
+    def test_batch_scoring_runs_calls_concurrently(self):
+        """Blocca una regressione a scoring sequenziale (Sprint 45): se
+        `score_jobs` tornasse a chiamare `score_job_with_claude` un job alla
+        volta, il picco di thread attivi in contemporanea sarebbe 1 e questo
+        test fallirebbe."""
+        jobs = [self._make_job(f"ext-concurrency-{i}") for i in range(8)]
+
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def fake_score(job, profile):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.2)
+            with lock:
+                active -= 1
+            return FAKE_SCORE_RESULT
+
+        with patch("apps.jobs.scoring.score_job_with_claude", side_effect=fake_score):
+            scored = score_jobs(jobs)
+
+        self.assertEqual(len(scored), len(jobs))
+        self.assertGreater(peak, 1)
+
 
 class ApplyIntakeCapTests(TestCase):
     def setUp(self):
@@ -299,85 +334,161 @@ class RunNightlyCycleForUserTests(TestCase):
         self.assertIn("scartati_cap=5", run_log.message)
 
 
-class AutomaticCvGenerationInNightlyCycleTests(TestCase):
+class NoAutomaticCvGenerationInNightlyCycleTests(TestCase):
+    """La generazione automatica di CV è stata rimossa: il ciclo
+    di raccolta lascia sempre i job in `new`, indipendentemente dallo score —
+    la generazione resta sempre manuale (§4.7/§4.11 funzionali)."""
+
     def setUp(self):
         self.user = User.objects.create_user(
-            username="autocv@example.com", email="autocv@example.com", password="pw-Auto-12345!"
+            username="noautocv@example.com", email="noautocv@example.com", password="pw-NoAuto-12345!"
         )
         SavedSearch.objects.create(
             user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
 
-    def _run_cycle_with_scores(self, scores):
-        offers = [_offer(f"ext-{i}") for i in range(len(scores))]
-        score_cycle = iter(scores)
+    def test_high_score_jobs_stay_new_and_no_cv_is_generated(self):
+        offers = [_offer(f"ext-{i}") for i in range(5)]
+        scores = iter([5, 4, 3, 2, 1])
 
         def fake_score(job, profile):
-            score = next(score_cycle)
-            return {**FAKE_SCORE_RESULT, "score": score}
+            return {**FAKE_SCORE_RESULT, "score": next(scores)}
 
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", side_effect=fake_score
-        ):
+        ), patch("apps.cv.generation.generate_cv") as mock_generate_cv:
             mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
             summary = run_nightly_cycle_for_user(self.user)
-        return summary
 
-    def test_high_score_jobs_get_automatic_cv_and_cv_generated_status(self):
-        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
-            mock_generate_cv.return_value = MagicMock()
-            summary = self._run_cycle_with_scores([5, 4, 3, 2, 1])
-
-        self.assertEqual(summary["cv_generated"], 2)
-        high_score_jobs = Job.objects.filter(user=self.user, score__gte=4)
-        low_score_jobs = Job.objects.filter(user=self.user, score__lte=3)
-        self.assertEqual(high_score_jobs.count(), 2)
-        self.assertTrue(all(job.status == Job.Status.CV_GENERATED for job in high_score_jobs))
-        self.assertTrue(all(job.date_cv_generated is not None for job in high_score_jobs))
-        self.assertEqual(low_score_jobs.count(), 3)
-        self.assertTrue(all(job.status == Job.Status.NEW for job in low_score_jobs))
-        self.assertEqual(mock_generate_cv.call_count, 2)
-        for call in mock_generate_cv.call_args_list:
-            self.assertEqual(call.args[1], CVDocument.GenerationType.AUTOMATIC)
-
-    def test_low_score_jobs_have_no_cv_document(self):
-        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
-            self._run_cycle_with_scores([2, 1])
-
+        self.assertNotIn("cv_generated", summary)
         mock_generate_cv.assert_not_called()
+        self.assertTrue(all(job.status == Job.Status.NEW for job in Job.objects.filter(user=self.user)))
+        self.assertFalse(CVDocument.objects.filter(job__user=self.user).exists())
 
-    def test_failed_generation_leaves_job_new_without_blocking_others(self):
-        job_scores = [5, 5]
 
-        def fake_generate(job, generation_type):
-            if job.score == 5 and job.external_id == "ext-0":
-                raise RuntimeError("errore simulato di generazione")
-            return MagicMock()
-
-        with patch(
-            "apps.jobs.tasks.generate_cv", side_effect=fake_generate
-        ) as mock_generate_cv:
-            summary = self._run_cycle_with_scores(job_scores)
-
-        self.assertEqual(mock_generate_cv.call_count, 2)
-        self.assertEqual(summary["cv_generated"], 1)
-        failed_job = Job.objects.get(user=self.user, external_id="ext-0")
-        succeeded_job = Job.objects.get(user=self.user, external_id="ext-1")
-        self.assertEqual(failed_job.status, Job.Status.NEW)
-        self.assertIsNone(failed_job.date_cv_generated)
-        self.assertEqual(succeeded_job.status, Job.Status.CV_GENERATED)
-
-        run_log = RunLog.objects.get(
-            user=self.user, job=failed_job, task_type=RunLog.TaskType.CV_GENERATION
+class RunManualCollectionForUserTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="manualcollect@example.com",
+            email="manualcollect@example.com",
+            password="pw-Manual-12345!",
         )
+        SavedSearch.objects.create(
+            user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
+        )
+
+    def test_runs_collection_scoring_and_cap_and_releases_guard(self):
+        offers = [_offer(f"ext-{i}") for i in range(3)]
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            summary = run_manual_collection_for_user(self.user)
+
+        self.assertEqual(summary["collected"], 3)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.collection_in_progress)
+
+    def test_rejects_when_already_in_progress(self):
+        self.user.collection_in_progress = True
+        self.user.save(update_fields=["collection_in_progress"])
+
+        with self.assertRaises(CollectionAlreadyInProgress):
+            run_manual_collection_for_user(self.user)
+
+    def test_releases_guard_and_logs_failure_on_source_error(self):
+        with patch(
+            "apps.jobs.collection.get_job_source",
+            side_effect=ConnectionError("fonte non raggiungibile"),
+        ):
+            with self.assertRaises(ManualCollectionFailed):
+                run_manual_collection_for_user(self.user)
+
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.collection_in_progress)
+        run_log = RunLog.objects.get(user=self.user, task_type=RunLog.TaskType.COLLECTION)
         self.assertEqual(run_log.status, RunLog.Status.FAILURE)
 
-    def test_automatic_generation_does_not_consume_daily_quota(self):
-        with patch("apps.jobs.tasks.generate_cv") as mock_generate_cv:
-            mock_generate_cv.return_value = MagicMock()
-            self._run_cycle_with_scores([5, 4])
+    def _collect_once(self):
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            return run_manual_collection_for_user(self.user)
 
-        self.assertFalse(DailyQuota.objects.filter(user=self.user).exists())
+    def test_second_call_same_day_hits_the_daily_limit(self):
+        self._collect_once()
+
+        with self.assertRaises(CollectionDailyLimitReached):
+            self._collect_once()
+
+        quota = DailyQuota.objects.get(user=self.user)
+        self.assertEqual(quota.collection_count, 1)
+
+    def test_failed_collection_refunds_the_daily_quota(self):
+        with patch(
+            "apps.jobs.collection.get_job_source",
+            side_effect=ConnectionError("fonte non raggiungibile"),
+        ):
+            with self.assertRaises(ManualCollectionFailed):
+                run_manual_collection_for_user(self.user)
+
+        quota = DailyQuota.objects.get(user=self.user)
+        self.assertEqual(quota.collection_count, 0)
+        # Il fallimento restituisce la quota: una nuova richiesta lo stesso
+        # giorno deve poter procedere di nuovo.
+        summary = self._collect_once()
+        self.assertEqual(summary["collected"], 0)
+
+
+class CollectJobsApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="collectapi@example.com",
+            email="collectapi@example.com",
+            password="pw-CollectApi-12345!",
+        )
+        self.client.force_authenticate(user=self.user)
+        SavedSearch.objects.create(
+            user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
+        )
+
+    def test_post_collects_for_the_authenticated_user_only(self):
+        other_user = User.objects.create_user(
+            username="other-collectapi@example.com",
+            email="other-collectapi@example.com",
+            password="pw-Other-12345!",
+        )
+        offers = [_offer("ext-collect-0")]
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            response = self.client.post("/api/jobs/collect/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["collected"], 1)
+        self.assertTrue(Job.objects.filter(user=self.user, external_id="ext-collect-0").exists())
+        self.assertFalse(Job.objects.filter(user=other_user).exists())
+
+    def test_post_returns_409_when_already_in_progress(self):
+        self.user.collection_in_progress = True
+        self.user.save(update_fields=["collection_in_progress"])
+
+        response = self.client.post("/api/jobs/collect/")
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_post_returns_409_on_second_call_same_day(self):
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            first = self.client.post("/api/jobs/collect/")
+            second = self.client.post("/api/jobs/collect/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 409)
 
 
 class NightlyCycleScheduleTests(TestCase):
@@ -397,7 +508,7 @@ class RunNightlyCycleOrchestratorTests(TestCase):
     fallimento per un singolo utente (es. sorgente Apify irraggiungibile) non
     deve bloccare la raccolta per gli utenti successivi del batch — bug reale
     trovato durante la QA di fine sprint (`run_nightly_cycle` non isolava le
-    eccezioni per utente, a differenza di `_generate_automatic_cv`)."""
+    eccezioni per utente)."""
 
     def setUp(self):
         self.failing_user = User.objects.create_user(

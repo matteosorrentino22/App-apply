@@ -75,12 +75,12 @@ class SelectEducationsToShowTests(SimpleTestCase):
 
 class ComputeBulletBudgetTests(SimpleTestCase):
     def test_budget_table(self):
-        self.assertEqual(compute_bullet_budget(1), 12)
-        self.assertEqual(compute_bullet_budget(2), 10)
-        self.assertEqual(compute_bullet_budget(3), 9)
+        self.assertEqual(compute_bullet_budget(1), 18)
+        self.assertEqual(compute_bullet_budget(2), 16)
+        self.assertEqual(compute_bullet_budget(3), 14)
 
     def test_zero_educations_uses_one_education_budget(self):
-        self.assertEqual(compute_bullet_budget(0), 12)
+        self.assertEqual(compute_bullet_budget(0), 18)
 
 
 def _bullet(text, rank, protected=False):

@@ -25,7 +25,17 @@ services:
 
   web:
     build: ./backend
-    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    # --timeout 1800: la raccolta manuale scora in sincrono dentro la
+    # richiesta HTTP un batch fino a 100 job (apps/jobs/scoring.py, pool di
+    # thread SCORING_CONCURRENCY=5 sulle chiamate Bedrock) — con 120s
+    # osservato in produzione un worker ucciso a metà da gunicorn con
+    # SystemExit non catturabile da `except Exception`, job restanti senza
+    # punteggio (Sprint 45). Stesso rischio, causa diversa, già noto per la
+    # generazione CV/cover letter (Sprint 44). --workers 4 (da 3): con
+    # richieste che possono restare in corso a lungo, più worker liberi
+    # riducono il rischio che due utenti in contemporanea saturino il pool
+    # (costo RAM osservato trascurabile, ~65MB/worker su questo VPS).
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 1800"
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/mediafiles

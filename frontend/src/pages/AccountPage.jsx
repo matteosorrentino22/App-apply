@@ -195,16 +195,11 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <div>
-        <Link to="/list" className="text-sm font-medium text-primary hover:underline">
-          ← {t('jobs.backToList')}
-        </Link>
-        <div className="mt-2 flex items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold tracking-tight">{t('account.title')}</h1>
-          <Button variant="secondary" asChild>
-            <Link to="/profile">{t('account.editProfileLink')}</Link>
-          </Button>
-        </div>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight">{t('account.title')}</h1>
+        <Button variant="secondary" asChild>
+          <Link to="/profile">{t('account.editProfileLink')}</Link>
+        </Button>
       </div>
 
       <Card>

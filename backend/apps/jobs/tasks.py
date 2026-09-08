@@ -1,69 +1,54 @@
 from celery import shared_task
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
-
-from apps.cv.generation import generate_cv
-from apps.cv.models import CVDocument
 
 from .collection import collect_jobs_for_user
 from .intake import apply_intake_cap
-from .models import Job, RunLog
+from .models import DailyQuota, RunLog
 from .scoring import score_jobs
 
 User = get_user_model()
 
-# Soglia di punteggio per la generazione automatica del CV nel ciclo
-# notturno (01-specifiche-funzionali-v4.md §4.7, 02-specifiche-tecniche-v3.md
-# §5.1 punto 4): job 4-5 tenuti dal cap.
-AUTO_GENERATION_SCORE_THRESHOLD = 4
+# Massimo 1 raccolta manuale/utente/giorno (tutti i piani, nessuna estensione
+# a credito): il limite esiste apposta per non sprecare chiamate Apify, che
+# poterlo superare a pagamento vanificherebbe.
+COLLECTION_DAILY_LIMIT = 1
 
 
-def _generate_automatic_cv(job):
-    """Genera automaticamente il CV per un Job 4-5 tenuto dal cap. In caso di
-    successo il Job passa a `cv_generated`; in caso di fallimento resta
-    `new`, senza `CVDocument` e senza bloccare la generazione degli altri Job
-    del batch (§5.1 tecniche)."""
-    started_at = timezone.now()
-    try:
-        generate_cv(job, CVDocument.GenerationType.AUTOMATIC)
-    except Exception as exc:
-        RunLog.objects.create(
-            user=job.user,
-            job=job,
-            task_type=RunLog.TaskType.CV_GENERATION,
-            status=RunLog.Status.FAILURE,
-            message=str(exc),
-            started_at=started_at,
-            finished_at=timezone.now(),
-        )
-        return False
+class CollectionAlreadyInProgress(Exception):
+    """Raccolta manuale respinta senza alcuna chiamata ad Apify: l'utente ha
+    già una raccolta in corso."""
 
-    job.status = Job.Status.CV_GENERATED
-    job.date_cv_generated = timezone.now()
-    job.save(update_fields=["status", "date_cv_generated"])
-    return True
+
+class CollectionDailyLimitReached(Exception):
+    """Raccolta manuale respinta senza alcuna chiamata ad Apify: massimale
+    giornaliero (`COLLECTION_DAILY_LIMIT`) già raggiunto per questo utente."""
+
+
+class ManualCollectionFailed(Exception):
+    """La raccolta manuale è stata avviata (guardia e quota rilasciate) ma è
+    fallita — es. fonte Apify irraggiungibile."""
+
+
+def _today_europe_rome():
+    return timezone.localtime(timezone.now()).date()
 
 
 def run_nightly_cycle_for_user(user):
-    """Raccolta → scoring → cap di intake → CV automatico (4-5) per un
-    singolo utente.
+    """Raccolta → scoring → cap di intake per un singolo utente. Nessuna
+    generazione automatica di CV (rimossa: la generazione è sempre manuale,
+    §4.7/§4.11 funzionali).
 
     Un fallimento isolato non deve mai bloccare il ciclo per l'utente stesso
     né per gli altri: le eccezioni di scoring per singolo job sono già
-    gestite in `score_job` (Sprint 08), quelle di generazione CV in
-    `_generate_automatic_cv` (Sprint 11).
+    gestite in `score_job` (Sprint 08).
     """
     started_at = timezone.now()
 
     collected = collect_jobs_for_user(user)
     scored = score_jobs(collected)
     kept, discarded_by_cap = apply_intake_cap(user, scored)
-
-    cv_generated = sum(
-        1
-        for job in kept
-        if job.score >= AUTO_GENERATION_SCORE_THRESHOLD and _generate_automatic_cv(job)
-    )
 
     RunLog.objects.create(
         user=user,
@@ -72,8 +57,7 @@ def run_nightly_cycle_for_user(user):
         message=(
             f"raccolti={len(collected)} scorati={len(scored)} "
             f"scartati_scoring={len(collected) - len(scored)} "
-            f"scartati_cap={len(discarded_by_cap)} tenuti={len(kept)} "
-            f"cv_generati={cv_generated}"
+            f"scartati_cap={len(discarded_by_cap)} tenuti={len(kept)}"
         ),
         started_at=started_at,
         finished_at=timezone.now(),
@@ -84,15 +68,74 @@ def run_nightly_cycle_for_user(user):
         "discarded_scoring": len(collected) - len(scored),
         "discarded_cap": len(discarded_by_cap),
         "kept": len(kept),
-        "cv_generated": cv_generated,
     }
+
+
+@transaction.atomic
+def _refund_collection_quota(user):
+    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
+    quota.collection_count = max(0, quota.collection_count - 1)
+    quota.save(update_fields=["collection_count"])
+
+
+def run_manual_collection_for_user(user):
+    """Innesco manuale della raccolta (sezione Home): stessa pipeline di
+    `run_nightly_cycle_for_user`, ma per il solo utente che la richiede, con
+    guardia di concorrenza (`User.collection_in_progress`, stesso schema di
+    `Job.cv_generation_in_progress`) + massimale giornaliero
+    (`COLLECTION_DAILY_LIMIT`, `DailyQuota.collection_count`) per non
+    sprecare chiamate Apify con doppi trigger o click ripetuti nello stesso
+    giorno. La quota è riservata prima della chiamata e restituita se questa
+    fallisce, stesso schema di `apps.cv.manual_generation`."""
+    with transaction.atomic():
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
+        if locked_user.collection_in_progress:
+            raise CollectionAlreadyInProgress("Raccolta già in corso per questo account.")
+
+        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
+        if quota.collection_count >= COLLECTION_DAILY_LIMIT:
+            raise CollectionDailyLimitReached(
+                "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
+            )
+        quota.collection_count += 1
+        quota.save(update_fields=["collection_count"])
+
+        locked_user.collection_in_progress = True
+        locked_user.save(update_fields=["collection_in_progress"])
+
+    started_at = timezone.now()
+    try:
+        summary = run_nightly_cycle_for_user(user)
+    except (Exception, SystemExit) as exc:
+        # SystemExit (non un Exception) è quello che gunicorn solleva nel worker
+        # quando scatta `--timeout`: osservato in produzione su una raccolta di
+        # ~100 job, dove lo scoring sequenziale supera il timeout mentre è
+        # bloccato in attesa della risposta di Bedrock. Senza catturarlo qui,
+        # la richiesta muore senza RunLog né refund della quota, e i job
+        # restanti rimangono senza score senza che l'utente lo sappia.
+        _refund_collection_quota(user)
+        RunLog.objects.create(
+            user=user,
+            task_type=RunLog.TaskType.COLLECTION,
+            status=RunLog.Status.FAILURE,
+            message=str(exc),
+            started_at=started_at,
+            finished_at=timezone.now(),
+        )
+        raise ManualCollectionFailed("Raccolta non riuscita. Riprova più tardi.") from exc
+    finally:
+        User.objects.filter(pk=user.pk).update(collection_in_progress=False)
+    return summary
 
 
 @shared_task
 def run_nightly_cycle():
     """Task orchestratore schedulato (Celery Beat, 02:00 Europe/Rome —
     02-specifiche-tecniche-v3.md §5.1, §7): raccolta → scoring → cap di
-    intake → CV automatico per ogni utente.
+    intake per ogni utente. Nessuna generazione automatica di CV: la
+    generazione è sempre manuale (§4.7/§4.11 funzionali).
 
     Un fallimento per singolo utente (es. fonte Apify non raggiungibile) non
     deve impedire la raccolta per gli utenti successivi del batch: l'utente

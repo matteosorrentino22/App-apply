@@ -36,6 +36,13 @@ from .list_service import (
 )
 from .models import Job
 from .serializers import JobSerializer, ManualJobCreateSerializer
+from .stats import get_home_stats
+from .tasks import (
+    CollectionAlreadyInProgress,
+    CollectionDailyLimitReached,
+    ManualCollectionFailed,
+    run_manual_collection_for_user,
+)
 
 
 class GenerateCvView(APIView):
@@ -169,6 +176,25 @@ class EnrichAndGenerateCvView(APIView):
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
 
 
+class CollectJobsView(APIView):
+    """Raccolta manuale per il solo utente autenticato (sezione Home): stessa
+    pipeline raccolta→scoring→cap del ciclo notturno, innescata a richiesta
+    per non sprecare chiamate Apify nei giorni in cui i risultati non
+    verrebbero comunque controllati."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            summary = run_manual_collection_for_user(request.user)
+        except (CollectionAlreadyInProgress, CollectionDailyLimitReached) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ManualCollectionFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(summary, status=status.HTTP_200_OK)
+
+
 class JobDetailView(APIView):
     """Dettaglio di un singolo Job dell'utente autenticato — serve alla UI
     (Sprint 19) per una vista di dettaglio deep-linkabile/sopravvivente al
@@ -289,3 +315,13 @@ class MarkApplicationDoneView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
         return Response(JobSerializer(job).data)
+
+
+class HomeStatsView(APIView):
+    """Statistiche aggregate per la Home (Sprint 44): job trovati, CV
+    generati, candidature fatte, oggi/ultima settimana/totali."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(get_home_stats(request.user))

@@ -95,6 +95,10 @@ class DailyQuota(models.Model):
     # e importarlo da un link LinkedIn sono due budget indipendenti, anche
     # se numericamente identici (3/giorno, stesso credito di sblocco).
     manual_job_count = models.PositiveIntegerField(default=0)
+    # Raccolta manuale (sezione Home): massimo 1/utente/giorno, uguale per
+    # tutti i piani e senza estensione a credito — il limite esiste per non
+    # sprecare chiamate Apify, che pagare per superarlo vanificherebbe.
+    collection_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [

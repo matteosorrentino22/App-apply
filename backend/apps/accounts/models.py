@@ -42,6 +42,10 @@ class User(AbstractUser):
     # last_activity_reset), il promemoria può ripartire da capo.
     last_inactivity_notified_at = models.DateTimeField(null=True, blank=True)
     extra_credit = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    # Guardia di concorrenza per la raccolta manuale (sezione Home): stesso
+    # schema di `Job.cv_generation_in_progress`, ma per utente invece che per
+    # job, per evitare doppie chiamate ad Apify sullo stesso account.
+    collection_in_progress = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
