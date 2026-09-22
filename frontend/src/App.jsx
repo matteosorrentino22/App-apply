@@ -63,7 +63,8 @@ function Topbar() {
         <nav className="flex items-center gap-1 rounded-full bg-muted p-1">
           <NavItem to="/home" label={t('home.navLink')} />
           <NavItem to="/list" label={t('jobs.navLink')} />
-          <NavItem to="/account" label={t('account.navLink')} />
+          <NavItem to="/profile" label={t('profile.navLink')} />
+          <NavItem to="/settings" label={t('account.navLink')} />
         </nav>
       )}
       <LanguageSwitcher />
@@ -116,7 +117,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/account"
+                path="/settings"
                 element={
                   <ProtectedRoute>
                     <AccountPage />

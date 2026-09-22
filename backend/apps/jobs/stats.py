@@ -18,16 +18,11 @@ def _period_counts(queryset, date_field, today_start, week_start):
 
 def get_home_stats(user):
     """Statistiche aggregate per la Home (Sprint 44): job trovati, CV
-    generati, candidature fatte, oggi/ultima settimana/totali. `discarded_by_cap`
-    è escluso dal conteggio job perché quei job sono scartati dal cap
-    giornaliero prima di essere mostrati all'utente (intake.py) — non sono
-    "trovati" dal suo punto di vista. `date_application_done`/`generated_at`
-    non hanno bisogno dello stesso filtro: non esiste cap sulle candidature o
-    sui CV, e sono comunque derivati da job già passati dal cap."""
+    generati, candidature fatte, oggi/ultima settimana/totali."""
     today_start = _local_today_start(user)
     week_start = dj_timezone.now() - timedelta(days=7)
 
-    jobs_qs = Job.objects.filter(user=user, discarded_by_cap=False)
+    jobs_qs = Job.objects.filter(user=user)
     jobs = _period_counts(jobs_qs, "date_collected", today_start, week_start)
     jobs["manual"] = _period_counts(
         jobs_qs.filter(origin=Job.Origin.IMPORTED), "date_collected", today_start, week_start

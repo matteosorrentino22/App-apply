@@ -84,8 +84,8 @@ def score_jobs(jobs):
     chiamate Bedrock): un fallimento su un job non blocca gli altri. Il
     salvataggio su DB resta sul thread principale; `pool.map` mantiene
     l'ordine di `prepared` (non quello di completamento dei thread), ma
-    l'ordine del risultato non conta per chi chiama (`apply_intake_cap`
-    rimescola comunque l'intero batch prima di ordinare per punteggio)."""
+    l'ordine del risultato non conta per chi chiama: la lista finale in UI è
+    comunque riordinata per punteggio da `list_service.list_jobs`."""
     jobs = list(jobs)
     if not jobs:
         return []

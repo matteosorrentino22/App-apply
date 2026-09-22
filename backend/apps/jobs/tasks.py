@@ -1,10 +1,11 @@
+from datetime import timedelta
+
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
 from .collection import collect_jobs_for_user
-from .intake import apply_intake_cap
 from .models import DailyQuota, RunLog
 from .scoring import score_jobs
 
@@ -14,6 +15,15 @@ User = get_user_model()
 # a credito): il limite esiste apposta per non sprecare chiamate Apify, che
 # poterlo superare a pagamento vanificherebbe.
 COLLECTION_DAILY_LIMIT = 1
+
+# Oltre questa soglia, un `collection_in_progress=True` è considerato
+# stantio e ignorato invece di bloccare l'utente (bug osservato in
+# produzione, sprint corrente): se un riavvio del server interrompe la
+# raccolta a metà, il `finally` che rimette il flag a `False` non viene mai
+# eseguito e l'account resta bloccato a tempo indeterminato. Il tetto
+# rimosso sui job/notte (sprint precedente) rende le raccolte più lunghe e
+# quindi più esposte a questo tipo di interruzione.
+COLLECTION_STALE_AFTER = timedelta(hours=2)
 
 
 class CollectionAlreadyInProgress(Exception):
@@ -36,9 +46,11 @@ def _today_europe_rome():
 
 
 def run_nightly_cycle_for_user(user):
-    """Raccolta → scoring → cap di intake per un singolo utente. Nessuna
-    generazione automatica di CV (rimossa: la generazione è sempre manuale,
-    §4.7/§4.11 funzionali).
+    """Raccolta → scoring per un singolo utente. Nessuna generazione
+    automatica di CV (rimossa: la generazione è sempre manuale, §4.7/§4.11
+    funzionali). Nessun cap di intake sui job scorati (rimosso, sprint
+    corrente): tutti i job raccolti e scorati restano visibili, nessuno
+    viene scartato a valle.
 
     Un fallimento isolato non deve mai bloccare il ciclo per l'utente stesso
     né per gli altri: le eccezioni di scoring per singolo job sono già
@@ -48,7 +60,6 @@ def run_nightly_cycle_for_user(user):
 
     collected = collect_jobs_for_user(user)
     scored = score_jobs(collected)
-    kept, discarded_by_cap = apply_intake_cap(user, scored)
 
     RunLog.objects.create(
         user=user,
@@ -56,8 +67,7 @@ def run_nightly_cycle_for_user(user):
         status=RunLog.Status.SUCCESS,
         message=(
             f"raccolti={len(collected)} scorati={len(scored)} "
-            f"scartati_scoring={len(collected) - len(scored)} "
-            f"scartati_cap={len(discarded_by_cap)} tenuti={len(kept)}"
+            f"scartati_scoring={len(collected) - len(scored)}"
         ),
         started_at=started_at,
         finished_at=timezone.now(),
@@ -66,8 +76,7 @@ def run_nightly_cycle_for_user(user):
         "collected": len(collected),
         "scored": len(scored),
         "discarded_scoring": len(collected) - len(scored),
-        "discarded_cap": len(discarded_by_cap),
-        "kept": len(kept),
+        "kept": len(scored),
     }
 
 
@@ -83,14 +92,25 @@ def run_manual_collection_for_user(user):
     """Innesco manuale della raccolta (sezione Home): stessa pipeline di
     `run_nightly_cycle_for_user`, ma per il solo utente che la richiede, con
     guardia di concorrenza (`User.collection_in_progress`, stesso schema di
-    `Job.cv_generation_in_progress`) + massimale giornaliero
-    (`COLLECTION_DAILY_LIMIT`, `DailyQuota.collection_count`) per non
-    sprecare chiamate Apify con doppi trigger o click ripetuti nello stesso
-    giorno. La quota è riservata prima della chiamata e restituita se questa
-    fallisce, stesso schema di `apps.cv.manual_generation`."""
+    `Job.cv_generation_in_progress`, con l'aggiunta di un timeout — vedi
+    `COLLECTION_STALE_AFTER`) + massimale giornaliero (`COLLECTION_DAILY_LIMIT`,
+    `DailyQuota.collection_count`) per non sprecare chiamate Apify con doppi
+    trigger o click ripetuti nello stesso giorno. La quota è riservata prima
+    della chiamata e restituita se questa fallisce, stesso schema di
+    `apps.cv.manual_generation`."""
     with transaction.atomic():
         locked_user = User.objects.select_for_update().get(pk=user.pk)
-        if locked_user.collection_in_progress:
+        # `collection_started_at` assente (flag rimasto `True` da prima che
+        # questo campo esistesse, o da qualunque altro stato anomalo) non
+        # permette di verificare l'età del flag: trattato come stantio,
+        # stesso comportamento del caso "scaduto" — mai un blocco a tempo
+        # indeterminato senza un timestamp con cui giudicarlo.
+        is_active = (
+            locked_user.collection_in_progress
+            and locked_user.collection_started_at is not None
+            and timezone.now() - locked_user.collection_started_at <= COLLECTION_STALE_AFTER
+        )
+        if is_active:
             raise CollectionAlreadyInProgress("Raccolta già in corso per questo account.")
 
         quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
@@ -103,7 +123,8 @@ def run_manual_collection_for_user(user):
         quota.save(update_fields=["collection_count"])
 
         locked_user.collection_in_progress = True
-        locked_user.save(update_fields=["collection_in_progress"])
+        locked_user.collection_started_at = timezone.now()
+        locked_user.save(update_fields=["collection_in_progress", "collection_started_at"])
 
     started_at = timezone.now()
     try:
@@ -126,16 +147,16 @@ def run_manual_collection_for_user(user):
         )
         raise ManualCollectionFailed("Raccolta non riuscita. Riprova più tardi.") from exc
     finally:
-        User.objects.filter(pk=user.pk).update(collection_in_progress=False)
+        User.objects.filter(pk=user.pk).update(collection_in_progress=False, collection_started_at=None)
     return summary
 
 
 @shared_task
 def run_nightly_cycle():
     """Task orchestratore schedulato (Celery Beat, 02:00 Europe/Rome —
-    02-specifiche-tecniche-v3.md §5.1, §7): raccolta → scoring → cap di
-    intake per ogni utente. Nessuna generazione automatica di CV: la
-    generazione è sempre manuale (§4.7/§4.11 funzionali).
+    02-specifiche-tecniche-v3.md §5.1, §7): raccolta → scoring per ogni
+    utente. Nessuna generazione automatica di CV: la generazione è sempre
+    manuale (§4.7/§4.11 funzionali).
 
     Un fallimento per singolo utente (es. fonte Apify non raggiungibile) non
     deve impedire la raccolta per gli utenti successivi del batch: l'utente

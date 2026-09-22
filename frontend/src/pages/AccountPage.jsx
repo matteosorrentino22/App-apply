@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
 import { updateMe } from '../api/auth'
@@ -197,9 +196,6 @@ export default function AccountPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('account.title')}</h1>
-        <Button variant="secondary" asChild>
-          <Link to="/profile">{t('account.editProfileLink')}</Link>
-        </Button>
       </div>
 
       <Card>

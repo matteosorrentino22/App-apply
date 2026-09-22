@@ -56,7 +56,9 @@ class ApifyLinkedInSource:
 
     Implementa l'interfaccia attesa da `apps.jobs.collection`: `fetch(searches,
     window_hours, limit)` → lista di dict normalizzati (`external_id`, `title`,
-    `company`, `location`, `description`, `apply_url`, `published_at`, `salary`).
+    `company`, `location`, `description`, `apply_url`, `published_at`, `salary`,
+    `applicants_count`, `applicants_bucket`, `recruiter_name`,
+    `recruiter_profile_url`).
     """
 
     def fetch(self, searches, window_hours, limit):
@@ -156,6 +158,14 @@ class ApifyLinkedInSource:
             "published_at": None,
             "salary": "",
             "matched_search": "",
+            # La pagina guest pubblica di LinkedIn non mostra né il numero di
+            # candidati né chi ha pubblicato l'annuncio (info riservate agli
+            # utenti loggati): dato semplicemente non disponibile per import
+            # da link, a differenza della raccolta via actor Apify.
+            "applicants_count": None,
+            "applicants_bucket": "",
+            "recruiter_name": "",
+            "recruiter_profile_url": "",
         }
 
     def _extract_tag_text(self, page_html, pattern):
@@ -207,6 +217,9 @@ class ApifyLinkedInSource:
         return "r2592000"
 
     def _normalize_item(self, item):
+        applicants_count, applicants_bucket = self._parse_applicants_count(
+            item.get("applicationsCount")
+        )
         return {
             "external_id": str(item.get("id") or item.get("jobId") or ""),
             "title": item.get("title") or item.get("jobTitle") or "",
@@ -219,15 +232,34 @@ class ApifyLinkedInSource:
             ),
             "salary": item.get("salary") or "",
             "matched_search": item.get("searchString") or "",
+            "applicants_count": applicants_count,
+            "applicants_bucket": applicants_bucket,
+            "recruiter_name": item.get("posterFullName") or "",
+            "recruiter_profile_url": item.get("posterProfileUrl") or "",
         }
+
+    def _parse_applicants_count(self, raw_value):
+        """`applicationsCount` da Apify è una stringa: un intero puro quando
+        LinkedIn mostra il numero esatto, altrimenti una delle due fasce
+        testuali fisse osservate ("Be among the first 25 applicants" /
+        "Over 200 applicants") quando non lo mostra. Ritorna
+        (applicants_count, applicants_bucket): sempre uno dei due None/vuoto,
+        entrambi None/vuoti se il formato non è nessuno dei tre casi noti."""
+        if not isinstance(raw_value, str):
+            return None, ""
+        raw_value = raw_value.strip()
+        if raw_value.isdigit():
+            return int(raw_value), ""
+        if "first 25" in raw_value:
+            return None, "under_25"
+        if "Over 200" in raw_value:
+            return None, "over_200"
+        return None, ""
 
     def _parse_published_at(self, raw_value):
         """Converte la data restituita da Apify in un `datetime` prima che
-        arrivi a `Job.objects.create()`: assegnata in memoria (senza refresh
-        dal DB), una stringa grezza farebbe fallire con AttributeError il
-        confronto per data più recente nel tie-break del cap di intake
-        (`apps.jobs.intake.apply_intake_cap`), perdendo l'intera raccolta
-        della notte per l'utente colpito — bug osservato in produzione."""
+        arrivi a `Job.objects.create()` (campo `DateTimeField`, non accetta
+        una stringa grezza)."""
         if not isinstance(raw_value, str):
             return None
         return parse_datetime(raw_value)

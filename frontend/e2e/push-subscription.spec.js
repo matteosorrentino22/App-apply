@@ -81,7 +81,7 @@ test('completando il flusso di sottoscrizione viene creata una PushSubscription 
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Accedi', exact: true }).click()
   await page.waitForURL(/onboarding|list/)
-  await page.goto('/account')
+  await page.goto('/settings')
 
   await page.getByRole('button', { name: 'Attiva notifiche' }).click()
   await expect(page.getByText('Notifiche attive su questo dispositivo.')).toBeVisible()

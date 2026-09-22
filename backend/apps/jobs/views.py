@@ -1,3 +1,5 @@
+from datetime import date
+
 from rest_framework import permissions, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
@@ -26,13 +28,14 @@ from .import_service import (
 )
 from .manual_job_service import ManualJobRejected, create_manual_job
 from .list_service import (
-    DEFAULT_PERIOD,
+    APPLICANTS_RANGES,
     FILTERABLE_STATUSES,
-    PERIOD_CHOICES,
     SECTION_FILTERS,
     archive_job,
+    favorite_job,
     list_jobs,
     unarchive_job,
+    unfavorite_job,
 )
 from .models import Job
 from .serializers import JobSerializer, ManualJobCreateSerializer
@@ -208,9 +211,9 @@ class JobDetailView(APIView):
 
 
 class JobListView(APIView):
-    """Lista job per sezione, con filtri temporali/score/stato e ricerca
-    testuale confinata alla sezione (Sprint 15, 01-specifiche-funzionali-v4.md
-    §4.5)."""
+    """Lista job per sezione, con filtri su intervallo di date/score/stato/
+    location e ricerca testuale confinata alla sezione (Sprint 15,
+    01-specifiche-funzionali-v4.md §4.5)."""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -222,12 +225,29 @@ class JobListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        period = request.query_params.get("period", DEFAULT_PERIOD)
-        if period not in PERIOD_CHOICES:
-            return Response(
-                {"detail": f"Periodo non valido. Valori ammessi: {', '.join(PERIOD_CHOICES)}."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        date_from = None
+        raw_date_from = request.query_params.get("date_from")
+        if raw_date_from:
+            try:
+                date_from = date.fromisoformat(raw_date_from)
+            except ValueError:
+                return Response(
+                    {"detail": "Il parametro date_from deve essere una data in formato YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        date_to = None
+        raw_date_to = request.query_params.get("date_to")
+        if raw_date_to:
+            try:
+                date_to = date.fromisoformat(raw_date_to)
+            except ValueError:
+                return Response(
+                    {"detail": "Il parametro date_to deve essere una data in formato YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        location = request.query_params.get("location", "")
 
         scores = None
         raw_scores = request.query_params.get("score")
@@ -264,14 +284,40 @@ class JobListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        applicants_ranges = None
+        raw_applicants = request.query_params.get("applicants")
+        if raw_applicants:
+            applicants_ranges = [value for value in raw_applicants.split(",") if value]
+            if not set(applicants_ranges) <= set(APPLICANTS_RANGES):
+                return Response(
+                    {"detail": f"Il filtro candidati ammette solo: {', '.join(APPLICANTS_RANGES)}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        has_recruiter = None
+        raw_recruiter = request.query_params.get("recruiter")
+        if raw_recruiter == "yes":
+            has_recruiter = True
+        elif raw_recruiter == "no":
+            has_recruiter = False
+        elif raw_recruiter and raw_recruiter != "all":
+            return Response(
+                {"detail": 'Il filtro recruiter deve essere "yes", "no" o "all".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         jobs = list_jobs(
             request.user,
             section,
-            period=period,
+            date_from=date_from,
+            date_to=date_to,
             scores=scores,
             statuses=statuses,
             query=query,
             search_id=search_id,
+            location=location,
+            applicants_ranges=applicants_ranges,
+            has_recruiter=has_recruiter,
         )
         return Response(JobSerializer(jobs, many=True).data)
 
@@ -297,6 +343,29 @@ class UnarchiveJobView(APIView):
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         unarchive_job(job)
+        return Response(JobSerializer(job).data)
+
+
+class FavoriteJobView(APIView):
+    """Marca un Job come preferito (Sprint 46): alimenta la sezione
+    "Preferiti", indipendente da origine/stato."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        favorite_job(job)
+        return Response(JobSerializer(job).data)
+
+
+class UnfavoriteJobView(APIView):
+    """Rimuove un Job dai preferiti (Sprint 46)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        unfavorite_job(job)
         return Response(JobSerializer(job).data)
 
 

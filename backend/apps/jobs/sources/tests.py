@@ -193,9 +193,7 @@ class ApifyLinkedInSourceTests(TestCase):
 
     def test_normalize_item_parses_published_at_into_a_real_datetime(self):
         # Bug osservato in produzione: senza la conversione, il valore resta
-        # una stringa in memoria e `apply_intake_cap` (che confronta le date
-        # per il tie-break) crasha con AttributeError su `.timestamp()`,
-        # perdendo l'intera raccolta della notte per l'utente colpito.
+        # una stringa in memoria e fallisce assegnandolo al `DateTimeField`.
         source = ApifyLinkedInSource()
         item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
                 "publishedAt": "2026-07-28T10:00:00Z"}
@@ -214,6 +212,68 @@ class ApifyLinkedInSourceTests(TestCase):
         normalized = source._normalize_item(item)
 
         self.assertIsNone(normalized["published_at"])
+
+    def test_normalize_item_parses_exact_applicants_count(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+                "applicationsCount": "35"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertEqual(normalized["applicants_count"], 35)
+        self.assertEqual(normalized["applicants_bucket"], "")
+
+    def test_normalize_item_parses_under_25_bucket(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+                "applicationsCount": "Be among the first 25 applicants"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertIsNone(normalized["applicants_count"])
+        self.assertEqual(normalized["applicants_bucket"], "under_25")
+
+    def test_normalize_item_parses_over_200_bucket(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+                "applicationsCount": "Over 200 applicants"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertIsNone(normalized["applicants_count"])
+        self.assertEqual(normalized["applicants_bucket"], "over_200")
+
+    def test_normalize_item_without_applications_count_defaults_to_unknown(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x"}
+
+        normalized = source._normalize_item(item)
+
+        self.assertIsNone(normalized["applicants_count"])
+        self.assertEqual(normalized["applicants_bucket"], "")
+
+    def test_normalize_item_extracts_recruiter_name_and_profile_url(self):
+        source = ApifyLinkedInSource()
+        item = {
+            "id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+            "posterFullName": "Jane Doe",
+            "posterProfileUrl": "https://ch.linkedin.com/in/jane-doe",
+        }
+
+        normalized = source._normalize_item(item)
+
+        self.assertEqual(normalized["recruiter_name"], "Jane Doe")
+        self.assertEqual(normalized["recruiter_profile_url"], "https://ch.linkedin.com/in/jane-doe")
+
+    def test_normalize_item_without_recruiter_defaults_to_empty(self):
+        source = ApifyLinkedInSource()
+        item = {"id": "123", "title": "X", "companyName": "Y", "jobUrl": "https://x",
+                "posterFullName": ""}
+
+        normalized = source._normalize_item(item)
+
+        self.assertEqual(normalized["recruiter_name"], "")
+        self.assertEqual(normalized["recruiter_profile_url"], "")
 
     def test_fetch_retries_once_after_a_timeout_then_succeeds(self):
         source = ApifyLinkedInSource()

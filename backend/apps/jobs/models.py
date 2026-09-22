@@ -39,8 +39,33 @@ class Job(models.Model):
     published_at = models.DateTimeField(null=True, blank=True)
     salary = models.CharField(max_length=255, blank=True, default="")
 
+    # Numero di candidati riportato da LinkedIn (solo raccolta via Apify,
+    # sprint corrente): quando l'annuncio è troppo recente/troppo popolare
+    # per un numero esatto, LinkedIn mostra una fascia testuale ("Be among
+    # the first 25 applicants" / "Over 200 applicants") invece di un intero
+    # — da cui i due campi separati: `applicants_count` per il numero
+    # esatto, `applicants_bucket` per l'estremo quando il numero non c'è.
+    # Mai entrambi popolati insieme; entrambi vuoti se il dato manca del
+    # tutto (import da link, job manuale).
+    class ApplicantsBucket(models.TextChoices):
+        UNDER_25 = "under_25", "Meno di 25"
+        OVER_200 = "over_200", "Più di 200"
+
+    applicants_count = models.PositiveIntegerField(null=True, blank=True)
+    applicants_bucket = models.CharField(max_length=10, choices=ApplicantsBucket.choices, blank=True, default="")
+
+    # Nome/profilo di chi ha pubblicato l'annuncio (`posterFullName`/
+    # `posterProfileUrl` da Apify): LinkedIn non lo espone per tutti gli
+    # annunci, resta vuoto quando assente — stessa natura di `salary`.
+    recruiter_name = models.CharField(max_length=255, blank=True, default="")
+    recruiter_profile_url = models.URLField(max_length=500, blank=True, default="")
+
     origin = models.CharField(max_length=20, choices=Origin.choices, default=Origin.COLLECTED)
     is_archived = models.BooleanField(default=False)
+    # Flag organizzativo dell'utente, ortogonale a origine/archiviazione:
+    # alimenta la sezione "Preferiti" (esclusi però i job già archiviati, che
+    # restano visibili solo in "Archiviati" — vedi SECTION_FILTERS).
+    is_favorite = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     # Stato transitorio "CV in generazione": non un valore di status, ma un flag
     # a parte che funge anche da guardia di concorrenza (§4.6, §5.2 tecniche).
@@ -49,12 +74,11 @@ class Job(models.Model):
     # una cover letter non tocca lo status del job né interferisce con una
     # generazione di CV in corso sullo stesso job (Sprint 42).
     cover_letter_generation_in_progress = models.BooleanField(default=False)
-    # Scartato definitivamente dal cap di intake giornaliero (15 job/utente/
-    # giorno, §4.4 funzionali): dimensione ortogonale allo status, come
-    # is_archived — non è uno dei tre stati stabili, serve solo a escludere il
-    # job da vista lista e generazione automatica senza cancellare la riga
-    # (la riga resta per far valere la deduplica per (user, source,
-    # external_id) anche sui job scartati). Introdotto in Sprint 09.
+    # Storico: cap di intake giornaliero (15 job/utente/notte), rimosso
+    # nello sprint corrente — non più impostato da nessun percorso di
+    # raccolta. Campo lasciato sul modello (righe passate già marcate,
+    # nessuna migrazione di pulizia necessaria), ma sempre `False` per i job
+    # creati da qui in avanti.
     discarded_by_cap = models.BooleanField(default=False)
 
     score = models.PositiveSmallIntegerField(

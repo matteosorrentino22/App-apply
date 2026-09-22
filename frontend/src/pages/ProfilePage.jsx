@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
 import { updateMe } from '../api/auth'
@@ -306,10 +305,6 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <Link to="/account" className="text-sm font-medium text-primary hover:underline">
-        {t('profile.back')}
-      </Link>
-
       <h1 className="text-3xl font-bold tracking-tight text-balance">{t('profile.title')}</h1>
 
       {error && (

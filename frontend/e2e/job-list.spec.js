@@ -68,8 +68,8 @@ test('sezioni: raccolti/importati/archiviati mostrano i job attesi', async ({ pa
 test('filtro punteggio mostra solo i job con lo score selezionato', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  // Il filtro periodo di default è "Oggi": i job seed hanno date_collected a
-  // ora, quindi restano visibili senza dover cambiare periodo.
+  // Il filtro data di default è "oggi-oggi": i job seed hanno date_collected
+  // a ora, quindi restano visibili senza dover cambiare intervallo.
   await page.getByRole('button', { name: '4', exact: true }).click()
 
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
@@ -163,18 +163,26 @@ test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ p
   await expect(card.getByRole('button', { name: 'Genera CV' })).toBeEnabled()
 })
 
-test('apply link disponibile solo dopo la generazione del CV', async ({ page, request, baseURL }) => {
+test('apply link e "segna candidatura fatta" sono disponibili anche senza CV generato', async ({
+  page,
+  request,
+  baseURL,
+}) => {
   await loginAsSeededUser(page, request, baseURL)
 
+  // "Project Manager" è seedato con stato "new" (nessun CV generato): sia il
+  // link diretto all'annuncio sia "segna candidatura fatta" devono comunque
+  // essere disponibili.
   await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
   await page.waitForURL(/jobs\//)
-  await expect(page.getByRole('link', { name: "Vai all'annuncio" })).not.toBeVisible()
-  await expect(page.getByText('Disponibile dopo aver generato il CV.')).toBeVisible()
-
-  await page.goto('/list')
-  await cardFor(page, 'Head of Operations').getByRole('link', { name: 'Dettagli' }).click()
-  await page.waitForURL(/jobs\//)
   await expect(page.getByRole('link', { name: "Vai all'annuncio" })).toBeVisible()
+
+  const statusBadge = page.getByTestId('job-status-badge')
+  await expect(statusBadge).toHaveText('Nuovo')
+  await page.getByRole('button', { name: 'Segna candidatura fatta' }).click()
+
+  await expect(statusBadge).toHaveText('Candidatura fatta')
+  await expect(page.getByRole('button', { name: 'Segna candidatura fatta' })).not.toBeVisible()
 })
 
 test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async ({ page, request, baseURL }) => {
@@ -189,6 +197,102 @@ test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async (
 
   await expect(statusBadge).toHaveText('Candidatura fatta')
   await expect(page.getByRole('button', { name: 'Segna candidatura fatta' })).not.toBeVisible()
+})
+
+test('il pulsante "espandi motivazioni" rivela la motivazione di match/gap', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await page.waitForURL(/jobs\//)
+
+  await expect(page.getByText('5+ anni PM')).toBeVisible()
+  await expect(
+    page.getByText("L'offerta richiede almeno 5 anni di esperienza in project management"),
+  ).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Espandi motivazioni' }).click()
+
+  await expect(
+    page.getByText("L'offerta richiede almeno 5 anni di esperienza in project management"),
+  ).toBeVisible()
+})
+
+test('il filtro location mostra solo i job la cui località contiene il testo cercato', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await page.getByPlaceholder('Filtra per città o paese…').fill('Torino')
+  await page.waitForTimeout(400)
+
+  await expect(cardFor(page, 'Head of Operations')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+})
+
+test('il badge candidati evidenzia i job con meno di 25 candidati e mostra il numero esatto quando disponibile', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await expect(cardFor(page, 'Project Manager').getByText('Tra i primi 25 candidati')).toBeVisible()
+  await expect(cardFor(page, 'Backend Developer').getByText('45 candidati')).toBeVisible()
+  // Nessun dato candidati per questo job: nessun badge da mostrare.
+  await expect(cardFor(page, 'Head of Operations').getByText(/candidat/)).not.toBeVisible()
+})
+
+test('l\'icona recruiter è visibile solo per i job con un nome recruiter', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await expect(cardFor(page, 'Backend Developer').getByTitle(/Jane Doe/)).toBeVisible()
+  await expect(cardFor(page, 'Project Manager').getByTitle(/Posted by|pubblicato da/i)).not.toBeVisible()
+})
+
+test('il filtro candidati mostra solo i job nella fascia selezionata', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await page.getByRole('button', { name: '<25', exact: true }).click()
+
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+})
+
+test('il filtro recruiter mostra solo i job con (o senza) un recruiter', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await page.getByLabel('Recruiter').click()
+  await page.getByRole('option', { name: 'Con recruiter' }).click()
+
+  await expect(cardFor(page, 'Backend Developer')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+})
+
+test('il cuoricino aggiunge/rimuove un job dalla sezione Preferiti', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  const card = cardFor(page, 'Project Manager')
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/favorite/') && response.ok()),
+    card.getByRole('button', { name: 'Aggiungi ai preferiti' }).click(),
+  ])
+
+  await page.getByRole('button', { name: 'Preferiti' }).click()
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes('/unfavorite/') && response.ok()),
+    cardFor(page, 'Project Manager').getByRole('button', { name: 'Rimuovi dai preferiti' }).click(),
+  ])
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
 })
 
 test('arricchimento con "salva anche nel profilo" aggiunge il bullet all\'esperienza esistente', async ({

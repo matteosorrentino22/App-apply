@@ -26,7 +26,17 @@ def generate_cv_with_enrichment(job, experience_id, additional_bullets, save_to_
     di inclusione — vedi `generation.py`); se `save_to_profile` è vero, i
     nuovi bullet sono anche accodati all'`Experience` esistente nel profilo
     master (persistenti, riusabili nei CV futuri, ma senza più priorità in
-    quel caso — §5.6)."""
+    quel caso — §5.6).
+
+    Il salvataggio su profilo avviene DOPO la generazione, non prima (bug
+    osservato in produzione, Sprint 44): se i bullet venivano salvati prima,
+    Claude li leggeva già come bullet normali del profilo e a volte li
+    riformulava di nuovo di sua iniziativa, mentre il meccanismo
+    `protected_bullets` li inietta comunque, letterali, in questa stessa
+    generazione — risultato: lo stesso bullet reale compariva due volte nel
+    CV (una riformulato dal modello, una letterale). Salvando dopo, durante
+    QUESTA generazione il profilo non contiene ancora i nuovi bullet, quindi
+    Claude non può vederli né riformularli in autonomia."""
     try:
         experience = Experience.objects.get(pk=experience_id, profile__user=job.user)
     except Experience.DoesNotExist as exc:
@@ -36,13 +46,15 @@ def generate_cv_with_enrichment(job, experience_id, additional_bullets, save_to_
 
     enrichment_text = _format_enrichment_text(experience, additional_bullets)
 
-    if save_to_profile:
-        experience.bullets = [*experience.bullets, *additional_bullets]
-        experience.save(update_fields=["bullets"])
-
-    return request_manual_cv_generation(
+    cv_document = request_manual_cv_generation(
         job,
         enrichment=enrichment_text,
         protected_bullets=additional_bullets,
         protected_experience_id=experience.pk,
     )
+
+    if save_to_profile:
+        experience.bullets = [*experience.bullets, *additional_bullets]
+        experience.save(update_fields=["bullets"])
+
+    return cv_document

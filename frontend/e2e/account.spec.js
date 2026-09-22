@@ -39,7 +39,7 @@ async function login(page, email, password) {
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Accedi', exact: true }).click()
   await page.waitForURL(/onboarding|list/)
-  await page.goto('/account')
+  await page.goto('/settings')
 }
 
 test('la schermata account mostra piano e saldo credito impostati da amministratore', async ({

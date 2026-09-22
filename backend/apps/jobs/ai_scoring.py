@@ -3,12 +3,26 @@ from django.conf import settings
 from apps.common.ai import call_claude_structured
 from apps.profiles.language_options import LANGUAGE_LEVEL_LABELS, LANGUAGE_NAME_LABELS
 
+# Ogni voce di match/gap è un'etichetta cortissima più una motivazione a
+# parte (prima erano un'unica stringa con la motivazione tra parentesi): la
+# UI mostra solo `label` e rivela `reason` su richiesta (pulsante "espandi
+# motivazioni").
+_SCORE_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "reason": {"type": "string"},
+    },
+    "required": ["label", "reason"],
+    "additionalProperties": False,
+}
+
 SCORE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "score": {"type": "integer"},
-        "score_match": {"type": "array", "items": {"type": "string"}},
-        "score_gaps": {"type": "array", "items": {"type": "string"}},
+        "score_match": {"type": "array", "items": _SCORE_ITEM_SCHEMA},
+        "score_gaps": {"type": "array", "items": _SCORE_ITEM_SCHEMA},
         "score_reasoning": {"type": "string"},
     },
     "required": ["score", "score_match", "score_gaps", "score_reasoning"],
@@ -37,7 +51,15 @@ SCORING_SYSTEM_PROMPT = (
     "4. Non citare in score_gaps una competenza, esperienza, certificazione "
     "o lingua che è già presente nel profilo candidato riportato sopra: "
     "verifica il profilo per intero (esperienze, competenze, "
-    "certificazioni, lingue, istruzione) prima di segnalarla come lacuna."
+    "certificazioni, lingue, istruzione) prima di segnalarla come lacuna.\n"
+    "5. score_reasoning deve essere brevissima: massimo due frasi, circa 40 "
+    "parole in totale — va letta in pochi secondi in una lista di offerte, "
+    "non deve ripetere il contenuto di score_match/score_gaps.\n"
+    "6. Ogni voce di score_match e score_gaps è un oggetto con due campi: "
+    "`label`, cortissima (poche parole, solo il fatto, senza spiegazioni — "
+    "es. \"5 anni di esperienza PM\"), e `reason`, una frase che motiva "
+    "quella voce collegandola al requisito preciso dell'offerta (il "
+    "dettaglio che altrimenti andrebbe tra parentesi dopo l'etichetta)."
 )
 
 

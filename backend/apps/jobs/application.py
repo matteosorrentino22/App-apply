@@ -5,22 +5,21 @@ from .models import Job
 
 
 class ApplicationMarkRejected(Exception):
-    """Il Job non ha (ancora) un CV generato: la marcatura "candidatura
-    fatta" richiede che lo stato sia già `cv_generated` (01-specifiche
-    -funzionali-v4.md §4.10)."""
+    """Il Job è già stato marcato come candidatura fatta: la marcatura non è
+    ripetibile (deviazione voluta da 01-specifiche-funzionali-v4.md §4.10,
+    che richiedeva anche un CV già generato — l'utente può ora candidarsi
+    anche solo con il link diretto all'annuncio, senza aver generato nulla)."""
 
 
 @transaction.atomic
 def mark_application_done(job):
-    """Marca un Job come "candidatura fatta": possibile solo se esiste già
-    un CV per quel job (automatico o manuale, cioè `status='cv_generated'`).
-    Valorizza `date_application_done` e azzera `User.last_activity_reset`
-    (§4.12 funzionali: il timer di inattività riparte a ogni candidatura)."""
+    """Marca un Job come "candidatura fatta", con o senza un CV generato per
+    quel job. Valorizza `date_application_done` e azzera
+    `User.last_activity_reset` (§4.12 funzionali: il timer di inattività
+    riparte a ogni candidatura)."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
-    if locked_job.status != Job.Status.CV_GENERATED:
-        raise ApplicationMarkRejected(
-            "Puoi marcare come candidatura fatta solo un job per cui è già stato generato un CV."
-        )
+    if locked_job.status == Job.Status.APPLICATION_DONE:
+        raise ApplicationMarkRejected("Questo job è già stato marcato come candidatura fatta.")
 
     now = timezone.now()
     locked_job.status = Job.Status.APPLICATION_DONE

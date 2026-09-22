@@ -1,14 +1,29 @@
 import { apiFetch } from './client'
 
-export function fetchJobs({ section = 'main', period, scores, statuses, q, searchId }) {
+export function fetchJobs({
+  section = 'main',
+  dateFrom,
+  dateTo,
+  scores,
+  statuses,
+  q,
+  searchId,
+  location,
+  applicantsRanges,
+  hasRecruiter,
+}) {
   const params = new URLSearchParams({ section })
   if (q) {
     params.set('q', q)
   } else {
-    if (period) params.set('period', period)
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
     if (scores && scores.length) params.set('score', scores.join(','))
     if (statuses && statuses.length) params.set('status', statuses.join(','))
     if (searchId) params.set('search', searchId)
+    if (location) params.set('location', location)
+    if (applicantsRanges && applicantsRanges.length) params.set('applicants', applicantsRanges.join(','))
+    if (hasRecruiter) params.set('recruiter', hasRecruiter)
   }
   return apiFetch(`/api/jobs/?${params.toString()}`)
 }
@@ -50,6 +65,14 @@ export function archiveJob(id) {
 
 export function unarchiveJob(id) {
   return apiFetch(`/api/jobs/${id}/unarchive/`, { method: 'POST', body: {} })
+}
+
+export function favoriteJob(id) {
+  return apiFetch(`/api/jobs/${id}/favorite/`, { method: 'POST', body: {} })
+}
+
+export function unfavoriteJob(id) {
+  return apiFetch(`/api/jobs/${id}/unfavorite/`, { method: 'POST', body: {} })
 }
 
 export function markApplicationDone(id) {

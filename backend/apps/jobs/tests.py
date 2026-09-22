@@ -1,8 +1,8 @@
-import random
 import tempfile
 import threading
 import time
-from datetime import timedelta
+import zoneinfo
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +25,6 @@ from .import_service import (
     ImportRejected,
     import_job_from_url,
 )
-from .intake import INTAKE_CAP, apply_intake_cap
 from .list_service import list_jobs
 from .manual_job_service import (
     MANUAL_JOB_DAILY_LIMIT,
@@ -71,14 +70,14 @@ class CollectJobsForUserTests(TestCase):
             is_active=True,
         )
 
-    def test_caps_saved_jobs_at_plan_limit_even_if_source_returns_more(self):
+    def test_no_cap_saves_every_valid_offer_regardless_of_plan(self):
         offers = [_offer(f"ext-{i}") for i in range(80)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
             mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
             created = collect_jobs_for_user(self.free_user)
 
-        self.assertEqual(len(created), 50)
-        self.assertEqual(Job.objects.filter(user=self.free_user).count(), 50)
+        self.assertEqual(len(created), 80)
+        self.assertEqual(Job.objects.filter(user=self.free_user).count(), 80)
 
     def test_offer_missing_a_required_field_is_not_saved(self):
         offers = [_offer("ext-1"), _offer("ext-2", company="")]
@@ -108,7 +107,7 @@ class CollectJobsForUserTests(TestCase):
         self.assertEqual(len(second_run_created), 0)
         self.assertEqual(Job.objects.filter(user=self.free_user, external_id="ext-1").count(), 1)
 
-    def test_pro_user_plan_limit_is_one_hundred(self):
+    def test_no_cap_saves_every_valid_offer_for_pro_plan_too(self):
         pro_user = User.objects.create_user(
             username="pro@example.com",
             email="pro@example.com",
@@ -123,7 +122,7 @@ class CollectJobsForUserTests(TestCase):
             mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
             created = collect_jobs_for_user(pro_user)
 
-        self.assertEqual(len(created), 100)
+        self.assertEqual(len(created), 150)
 
     def test_no_active_searches_collects_nothing(self):
         SavedSearch.objects.filter(user=self.free_user).update(is_active=False)
@@ -243,69 +242,6 @@ class ScoreJobTests(TestCase):
         self.assertGreater(peak, 1)
 
 
-class ApplyIntakeCapTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username="cap@example.com", email="cap@example.com", password="pw-Cap-12345!"
-        )
-
-    def _make_scored_job(self, external_id, score, published_at=None):
-        return Job.objects.create(
-            user=self.user,
-            source=Job.Source.LINKEDIN,
-            external_id=external_id,
-            title="Project Manager",
-            company="Acme S.p.A.",
-            location="Roma",
-            description="Descrizione.",
-            apply_url="https://linkedin.com/jobs/view/1",
-            score=score,
-            published_at=published_at,
-        )
-
-    def test_keeps_exactly_the_cap_and_excludes_the_rest(self):
-        jobs = [self._make_scored_job(f"ext-{i}", score=(i % 5) + 1) for i in range(20)]
-
-        kept, discarded = apply_intake_cap(self.user, jobs)
-
-        self.assertEqual(len(kept), INTAKE_CAP)
-        self.assertEqual(len(discarded), 5)
-        self.assertEqual(
-            Job.objects.filter(user=self.user, discarded_by_cap=False).count(), INTAKE_CAP
-        )
-        self.assertEqual(Job.objects.filter(user=self.user, discarded_by_cap=True).count(), 5)
-
-    def test_tie_break_prefers_most_recently_published(self):
-        now = timezone.now()
-        # 14 job a punteggio 5 riempiono già il cap tranne un posto; due job a
-        # punteggio 4 sono a pari merito sul confine: vince quello più recente.
-        top_jobs = [self._make_scored_job(f"top-{i}", score=5) for i in range(14)]
-        older = self._make_scored_job("older", score=4, published_at=now - timedelta(days=2))
-        newer = self._make_scored_job("newer", score=4, published_at=now - timedelta(hours=1))
-
-        kept, discarded = apply_intake_cap(self.user, top_jobs + [older, newer])
-
-        kept_ids = {job.pk for job in kept}
-        self.assertIn(newer.pk, kept_ids)
-        self.assertNotIn(older.pk, kept_ids)
-
-    def test_tie_break_is_random_but_deterministic_with_seed(self):
-        # Due job a pari punteggio e senza published_at: il seed rende la
-        # scelta deterministica nel test, come richiesto dal criterio.
-        job_a = self._make_scored_job("a", score=3, published_at=None)
-        job_b = self._make_scored_job("b", score=3, published_at=None)
-
-        random.seed(1234)
-        kept_first, _ = apply_intake_cap(self.user, [job_a, job_b])
-
-        Job.objects.filter(pk__in=[job_a.pk, job_b.pk]).update(discarded_by_cap=False)
-
-        random.seed(1234)
-        kept_second, _ = apply_intake_cap(self.user, [job_a, job_b])
-
-        self.assertEqual([job.pk for job in kept_first], [job.pk for job in kept_second])
-
-
 class RunNightlyCycleForUserTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -315,7 +251,7 @@ class RunNightlyCycleForUserTests(TestCase):
             user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
 
-    def test_orchestrates_collection_scoring_and_cap_with_run_log(self):
+    def test_orchestrates_collection_and_scoring_with_run_log_no_cap(self):
         offers = [_offer(f"ext-{i}") for i in range(20)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
@@ -325,13 +261,14 @@ class RunNightlyCycleForUserTests(TestCase):
 
         self.assertEqual(summary["collected"], 20)
         self.assertEqual(summary["scored"], 20)
-        self.assertEqual(summary["kept"], INTAKE_CAP)
-        self.assertEqual(summary["discarded_cap"], 5)
+        self.assertEqual(summary["kept"], 20)
+        self.assertNotIn("discarded_cap", summary)
+        self.assertEqual(Job.objects.filter(user=self.user, discarded_by_cap=True).count(), 0)
 
         run_log = RunLog.objects.get(user=self.user, task_type=RunLog.TaskType.COLLECTION)
         self.assertEqual(run_log.status, RunLog.Status.SUCCESS)
         self.assertIn("raccolti=20", run_log.message)
-        self.assertIn("scartati_cap=5", run_log.message)
+        self.assertNotIn("scartati_cap", run_log.message)
 
 
 class NoAutomaticCvGenerationInNightlyCycleTests(TestCase):
@@ -377,7 +314,7 @@ class RunManualCollectionForUserTests(TestCase):
             user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
         )
 
-    def test_runs_collection_scoring_and_cap_and_releases_guard(self):
+    def test_runs_collection_and_scoring_and_releases_guard(self):
         offers = [_offer(f"ext-{i}") for i in range(3)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
@@ -388,10 +325,57 @@ class RunManualCollectionForUserTests(TestCase):
         self.assertEqual(summary["collected"], 3)
         self.user.refresh_from_db()
         self.assertFalse(self.user.collection_in_progress)
+        self.assertIsNone(self.user.collection_started_at)
 
     def test_rejects_when_already_in_progress(self):
         self.user.collection_in_progress = True
-        self.user.save(update_fields=["collection_in_progress"])
+        self.user.collection_started_at = timezone.now()
+        self.user.save(update_fields=["collection_in_progress", "collection_started_at"])
+
+        with self.assertRaises(CollectionAlreadyInProgress):
+            run_manual_collection_for_user(self.user)
+
+    def test_allows_new_collection_when_previous_flag_is_stale(self):
+        """Bug osservato in produzione (sprint corrente): un riavvio del
+        server durante una raccolta lascia `collection_in_progress=True` per
+        sempre, perché il `finally` che lo rimette a `False` non viene mai
+        eseguito. Dopo `COLLECTION_STALE_AFTER` il flag va ignorato invece
+        di bloccare l'utente a tempo indeterminato."""
+        self.user.collection_in_progress = True
+        self.user.collection_started_at = timezone.now() - timedelta(hours=3)
+        self.user.save(update_fields=["collection_in_progress", "collection_started_at"])
+
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            summary = run_manual_collection_for_user(self.user)
+
+        self.assertEqual(summary["collected"], 0)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.collection_in_progress)
+
+    def test_allows_new_collection_when_flag_has_no_timestamp(self):
+        """`collection_in_progress=True` senza `collection_started_at` (flag
+        rimasto `True` da prima che questo campo esistesse, osservato in
+        produzione appena dopo aver introdotto il timeout): l'età non è
+        verificabile, va trattato come stantio, non come blocco permanente."""
+        self.user.collection_in_progress = True
+        self.user.collection_started_at = None
+        self.user.save(update_fields=["collection_in_progress", "collection_started_at"])
+
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
+            "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
+        ):
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            summary = run_manual_collection_for_user(self.user)
+
+        self.assertEqual(summary["collected"], 0)
+
+    def test_rejects_when_flag_is_recent_even_if_set_a_bit_ago(self):
+        self.user.collection_in_progress = True
+        self.user.collection_started_at = timezone.now() - timedelta(minutes=5)
+        self.user.save(update_fields=["collection_in_progress", "collection_started_at"])
 
         with self.assertRaises(CollectionAlreadyInProgress):
             run_manual_collection_for_user(self.user)
@@ -473,7 +457,8 @@ class CollectJobsApiTests(APITestCase):
 
     def test_post_returns_409_when_already_in_progress(self):
         self.user.collection_in_progress = True
-        self.user.save(update_fields=["collection_in_progress"])
+        self.user.collection_started_at = timezone.now()
+        self.user.save(update_fields=["collection_in_progress", "collection_started_at"])
 
         response = self.client.post("/api/jobs/collect/")
 
@@ -1039,6 +1024,11 @@ class JobListTests(TestCase):
             job.refresh_from_db()
         return job
 
+    def _local_today(self, user=None):
+        user = user or self.user
+        tz = zoneinfo.ZoneInfo(user.timezone)
+        return timezone.now().astimezone(tz).date()
+
     def test_sections_return_exactly_the_expected_jobs(self):
         main_job = self._make_job("main-1", origin=Job.Origin.COLLECTED, is_archived=False)
         imported_job = self._make_job("imported-1", origin=Job.Origin.IMPORTED, is_archived=False)
@@ -1049,38 +1039,60 @@ class JobListTests(TestCase):
             "archived-imported-1", origin=Job.Origin.IMPORTED, is_archived=True
         )
 
-        main_ids = {job.pk for job in list_jobs(self.user, "main", period="all")}
-        imported_ids = {job.pk for job in list_jobs(self.user, "imported", period="all")}
-        archived_ids = {job.pk for job in list_jobs(self.user, "archived", period="all")}
+        main_ids = {job.pk for job in list_jobs(self.user, "main")}
+        imported_ids = {job.pk for job in list_jobs(self.user, "imported")}
+        archived_ids = {job.pk for job in list_jobs(self.user, "archived")}
 
         self.assertEqual(main_ids, {main_job.pk})
         self.assertEqual(imported_ids, {imported_job.pk})
         self.assertEqual(archived_ids, {archived_collected.pk, archived_imported.pk})
 
-    def test_today_filter_returns_only_jobs_collected_today(self):
+    def test_favorites_section_excludes_archived_favorites(self):
+        favorite_main = self._make_job("fav-main", origin=Job.Origin.COLLECTED, is_archived=False)
+        favorite_main.is_favorite = True
+        favorite_main.save(update_fields=["is_favorite"])
+
+        favorite_archived = self._make_job(
+            "fav-archived", origin=Job.Origin.COLLECTED, is_archived=True
+        )
+        favorite_archived.is_favorite = True
+        favorite_archived.save(update_fields=["is_favorite"])
+
+        self._make_job("not-fav", origin=Job.Origin.COLLECTED, is_archived=False)
+
+        favorites_ids = {job.pk for job in list_jobs(self.user, "favorites")}
+        archived_ids = {job.pk for job in list_jobs(self.user, "archived")}
+
+        self.assertEqual(favorites_ids, {favorite_main.pk})
+        self.assertIn(favorite_archived.pk, archived_ids)
+        self.assertNotIn(favorite_archived.pk, favorites_ids)
+
+    def test_date_range_filter_returns_only_jobs_collected_in_range(self):
         today_job = self._make_job("today-1", days_ago=0)
         old_job = self._make_job("old-1", days_ago=2)
+        today = self._local_today()
 
-        results = list_jobs(self.user, "main", period="today")
+        results = list_jobs(self.user, "main", date_from=today, date_to=today)
 
         result_ids = {job.pk for job in results}
         self.assertIn(today_job.pk, result_ids)
         self.assertNotIn(old_job.pk, result_ids)
 
-    def test_all_filter_returns_entire_history(self):
+    def test_no_date_range_returns_entire_history(self):
         today_job = self._make_job("today-2", days_ago=0)
         old_job = self._make_job("old-2", days_ago=60)
 
-        results = list_jobs(self.user, "main", period="all")
+        results = list_jobs(self.user, "main")
 
         result_ids = {job.pk for job in results}
         self.assertEqual(result_ids, {today_job.pk, old_job.pk})
 
-    def test_today_filter_follows_each_users_own_timezone(self):
-        """Sprint 22, §7 requisiti trasversali: "oggi" in lista segue il
-        fuso locale dell'utente, non un riferimento unico di sistema. Stesso
-        istante assoluto di raccolta, due utenti su fusi diversi: chi è già
-        "domani" nel proprio fuso lo vede in "oggi", chi è ancora "ieri" no.
+    def test_date_range_filter_uses_each_users_own_timezone(self):
+        """Sprint 22, §7 requisiti trasversali: la conversione di una data
+        nell'istante UTC segue il fuso locale dell'utente, non un
+        riferimento unico di sistema. Stesso istante assoluto di raccolta,
+        due utenti su fusi diversi: chi è già "domani" nel proprio fuso non
+        lo trova più filtrando per il giorno di ieri, chi è ancora "ieri" sì.
         """
         kiribati_user = User.objects.create_user(
             username="list-kiribati@example.com",
@@ -1089,11 +1101,10 @@ class JobListTests(TestCase):
             timezone="Pacific/Kiritimati",
         )
 
-        # 23:00 UTC del 27/07: le 01:00 CEST del 28/07 a Roma (già "domani"
-        # lì), ma solo le 21:30 UTC del 27/07 restano "oggi" per Roma;
-        # le 13:00 (+14) del 28/07 a Kiritimati, quindi "oggi" anche per loro.
-        fixed_now = timezone.datetime(2026, 7, 27, 23, 0, tzinfo=timezone.get_fixed_timezone(0))
+        # 21:30 UTC del 27/07: le 23:30 CEST del 27/07 a Roma (ancora "27"
+        # lì), ma le 11:30 (+14) del 28/07 a Kiritimati (già "28" lì).
         job_instant = timezone.datetime(2026, 7, 27, 21, 30, tzinfo=timezone.get_fixed_timezone(0))
+        target_day = date(2026, 7, 27)
 
         rome_job = self._make_job("tz-rome-1")
         Job.objects.filter(pk=rome_job.pk).update(date_collected=job_instant)
@@ -1110,12 +1121,16 @@ class JobListTests(TestCase):
         )
         Job.objects.filter(pk=kiribati_job.pk).update(date_collected=job_instant)
 
-        with patch("apps.jobs.list_service.dj_timezone.now", return_value=fixed_now):
-            rome_today_ids = {job.pk for job in list_jobs(self.user, "main", period="today")}
-            kiribati_today_ids = {job.pk for job in list_jobs(kiribati_user, "main", period="today")}
+        rome_ids = {
+            job.pk for job in list_jobs(self.user, "main", date_from=target_day, date_to=target_day)
+        }
+        kiribati_ids = {
+            job.pk
+            for job in list_jobs(kiribati_user, "main", date_from=target_day, date_to=target_day)
+        }
 
-        self.assertNotIn(rome_job.pk, rome_today_ids)
-        self.assertIn(kiribati_job.pk, kiribati_today_ids)
+        self.assertIn(rome_job.pk, rome_ids)
+        self.assertNotIn(kiribati_job.pk, kiribati_ids)
 
     def test_score_and_status_filters_intersect_correctly_in_every_section(self):
         sections = [
@@ -1137,9 +1152,7 @@ class JobListTests(TestCase):
                 **section_kwargs,
             )
 
-            results = list_jobs(
-                self.user, section, period="all", scores=[4, 5], statuses=[Job.Status.NEW]
-            )
+            results = list_jobs(self.user, section, scores=[4, 5], statuses=[Job.Status.NEW])
             self.assertEqual({job.pk for job in results}, {match.pk})
 
     def test_results_are_always_ordered_by_score_descending(self):
@@ -1147,7 +1160,7 @@ class JobListTests(TestCase):
         high = self._make_job("order-high", score=5)
         mid = self._make_job("order-mid", score=3)
 
-        results = list(list_jobs(self.user, "main", period="today"))
+        results = list(list_jobs(self.user, "main"))
 
         self.assertEqual([job.pk for job in results], [high.pk, mid.pk, low.pk])
 
@@ -1168,16 +1181,18 @@ class JobListTests(TestCase):
             title="Rare Keyword Match",
         )
 
-        # Filtri palesemente contraddittori (score/stato impossibili da
-        # soddisfare insieme al titolo): devono essere ignorati quando la
-        # ricerca testuale è attiva.
+        # Filtri palesemente contraddittori (data/score/stato/location
+        # impossibili da soddisfare insieme al titolo): devono essere
+        # ignorati quando la ricerca testuale è attiva.
         results = list_jobs(
             self.user,
             "main",
-            period="today",
+            date_from=date(2000, 1, 1),
+            date_to=date(2000, 1, 2),
             scores=[1],
             statuses=[Job.Status.APPLICATION_DONE],
             query="Rare Keyword",
+            location="Nessun posto del genere",
         )
 
         self.assertEqual({job.pk for job in results}, {main_match.pk})
@@ -1195,7 +1210,7 @@ class JobListTests(TestCase):
         )
         self._make_job("search-jobrole-other", matched_search="IT Project manager - Zurich, Switzerland")
 
-        results = list_jobs(self.user, "main", period="all", search_id=str(job_role_search.pk))
+        results = list_jobs(self.user, "main", search_id=str(job_role_search.pk))
 
         self.assertEqual({job.pk for job in results}, {match.pk})
 
@@ -1212,7 +1227,7 @@ class JobListTests(TestCase):
         match = self._make_job("search-company-match", matched_search="ubs")
         self._make_job("search-company-other", matched_search="Deloitte")
 
-        results = list_jobs(self.user, "main", period="all", search_id=str(company_search.pk))
+        results = list_jobs(self.user, "main", search_id=str(company_search.pk))
 
         self.assertEqual({job.pk for job in results}, {match.pk})
 
@@ -1220,7 +1235,7 @@ class JobListTests(TestCase):
         imported_like = self._make_job("search-none-match", matched_search="")
         self._make_job("search-none-other", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", period="all", search_id="none")
+        results = list_jobs(self.user, "main", search_id="none")
 
         self.assertEqual({job.pk for job in results}, {imported_like.pk})
 
@@ -1228,14 +1243,14 @@ class JobListTests(TestCase):
         job_a = self._make_job("search-all-a", matched_search="UBS")
         job_b = self._make_job("search-all-b", matched_search="")
 
-        results = list_jobs(self.user, "main", period="all", search_id="all")
+        results = list_jobs(self.user, "main", search_id="all")
 
         self.assertEqual({job.pk for job in results}, {job_a.pk, job_b.pk})
 
     def test_search_filter_with_unknown_id_returns_no_results(self):
         self._make_job("search-unknown", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", period="all", search_id="999999")
+        results = list_jobs(self.user, "main", search_id="999999")
 
         self.assertEqual(list(results), [])
 
@@ -1254,7 +1269,7 @@ class JobListTests(TestCase):
         )
         self._make_job("search-other-user", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", period="all", search_id=str(other_search.pk))
+        results = list_jobs(self.user, "main", search_id=str(other_search.pk))
 
         self.assertEqual(list(results), [])
 
@@ -1268,7 +1283,7 @@ class JobListTests(TestCase):
         )
 
         results = list_jobs(
-            self.user, "main", period="all", scores=[5], statuses=[Job.Status.NEW], search_id="none"
+            self.user, "main", scores=[5], statuses=[Job.Status.NEW], search_id="none"
         )
         # Nessuno dei tre ha matched_search vuoto: il filtro "none" combinato
         # in AND con score/stato deve restituire l'insieme vuoto, non
@@ -1278,7 +1293,6 @@ class JobListTests(TestCase):
         results = list_jobs(
             self.user,
             "main",
-            period="all",
             scores=[5],
             statuses=[Job.Status.NEW],
             search_id=None,
@@ -1287,6 +1301,113 @@ class JobListTests(TestCase):
         # score 5 e stato "new" devono uscire, indipendentemente dalla loro
         # ricerca di provenienza.
         self.assertEqual({job.pk for job in results}, {match.pk, wrong_search.pk})
+
+    def test_location_filter_combines_in_and_with_score_and_status(self):
+        match = self._make_job(
+            "loc-match", location="Milano, Italia", score=5, status=Job.Status.NEW
+        )
+        self._make_job("loc-wrong-score", location="Milano, Italia", score=3, status=Job.Status.NEW)
+        self._make_job("loc-wrong-city", location="Roma, Italia", score=5, status=Job.Status.NEW)
+
+        results = list_jobs(self.user, "main", scores=[5], statuses=[Job.Status.NEW], location="Milano")
+
+        self.assertEqual({job.pk for job in results}, {match.pk})
+
+    def test_location_filter_is_case_insensitive_substring_match(self):
+        match = self._make_job("loc-case-match", location="Roma, Italia")
+        self._make_job("loc-case-other", location="Milano, Italia")
+
+        results = list_jobs(self.user, "main", location="roma")
+
+        self.assertEqual({job.pk for job in results}, {match.pk})
+
+    def test_location_filter_is_ignored_when_text_search_is_active(self):
+        milano_job = self._make_job(
+            "loc-query-milano", location="Milano, Italia", title="Rare Keyword Match"
+        )
+        roma_job = self._make_job(
+            "loc-query-roma", location="Roma, Italia", title="Rare Keyword Match"
+        )
+
+        results = list_jobs(self.user, "main", query="Rare Keyword", location="Milano")
+
+        # Come score/stato/data, anche il filtro location viene ignorato
+        # quando la ricerca testuale principale è attiva.
+        self.assertEqual({job.pk for job in results}, {milano_job.pk, roma_job.pk})
+
+    def test_applicants_filter_under_25_matches_bucket_and_exact_count(self):
+        bucket_job = self._make_job("app-bucket")
+        Job.objects.filter(pk=bucket_job.pk).update(applicants_bucket="under_25")
+        exact_job = self._make_job("app-exact")
+        Job.objects.filter(pk=exact_job.pk).update(applicants_count=10)
+        outside_job = self._make_job("app-outside")
+        Job.objects.filter(pk=outside_job.pk).update(applicants_count=30)
+
+        results = list_jobs(self.user, "main", applicants_ranges=["under_25"])
+
+        self.assertEqual({job.pk for job in results}, {bucket_job.pk, exact_job.pk})
+
+    def test_applicants_filter_over_200_matches_bucket_and_exact_count(self):
+        bucket_job = self._make_job("app-bucket-over")
+        Job.objects.filter(pk=bucket_job.pk).update(applicants_bucket="over_200")
+        exact_job = self._make_job("app-exact-over")
+        Job.objects.filter(pk=exact_job.pk).update(applicants_count=250)
+        outside_job = self._make_job("app-outside-over")
+        Job.objects.filter(pk=outside_job.pk).update(applicants_count=100)
+
+        results = list_jobs(self.user, "main", applicants_ranges=["over_200"])
+
+        self.assertEqual({job.pk for job in results}, {bucket_job.pk, exact_job.pk})
+
+    def test_applicants_filter_middle_range_matches_only_exact_counts_in_range(self):
+        in_range = self._make_job("app-mid-in")
+        Job.objects.filter(pk=in_range.pk).update(applicants_count=75)
+        below = self._make_job("app-mid-below")
+        Job.objects.filter(pk=below.pk).update(applicants_count=20)
+        above = self._make_job("app-mid-above")
+        Job.objects.filter(pk=above.pk).update(applicants_count=150)
+
+        results = list_jobs(self.user, "main", applicants_ranges=["51_100"])
+
+        self.assertEqual({job.pk for job in results}, {in_range.pk})
+
+    def test_applicants_filter_combines_multiple_ranges_with_or(self):
+        low = self._make_job("app-multi-low")
+        Job.objects.filter(pk=low.pk).update(applicants_bucket="under_25")
+        high = self._make_job("app-multi-high")
+        Job.objects.filter(pk=high.pk).update(applicants_bucket="over_200")
+        middle = self._make_job("app-multi-middle")
+        Job.objects.filter(pk=middle.pk).update(applicants_count=75)
+
+        results = list_jobs(self.user, "main", applicants_ranges=["under_25", "over_200"])
+
+        self.assertEqual({job.pk for job in results}, {low.pk, high.pk})
+
+    def test_recruiter_filter_yes_and_no(self):
+        with_recruiter = self._make_job("rec-yes")
+        Job.objects.filter(pk=with_recruiter.pk).update(recruiter_name="Jane Doe")
+        without_recruiter = self._make_job("rec-no")
+
+        yes_results = list_jobs(self.user, "main", has_recruiter=True)
+        no_results = list_jobs(self.user, "main", has_recruiter=False)
+
+        self.assertEqual({job.pk for job in yes_results}, {with_recruiter.pk})
+        self.assertEqual({job.pk for job in no_results}, {without_recruiter.pk})
+
+    def test_applicants_and_recruiter_filters_are_ignored_when_text_search_is_active(self):
+        job_a = self._make_job("app-rec-query-a", title="Rare Keyword Match")
+        Job.objects.filter(pk=job_a.pk).update(applicants_bucket="under_25", recruiter_name="Jane Doe")
+        job_b = self._make_job("app-rec-query-b", title="Rare Keyword Match")
+
+        results = list_jobs(
+            self.user,
+            "main",
+            query="Rare Keyword",
+            applicants_ranges=["over_200"],
+            has_recruiter=True,
+        )
+
+        self.assertEqual({job.pk for job in results}, {job_a.pk, job_b.pk})
 
 
 class ArchiveJobApiTests(APITestCase):
@@ -1333,6 +1454,40 @@ class ArchiveJobApiTests(APITestCase):
         self.job.refresh_from_db()
         self.assertFalse(self.job.is_archived)
         self.assertEqual(self.job.status, Job.Status.CV_GENERATED)
+
+
+class FavoriteJobApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="favorite@example.com", email="favorite@example.com", password="pw-Favorite-12345!"
+        )
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_favorite_sets_is_favorite_true(self):
+        response = self.client.post(f"/api/jobs/{self.job.pk}/favorite/")
+
+        self.assertEqual(response.status_code, 200)
+        self.job.refresh_from_db()
+        self.assertTrue(self.job.is_favorite)
+
+    def test_unfavorite_sets_is_favorite_false(self):
+        self.client.post(f"/api/jobs/{self.job.pk}/favorite/")
+
+        response = self.client.post(f"/api/jobs/{self.job.pk}/unfavorite/")
+
+        self.assertEqual(response.status_code, 200)
+        self.job.refresh_from_db()
+        self.assertFalse(self.job.is_favorite)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -1426,15 +1581,22 @@ class MarkApplicationDoneTests(TestCase):
         self.assertEqual(result.status, Job.Status.APPLICATION_DONE)
         self.assertIsNotNone(result.date_application_done)
 
-    def test_marking_a_new_job_without_cv_is_rejected(self):
+    def test_marking_a_new_job_without_cv_succeeds(self):
         job = self._make_job(Job.Status.NEW)
+
+        result = mark_application_done(job)
+
+        self.assertEqual(result.status, Job.Status.APPLICATION_DONE)
+        self.assertIsNotNone(result.date_application_done)
+
+    def test_marking_an_already_done_job_is_rejected(self):
+        job = self._make_job(Job.Status.APPLICATION_DONE)
 
         with self.assertRaises(ApplicationMarkRejected):
             mark_application_done(job)
 
         job.refresh_from_db()
-        self.assertEqual(job.status, Job.Status.NEW)
-        self.assertIsNone(job.date_application_done)
+        self.assertEqual(job.status, Job.Status.APPLICATION_DONE)
 
     def test_marking_resets_user_inactivity_timer(self):
         job = self._make_job(Job.Status.CV_GENERATED)
@@ -1477,14 +1639,23 @@ class MarkApplicationDoneApiTests(APITestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, Job.Status.APPLICATION_DONE)
 
-    def test_endpoint_rejects_job_without_cv(self):
+    def test_endpoint_marks_a_new_job_without_cv_done(self):
         job = self._make_job(Job.Status.NEW)
+
+        response = self.client.post(f"/api/jobs/{job.pk}/mark-application-done/")
+
+        self.assertEqual(response.status_code, 200)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.APPLICATION_DONE)
+
+    def test_endpoint_rejects_an_already_done_job(self):
+        job = self._make_job(Job.Status.APPLICATION_DONE)
 
         response = self.client.post(f"/api/jobs/{job.pk}/mark-application-done/")
 
         self.assertEqual(response.status_code, 409)
         job.refresh_from_db()
-        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertEqual(job.status, Job.Status.APPLICATION_DONE)
 
 
 class SeedE2eJobsCommandTests(TestCase):

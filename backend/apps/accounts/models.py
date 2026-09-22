@@ -46,6 +46,14 @@ class User(AbstractUser):
     # schema di `Job.cv_generation_in_progress`, ma per utente invece che per
     # job, per evitare doppie chiamate ad Apify sullo stesso account.
     collection_in_progress = models.BooleanField(default=False)
+    # Timestamp di quando `collection_in_progress` è stato impostato: se un
+    # riavvio del server interrompe la raccolta a metà, il `finally` che
+    # rimette il flag a `False` non viene mai eseguito e l'account resta
+    # bloccato su "raccolta già in corso" a tempo indeterminato (bug
+    # osservato in produzione, sprint corrente). Usato solo per calcolare
+    # se il flag è "stantio" (`COLLECTION_STALE_AFTER` in apps.jobs.tasks) e
+    # va quindi ignorato, non per altro.
+    collection_started_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding

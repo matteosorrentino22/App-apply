@@ -124,6 +124,10 @@ def import_job_from_url(user, url):
         apply_url=offer["apply_url"],
         published_at=offer.get("published_at"),
         salary=offer.get("salary", ""),
+        applicants_count=offer.get("applicants_count"),
+        applicants_bucket=offer.get("applicants_bucket", ""),
+        recruiter_name=offer.get("recruiter_name", ""),
+        recruiter_profile_url=offer.get("recruiter_profile_url", ""),
         origin=Job.Origin.IMPORTED,
     )
     score_job(job)

@@ -6,6 +6,7 @@ from .views import (
     CoverLetterInstructionsView,
     CreateManualJobView,
     EnrichAndGenerateCvView,
+    FavoriteJobView,
     GenerateCoverLetterView,
     GenerateCvView,
     HomeStatsView,
@@ -14,6 +15,7 @@ from .views import (
     JobListView,
     MarkApplicationDoneView,
     UnarchiveJobView,
+    UnfavoriteJobView,
 )
 
 urlpatterns = [
@@ -41,6 +43,8 @@ urlpatterns = [
     ),
     path("jobs/<int:pk>/archive/", ArchiveJobView.as_view(), name="job-archive"),
     path("jobs/<int:pk>/unarchive/", UnarchiveJobView.as_view(), name="job-unarchive"),
+    path("jobs/<int:pk>/favorite/", FavoriteJobView.as_view(), name="job-favorite"),
+    path("jobs/<int:pk>/unfavorite/", UnfavoriteJobView.as_view(), name="job-unfavorite"),
     path(
         "jobs/<int:pk>/mark-application-done/",
         MarkApplicationDoneView.as_view(),

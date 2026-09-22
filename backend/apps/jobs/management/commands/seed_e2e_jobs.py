@@ -19,11 +19,26 @@ SEED_JOBS = [
         description="Gestione progetti IT cross-funzionali.",
         apply_url="https://linkedin.com/jobs/view/101",
         score=4,
-        score_match=["5+ anni PM"],
-        score_gaps=["Nessuna esperienza fintech"],
+        # Formato nuovo (label + reason separati, sprint corrente): usato qui
+        # per coprire il pulsante "espandi motivazioni" nei test e2e; gli
+        # altri job seed restano nel vecchio formato (stringa unica) per
+        # coprire anche la retrocompatibilità di rendering.
+        score_match=[
+            {
+                "label": "5+ anni PM",
+                "reason": "L'offerta richiede almeno 5 anni di esperienza in project management, coperti dal profilo.",
+            }
+        ],
+        score_gaps=[
+            {
+                "label": "Nessuna esperienza fintech",
+                "reason": "L'offerta cita il settore fintech come plus, non presente nel profilo.",
+            }
+        ],
         score_reasoning="Ottima corrispondenza su gestione stakeholder.",
         status=Job.Status.NEW,
         origin=Job.Origin.COLLECTED,
+        applicants_bucket="under_25",
     ),
     dict(
         external_id="e2e-2",
@@ -38,6 +53,9 @@ SEED_JOBS = [
         score_reasoning="Sovrapposizione limitata con lo stack richiesto.",
         status=Job.Status.NEW,
         origin=Job.Origin.COLLECTED,
+        applicants_count=45,
+        recruiter_name="Jane Doe",
+        recruiter_profile_url="https://linkedin.com/in/jane-doe",
     ),
     dict(
         external_id="e2e-3",

@@ -7,6 +7,8 @@ import {
   generateCv,
   archiveJob,
   unarchiveJob,
+  favoriteJob,
+  unfavoriteJob,
   importJob,
   createManualJob,
 } from '../api/jobs'
@@ -29,6 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import JobCard from '@/components/JobCard'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
+import { todayInputValue } from '../utils/date'
 
 const EMPTY_MANUAL_JOB = {
   title: '',
@@ -39,10 +42,10 @@ const EMPTY_MANUAL_JOB = {
   apply_url: '',
 }
 
-const SECTIONS = ['main', 'imported', 'archived']
-const PERIODS = ['today', 'week', 'month', 'all']
+const SECTIONS = ['main', 'imported', 'favorites', 'archived']
 const SCORES = [1, 2, 3, 4, 5]
 const STATUSES = ['new', 'cv_generated', 'application_done']
+const APPLICANTS_RANGES = ['under_25', '25_50', '51_100', '101_200', 'over_200']
 
 export default function JobListPage() {
   const { t } = useLanguage()
@@ -50,13 +53,18 @@ export default function JobListPage() {
   const { showToast } = useToast()
 
   const [section, setSection] = useState('main')
-  const [period, setPeriod] = useState('today')
+  const [dateFrom, setDateFrom] = useState(todayInputValue)
+  const [dateTo, setDateTo] = useState(todayInputValue)
   const [scores, setScores] = useState([])
   const [statuses, setStatuses] = useState([])
   const [searchFilter, setSearchFilter] = useState('all')
   const [savedSearches, setSavedSearches] = useState([])
   const [query, setQuery] = useState('')
   const [queryInput, setQueryInput] = useState('')
+  const [location, setLocation] = useState('')
+  const [locationInput, setLocationInput] = useState('')
+  const [applicantsRanges, setApplicantsRanges] = useState([])
+  const [recruiterFilter, setRecruiterFilter] = useState('all')
 
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -73,6 +81,7 @@ export default function JobListPage() {
   const [manualJobError, setManualJobError] = useState('')
 
   const debounceRef = useRef(null)
+  const locationDebounceRef = useRef(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,14 +92,37 @@ export default function JobListPage() {
       // anche se resta selezionato per quando l'utente torna su Raccolti/
       // Archiviati.
       const searchId = section === 'imported' ? undefined : searchFilter
-      const data = await fetchJobs({ section, period, scores, statuses, q: query, searchId })
+      const data = await fetchJobs({
+        section,
+        dateFrom,
+        dateTo,
+        scores,
+        statuses,
+        q: query,
+        searchId,
+        location,
+        applicantsRanges,
+        hasRecruiter: recruiterFilter === 'all' ? undefined : recruiterFilter,
+      })
       setJobs(data)
     } catch {
       setError(t('jobs.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [section, period, scores, statuses, searchFilter, query, t])
+  }, [
+    section,
+    dateFrom,
+    dateTo,
+    scores,
+    statuses,
+    searchFilter,
+    query,
+    location,
+    applicantsRanges,
+    recruiterFilter,
+    t,
+  ])
 
   useEffect(() => {
     load()
@@ -106,6 +138,17 @@ export default function JobListPage() {
     setQueryInput(value)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => setQuery(value), 300)
+  }
+
+  function handleLocationChange(value) {
+    setLocationInput(value)
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current)
+    locationDebounceRef.current = setTimeout(() => setLocation(value), 300)
+  }
+
+  function resetDateRange() {
+    setDateFrom('')
+    setDateTo('')
   }
 
   function toggleValue(list, setList, value) {
@@ -154,6 +197,20 @@ export default function JobListPage() {
     setJobs((current) => current.filter((j) => j.id !== job.id))
     await unarchiveJob(job.id)
     showToast(t('jobs.unarchivedToast'))
+  }
+
+  async function handleToggleFavorite(job) {
+    const nextFavorite = !job.is_favorite
+    if (section === 'favorites' && !nextFavorite) {
+      setJobs((current) => current.filter((j) => j.id !== job.id))
+    } else {
+      setJobs((current) => current.map((j) => (j.id === job.id ? { ...j, is_favorite: nextFavorite } : j)))
+    }
+    if (nextFavorite) {
+      await favoriteJob(job.id)
+    } else {
+      await unfavoriteJob(job.id)
+    }
   }
 
   async function handleImport(event) {
@@ -273,18 +330,49 @@ export default function JobListPage() {
       />
 
       <div className={'flex flex-wrap items-center gap-4' + (searching ? ' opacity-40' : '')}>
-        <Select value={period} onValueChange={setPeriod} disabled={searching}>
-          <SelectTrigger aria-label={t('jobs.periodLabel')} className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PERIODS.map((value) => (
-              <SelectItem key={value} value={value}>
-                {t(`jobs.period_${value}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="date-from" className="text-xs font-medium text-muted-foreground">
+            {t('jobs.dateFromLabel')}
+          </Label>
+          <Input
+            id="date-from"
+            type="date"
+            value={dateFrom}
+            onChange={(event) => setDateFrom(event.target.value)}
+            disabled={searching}
+            className="w-36"
+          />
+          <Label htmlFor="date-to" className="text-xs font-medium text-muted-foreground">
+            {t('jobs.dateToLabel')}
+          </Label>
+          <Input
+            id="date-to"
+            type="date"
+            value={dateTo}
+            onChange={(event) => setDateTo(event.target.value)}
+            disabled={searching}
+            className="w-36"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={resetDateRange}
+              disabled={searching}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {t('jobs.dateRangeAll')}
+            </button>
+          )}
+        </div>
+
+        <Input
+          value={locationInput}
+          onChange={(event) => handleLocationChange(event.target.value)}
+          placeholder={t('jobs.locationFilterPlaceholder')}
+          aria-label={t('jobs.locationFilterPlaceholder')}
+          disabled={searching}
+          className="w-48"
+        />
 
         {section !== 'imported' && (
           <Select value={searchFilter} onValueChange={setSearchFilter} disabled={searching}>
@@ -345,6 +433,38 @@ export default function JobListPage() {
             </button>
           ))}
         </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">{t('jobs.applicantsLabel')}</span>
+          {APPLICANTS_RANGES.map((value) => (
+            <button
+              key={value}
+              type="button"
+              disabled={searching}
+              onClick={() => toggleValue(applicantsRanges, setApplicantsRanges, value)}
+              aria-pressed={applicantsRanges.includes(value)}
+              className={
+                'rounded-full px-2.5 py-1 text-xs font-medium transition-colors ' +
+                (applicantsRanges.includes(value)
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground')
+              }
+            >
+              {t(`jobs.applicants_${value}`)}
+            </button>
+          ))}
+        </div>
+
+        <Select value={recruiterFilter} onValueChange={setRecruiterFilter} disabled={searching}>
+          <SelectTrigger aria-label={t('jobs.recruiterFilterLabel')} className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('jobs.recruiterFilter_all')}</SelectItem>
+            <SelectItem value="yes">{t('jobs.recruiterFilter_yes')}</SelectItem>
+            <SelectItem value="no">{t('jobs.recruiterFilter_no')}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {searching && <p className="text-xs text-muted-foreground">{t('jobs.filtersDisabledWhileSearching')}</p>}
 
@@ -366,6 +486,7 @@ export default function JobListPage() {
             key={job.id}
             job={job}
             onGenerateCv={handleGenerateCv}
+            onToggleFavorite={handleToggleFavorite}
             generating={generatingIds.has(job.id)}
             {...swipeProps}
           />

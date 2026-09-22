@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Heart, UserRound } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchJob,
@@ -8,6 +9,8 @@ import {
   markApplicationDone,
   generateCoverLetter,
   fetchCoverLetterInstructions,
+  favoriteJob,
+  unfavoriteJob,
 } from '../api/jobs'
 import { fetchProfile } from '../api/profile'
 import { ApiError } from '../api/client'
@@ -27,6 +30,9 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import ChipInput from '@/components/ChipInput'
+import { scoreItemLabel, scoreItemReason } from '../utils/scoreItems'
+import { formatShortDate } from '../utils/date'
+import { applicantsLabel, isLowApplicants } from '../utils/applicants'
 
 const SCORE_STYLE = {
   1: 'bg-score-1-soft text-score-1',
@@ -44,7 +50,7 @@ const EMPTY_ENRICHMENT = {
 
 export default function JobDetailPage() {
   const { id } = useParams()
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const navigate = useNavigate()
   const { showToast } = useToast()
 
@@ -56,6 +62,7 @@ export default function JobDetailPage() {
   const [marking, setMarking] = useState(false)
   const [showEnrichment, setShowEnrichment] = useState(false)
   const [enrichment, setEnrichment] = useState(EMPTY_ENRICHMENT)
+  const [showReasons, setShowReasons] = useState(false)
 
   const [showCoverLetterDialog, setShowCoverLetterDialog] = useState(false)
   const [coverLetterText, setCoverLetterText] = useState('')
@@ -155,6 +162,13 @@ export default function JobDetailPage() {
     }
   }
 
+  async function handleToggleFavorite() {
+    const nextFavorite = !job.is_favorite
+    setJob((current) => ({ ...current, is_favorite: nextFavorite }))
+    const updated = nextFavorite ? await favoriteJob(id) : await unfavoriteJob(id)
+    setJob(updated)
+  }
+
   async function handleMarkApplicationDone() {
     setMarking(true)
     try {
@@ -188,7 +202,12 @@ export default function JobDetailPage() {
     )
   }
 
-  const cvGenerated = job.status !== 'new'
+  const hasCv = Boolean(job.cv_pdf_url)
+  const hasExpandableReasons = [...(job.score_match || []), ...(job.score_gaps || [])].some(
+    (item) => scoreItemReason(item),
+  )
+  const applicantsText = applicantsLabel(job, t)
+  const lowApplicants = isLowApplicants(job)
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
@@ -204,21 +223,71 @@ export default function JobDetailPage() {
                 {t(`jobs.status_${job.status}`)}
               </Badge>
               {job.matched_search && <Badge variant="neutral">{job.matched_search}</Badge>}
+              {applicantsText && (
+                <span
+                  className={
+                    'rounded-full px-2 py-0.5 text-xs font-medium ' +
+                    (lowApplicants
+                      ? 'bg-success-soft text-success font-semibold'
+                      : 'bg-secondary text-muted-foreground')
+                  }
+                >
+                  {applicantsText}
+                </span>
+              )}
             </div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-balance">{job.title}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {job.company}
-              {job.location && <> · {job.location}</>}
-              {job.salary && <> · {job.salary}</>}
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <span>
+                {job.company}
+                {job.location && <> · {job.location}</>}
+                {job.salary && <> · {job.salary}</>}
+              </span>
+              {job.recruiter_name && (
+                job.recruiter_profile_url ? (
+                  <a
+                    href={job.recruiter_profile_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
+                    className="text-muted-foreground/70 hover:text-foreground"
+                  >
+                    <UserRound className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <span
+                    title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
+                    className="text-muted-foreground/70"
+                  >
+                    <UserRound className="h-4 w-4" />
+                  </span>
+                )
+              )}
             </p>
+            {job.date_collected && (
+              <p className="mt-0.5 text-xs text-muted-foreground/70">
+                {t('jobs.importedOnPrefix')} {formatShortDate(job.date_collected, lang)}
+              </p>
+            )}
           </div>
-          {job.score != null && (
-            <div
-              className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${SCORE_STYLE[job.score]}`}
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleFavorite}
+              aria-label={job.is_favorite ? t('jobs.unfavorite') : t('jobs.favorite')}
+              aria-pressed={job.is_favorite}
+              className="text-muted-foreground hover:text-rose-500"
             >
-              <span className="text-2xl font-bold tabular-nums leading-none">{job.score}</span>
-            </div>
-          )}
+              <Heart className={`h-6 w-6 ${job.is_favorite ? 'fill-rose-500 text-rose-500' : ''}`} />
+            </button>
+            {job.score != null && (
+              <div
+                className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${SCORE_STYLE[job.score]}`}
+              >
+                <span className="text-2xl font-bold tabular-nums leading-none">{job.score}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {job.score_reasoning && (
@@ -231,37 +300,58 @@ export default function JobDetailPage() {
         )}
 
         {(job.score_match?.length > 0 || job.score_gaps?.length > 0) && (
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            {job.score_match?.length > 0 && (
-              <div>
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t('jobs.matches')}
-                </h2>
-                <ul className="flex flex-col gap-1.5 text-sm">
-                  {job.score_match.map((item, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span className="shrink-0 text-success">✓</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <div className="mt-5">
+            {hasExpandableReasons && (
+              <button
+                type="button"
+                onClick={() => setShowReasons((current) => !current)}
+                className="mb-2 text-xs font-medium text-primary hover:underline"
+              >
+                {showReasons ? t('jobs.hideReasons') : t('jobs.expandReasons')}
+              </button>
             )}
-            {job.score_gaps?.length > 0 && (
-              <div>
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t('jobs.gaps')}
-                </h2>
-                <ul className="flex flex-col gap-1.5 text-sm">
-                  {job.score_gaps.map((item, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span className="shrink-0 text-destructive">−</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="grid gap-5 sm:grid-cols-2">
+              {job.score_match?.length > 0 && (
+                <div>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t('jobs.matches')}
+                  </h2>
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {job.score_match.map((item, index) => (
+                      <li key={index} className="flex flex-col gap-0.5">
+                        <div className="flex gap-2">
+                          <span className="shrink-0 text-success">✓</span>
+                          {scoreItemLabel(item)}
+                        </div>
+                        {showReasons && scoreItemReason(item) && (
+                          <p className="pl-5 text-xs text-muted-foreground">{scoreItemReason(item)}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {job.score_gaps?.length > 0 && (
+                <div>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t('jobs.gaps')}
+                  </h2>
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {job.score_gaps.map((item, index) => (
+                      <li key={index} className="flex flex-col gap-0.5">
+                        <div className="flex gap-2">
+                          <span className="shrink-0 text-destructive">−</span>
+                          {scoreItemLabel(item)}
+                        </div>
+                        {showReasons && scoreItemReason(item) && (
+                          <p className="pl-5 text-xs text-muted-foreground">{scoreItemReason(item)}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -350,9 +440,9 @@ export default function JobDetailPage() {
             ? t('jobs.generating')
             : enrichmentComplete
               ? t('jobs.generateWithEnrichment')
-              : job.status === 'new'
-                ? t('jobs.generateCv')
-                : t('jobs.regenerateCv')}
+              : hasCv
+                ? t('jobs.regenerateCv')
+                : t('jobs.generateCv')}
         </Button>
 
         {job.cv_pdf_url && (
@@ -387,7 +477,7 @@ export default function JobDetailPage() {
           </Button>
         )}
 
-        {cvGenerated ? (
+        {job.apply_url ? (
           <Button variant="secondary" asChild>
             <a href={job.apply_url} target="_blank" rel="noreferrer">
               {t('jobs.openApplyLink')}
@@ -397,7 +487,7 @@ export default function JobDetailPage() {
           <span className="text-sm text-muted-foreground">{t('jobs.applyLinkHint')}</span>
         )}
 
-        {job.status === 'cv_generated' && (
+        {job.status !== 'application_done' && (
           <Button variant="secondary" disabled={marking} onClick={handleMarkApplicationDone}>
             {t('jobs.markApplicationDone')}
           </Button>
