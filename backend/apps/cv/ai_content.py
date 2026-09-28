@@ -86,8 +86,9 @@ CONTENT_SYSTEM_PROMPT = (
     "riformulare, riordinare per rilevanza rispetto all'offerta, tradurre "
     "nella lingua richiesta ed enfatizzare ciò che è già nel profilo. Non "
     "devi mai inventare esperienze, competenze o risultati non presenti nel "
-    "profilo fornito (grounding), con un'unica eccezione controllata per "
-    "'areas_of_expertise' (vedi sotto).\n\n"
+    "profilo fornito (grounding), con due eccezioni controllate: "
+    "'areas_of_expertise' e i 'GAP DA COLMARE' (vedi sotto in entrambi i "
+    "casi).\n\n"
     "PRIORITÀ DELL'OFFERTA: prima di scrivere qualsiasi contenuto, individua "
     "mentalmente le 3-5 priorità chiave dell'offerta (competenze/tool "
     "richiesti, responsabilità principali, seniority, dominio/settore) e "
@@ -164,6 +165,26 @@ CONTENT_SYSTEM_PROMPT = (
     "quasi vuota, accorcialo per stare su una riga sola, oppure espandilo "
     "con un dettaglio reale in più (impatto, contesto, strumento usato) per "
     "riempirla.\n\n"
+    "GAP DA COLMARE (eccezione controllata, secondo caso): se le "
+    "'INDICAZIONI EXTRA PER QUESTA GENERAZIONE' elencano dei 'GAP DA "
+    "COLMARE PER QUESTA OFFERTA', per quei gap specifici — e SOLO per "
+    "quelli — sei autorizzato ad amplificare o estendere il contenuto di "
+    "un'esperienza REALE già presente nel profilo (stessa azienda, stesso "
+    "ruolo, stesso periodo di quell'esperienza) per farvi emergere un "
+    "riferimento credibile al gap, anche oltre quanto letteralmente "
+    "documentato nei bullet originali di quell'esperienza. Resta comunque "
+    "vietato, anche per colmare un gap: creare un datore di lavoro, un "
+    "ruolo o un periodo che il candidato non ha mai avuto; aggiungere in "
+    "'skills'/'certifications' una competenza o certificazione non "
+    "letteralmente presente nel profilo (per quelle vale sempre il "
+    "grounding stretto, nessuna eccezione). Se l'utente fornisce "
+    "un'istruzione su come colmare i gap, seguila — può riferirsi a un gap "
+    "col suo numero (es. 'per il gap 2...'); se non fornisce istruzioni "
+    "specifiche, scegli tu l'esperienza più plausibile per ciascun gap e "
+    "amplificala con buon senso, restando coerente con il contesto reale "
+    "di quell'esperienza. Il bullet così creato deve avere "
+    "'relevance_rank' basso (molto rilevante): è pensato apposta per "
+    "questa offerta specifica, ed è corretto che compaia in evidenza.\n\n"
     "SKILLS e CERTIFICATIONS: seleziona solo voci letteralmente presenti nel "
     "profilo, per rilevanza rispetto all'offerta, senza inventarne di nuove. "
     "Una competenza già valorizzata in un bullet di esperienza (vedi sopra) "
@@ -202,12 +223,15 @@ def _resolve_language(job, cv_language_mode):
     return f"la stessa lingua della seguente job description: {job.description[:200]}"
 
 
-def generate_cv_content(profile, job, cv_language_mode, enrichment=""):
+def generate_cv_content(profile, job, cv_language_mode, extra_instructions=""):
     """Chiama Claude per i contenuti del CV su misura per `job` (Docs/03
     §11 punto 3): sommario, qualifica professionale, Areas of Expertise,
     bullet con ordinamento di rilevanza per ogni esperienza del profilo,
-    skills/certifications selezionate. Solleva l'eccezione a chi chiama in
-    caso di errore/timeout — la gestione del fallimento è responsabilità del
+    skills/certifications selezionate. `extra_instructions` (Sprint 44) è il
+    testo composto da `apps.cv.gap_filling` quando l'utente ha selezionato
+    gap da colmare per questa offerta — vedi paragrafo 'GAP DA COLMARE' nel
+    system prompt per le regole. Solleva l'eccezione a chi chiama in caso di
+    errore/timeout — la gestione del fallimento è responsabilità del
     servizio di generazione (§5.2 tecniche madre)."""
     profile_context = _build_profile_context(profile)
     language_instruction = _resolve_language(job, cv_language_mode)
@@ -216,8 +240,8 @@ def generate_cv_content(profile, job, cv_language_mode, enrichment=""):
         f"PROFILO CANDIDATO (JSON):\n{json.dumps(profile_context, ensure_ascii=False)}\n\n"
         f"OFFERTA:\nTitolo: {job.title}\nAzienda: {job.company}\n"
         f"Descrizione: {job.description}\n\n"
-        f"ARRICCHIMENTO FORNITO DALL'UTENTE (se presente, considera anche "
-        f"questo dettaglio, senza inventare oltre): {enrichment or 'Nessuno.'}\n\n"
+        f"INDICAZIONI EXTRA PER QUESTA GENERAZIONE (se presenti, seguile "
+        f"come descritto nel system prompt): {extra_instructions or 'Nessuna.'}\n\n"
         f"Genera i contenuti in questa lingua: {language_instruction}. "
         f"Le Areas of Expertise devono essere tra {AREAS_OF_EXPERTISE_MIN} e "
         f"{AREAS_OF_EXPERTISE_MAX}."

@@ -197,28 +197,17 @@ def _filter_grounded_skills(ai_names, profile_names):
     return [name for name in ai_names if name in profile_names]
 
 
-def _attach_facts_and_enrichment(
-    ai_experiences, profile, protected_bullets, protected_experience_id, ongoing_label
-):
+def _attach_facts(ai_experiences, profile, ongoing_label):
     """`location`/`dates`/`technologies` sono dati fattuali del profilo, non
     riformulati dall'AI (grounding): il prompt garantisce stesso ordine e
     stesso numero di voci in output (Docs/03 §11 punto 3), quindi si
-    riattaccano per indice invece di chiederli al modello. Stesso principio
-    per i bullet di arricchimento (§5.6): iniettati letteralmente (mai
-    passati alla riformulazione AI) sull'esperienza corrispondente, marcati
-    `protected` per la protezione nel taglio budget/overflow."""
+    riattaccano per indice invece di chiederli al modello."""
     ordered_profile_experiences = list(
         profile.experiences.all().order_by("-end_date", "-start_date")
     )
     result = []
     for index, exp in enumerate(ai_experiences):
         profile_experience = ordered_profile_experiences[index]
-        bullets = list(exp["bullets"])
-        if protected_experience_id and profile_experience.pk == protected_experience_id:
-            bullets.extend(
-                {"text": text, "relevance_rank": -1, "protected": True}
-                for text in protected_bullets
-            )
         result.append(
             {
                 **exp,
@@ -229,24 +218,19 @@ def _attach_facts_and_enrichment(
                     profile_experience.start_date, profile_experience.end_date, ongoing_label
                 ),
                 "technologies": profile_experience.technologies,
-                "bullets": bullets,
             }
         )
     return result
 
 
-def _build_shown_experiences(
-    content, bullet_budget, profile, protected_bullets, protected_experience_id, ongoing_label
-):
+def _build_shown_experiences(content, bullet_budget, profile, ongoing_label):
     """Applica selezione (cap 5, swap singolo) e taglio bullet al budget
     globale (Docs/03 §11 punto 4), sul contenuto già prodotto dal modello
     per punto 3. I bullet restano dict `{text, relevance_rank}` — il loop di
     ripiego per overflow (§6) deve poterli continuare a rimuovere per
     rilevanza; l'appiattimento a stringa avviene solo subito prima del primo
     rendering (`generate_cv`)."""
-    with_facts = _attach_facts_and_enrichment(
-        content["experiences"], profile, protected_bullets or [], protected_experience_id, ongoing_label
-    )
+    with_facts = _attach_facts(content["experiences"], profile, ongoing_label)
     selected = select_and_cut_experiences(with_facts, bullet_budget)
     return [
         {
@@ -261,7 +245,7 @@ def _build_shown_experiences(
     ]
 
 
-def _build_render_context(user, profile, content, protected_bullets, protected_experience_id):
+def _build_render_context(user, profile, content):
     html_lang = _resolve_html_lang(user, content)
     ongoing_label = SECTION_LABELS[html_lang]["ongoing"]
     shown_educations, shown_education_count = _build_shown_educations(profile, ongoing_label)
@@ -278,9 +262,7 @@ def _build_render_context(user, profile, content, protected_bullets, protected_e
         "qualification": content["qualification"],
         "summary": content["summary"],
         "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
-        "experiences": _build_shown_experiences(
-            content, bullet_budget, profile, protected_bullets, protected_experience_id, ongoing_label
-        ),
+        "experiences": _build_shown_experiences(content, bullet_budget, profile, ongoing_label),
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
         "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
@@ -321,9 +303,7 @@ def _render_with_overflow_retry(job, context):
     return html, pdf_bytes
 
 
-def generate_cv(
-    job, generation_type, enrichment="", protected_bullets=None, protected_experience_id=None
-):
+def generate_cv(job, generation_type, extra_instructions=""):
     """Genera un CV per `job` sul profilo del suo utente (Docs/03 §11):
     contenuti via Claude (qualifica, Areas of Expertise, bullet con
     ordinamento di rilevanza per ogni esperienza), selezione/taglio
@@ -332,10 +312,11 @@ def generate_cv(
     conversione PDF con WeasyPrint (con loop di ripiego per overflow),
     salvataggio in `CVDocument`.
 
-    `protected_bullets`/`protected_experience_id` (Docs/03 §5.6): bullet di
-    arricchimento con priorità massima di inclusione per questa generazione
-    — mai esclusi dal cap esperienze, dal taglio budget né dal loop di
-    ripiego per overflow.
+    `extra_instructions` (Sprint 44): testo opzionale per colmare i gap
+    rilevati per questa specifica offerta — vedi `apps.cv.gap_filling` per
+    come viene composto da gap selezionati + indicazioni dell'utente, e il
+    system prompt in `ai_content.py` per le regole di quando è permesso
+    amplificare un'esperienza reale per farvi emergere un gap.
 
     Solleva l'eccezione a chi chiama in caso di fallimento (profilo
     incompleto, chiamata Claude, rendering): la gestione (stato Job,
@@ -348,10 +329,8 @@ def generate_cv(
     if not profile.is_complete:
         raise ProfileIncomplete("Il profilo non ha ancora almeno un titolo di studio.")
 
-    content = generate_cv_content(profile, job, user.cv_language_mode, enrichment)
-    context = _build_render_context(
-        user, profile, content, protected_bullets, protected_experience_id
-    )
+    content = generate_cv_content(profile, job, user.cv_language_mode, extra_instructions)
+    context = _build_render_context(user, profile, content)
     html, pdf_bytes = _render_with_overflow_retry(job, context)
 
     cv_document = CVDocument.objects.create(
@@ -359,7 +338,7 @@ def generate_cv(
         user=user,
         html_source=html,
         generation_type=generation_type,
-        enrichment_used=enrichment,
+        extra_instructions_used=extra_instructions,
         areas_of_expertise_grounding=[
             {"label": area["label"], "grounding_reference": area["grounding_reference"]}
             for area in content["areas_of_expertise"]

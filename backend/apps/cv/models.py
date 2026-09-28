@@ -17,7 +17,10 @@ class CVDocument(models.Model):
     pdf_file = models.FileField(upload_to="cv_documents/")
     generated_at = models.DateTimeField(auto_now_add=True)
     generation_type = models.CharField(max_length=10, choices=GenerationType.choices)
-    enrichment_used = models.TextField(blank=True, default="")
+    # Testo "gap da colmare + istruzioni" usato per questa generazione
+    # (Sprint 44, apps.cv.gap_filling) — prima era il testo dell'arricchimento
+    # manuale su un'esperienza scelta dall'utente, funzione ora rimossa.
+    extra_instructions_used = models.TextField(blank=True, default="")
     # Riferimento interno di provenienza per ogni Area of Expertise prodotta
     # (Docs/03 §5.3, §13): mai mostrato all'utente, serve solo alla diagnosi
     # in fase di tuning del prompt (verificare che le aree siano riconducibili

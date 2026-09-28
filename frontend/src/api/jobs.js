@@ -40,12 +40,11 @@ export function fetchHomeStats() {
   return apiFetch('/api/jobs/stats/')
 }
 
-export function generateCv(id) {
-  return apiFetch(`/api/jobs/${id}/generate-cv/`, { method: 'POST', body: {} })
-}
-
-export function enrichAndGenerateCv(id, detail) {
-  return apiFetch(`/api/jobs/${id}/enrich-and-generate-cv/`, { method: 'POST', body: detail })
+export function generateCv(id, gaps = [], gapInstructions = '') {
+  return apiFetch(`/api/jobs/${id}/generate-cv/`, {
+    method: 'POST',
+    body: { gaps, gap_instructions: gapInstructions },
+  })
 }
 
 export function generateCoverLetter(id, instructions) {

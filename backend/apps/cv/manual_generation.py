@@ -98,20 +98,15 @@ def _guard_and_reserve(job):
     return charge_mode
 
 
-def request_manual_cv_generation(
-    job, enrichment="", protected_bullets=None, protected_experience_id=None
-):
+def request_manual_cv_generation(job, extra_instructions=""):
     """Punto d'ingresso della generazione manuale di CV (02-specifiche-
     tecniche-v3.md §5.2): guardia di concorrenza → controllo/riserva quota o
     credito → generazione → aggiornamento stato Job. Vale sia per una prima
     generazione manuale sia per una rigenerazione, sia per il "riprova" dopo
     un fallimento automatico (stesso Job tornato a `new`, stesso contatore).
 
-    `protected_bullets`/`protected_experience_id` (Docs/03 §5.6): testi dei
-    bullet di arricchimento e l'esperienza a cui sono agganciati per questa
-    generazione, protetti dal taglio al budget e dal loop di ripiego per
-    overflow — priorità massima di inclusione, persa nei CV successivi se
-    l'arricchimento viene salvato nel profilo master.
+    `extra_instructions` (Sprint 44): testo per colmare i gap rilevati per
+    questa offerta — vedi `apps.cv.gap_filling`.
 
     Solleva `ManualGenerationRejected` se la guardia o la quota/credito
     respingono la richiesta (nessun consumo). Solleva
@@ -125,9 +120,7 @@ def request_manual_cv_generation(
         cv_document = generate_cv(
             job,
             CVDocument.GenerationType.MANUAL,
-            enrichment=enrichment,
-            protected_bullets=protected_bullets,
-            protected_experience_id=protected_experience_id,
+            extra_instructions=extra_instructions,
         )
     except Exception as exc:
         _refund(job.user, charge_mode)

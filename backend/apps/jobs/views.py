@@ -11,13 +11,12 @@ from apps.cv.cover_letter_manual_generation import (
     get_recent_instructions,
     request_cover_letter_generation,
 )
-from apps.cv.enrichment import EnrichmentExperienceNotFound, generate_cv_with_enrichment
+from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
     ManualGenerationRejected,
     request_manual_cv_generation,
 )
-from apps.cv.serializers import CvEnrichmentSerializer
 
 from .application import ApplicationMarkRejected, mark_application_done
 from .import_service import (
@@ -51,16 +50,21 @@ from .tasks import (
 class GenerateCvView(APIView):
     """Generazione manuale di CV per un Job dell'utente autenticato — anche
     rigenerazione o "riprova" dopo un fallimento automatico (Sprint 12,
-    02-specifiche-tecniche-v3.md §5.2)."""
+    02-specifiche-tecniche-v3.md §5.2). `gaps`/`gap_instructions` (Sprint 44,
+    sostituisce l'arricchimento manuale su esperienza esistente): gap
+    dell'offerta selezionati dall'utente da colmare in questa generazione,
+    con istruzione opzionale su come farlo — vedi `apps.cv.gap_filling`."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        enrichment = request.data.get("enrichment", "")
+        gaps = request.data.get("gaps", [])
+        gap_instructions = request.data.get("gap_instructions", "")
+        extra_instructions = build_extra_instructions(gaps, gap_instructions)
 
         try:
-            cv_document = request_manual_cv_generation(job, enrichment=enrichment)
+            cv_document = request_manual_cv_generation(job, extra_instructions=extra_instructions)
         except ManualGenerationRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except ManualGenerationFailed as exc:
@@ -146,37 +150,6 @@ class CreateManualJobView(APIView):
             {"job_id": job.pk, "status": job.status, "score": job.score},
             status=status.HTTP_201_CREATED,
         )
-
-
-class EnrichAndGenerateCvView(APIView):
-    """Generazione manuale con un dettaglio di arricchimento agganciato a
-    un'esperienza già presente nel profilo, applicato prima della
-    generazione (Sprint 13, Docs/03 §5.6 — sostituisce
-    01-specifiche-funzionali-v4.md §4.8)."""
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, pk):
-        job = get_object_or_404(Job, pk=pk, user=request.user)
-        serializer = CvEnrichmentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        try:
-            cv_document = generate_cv_with_enrichment(
-                job,
-                data["experience_id"],
-                data["additional_bullets"],
-                save_to_profile=data["save_to_profile"],
-            )
-        except EnrichmentExperienceNotFound as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
-        except ManualGenerationRejected as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        except ManualGenerationFailed as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-
-        return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
 
 
 class CollectJobsView(APIView):

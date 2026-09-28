@@ -5,7 +5,6 @@ from .views import (
     CollectJobsView,
     CoverLetterInstructionsView,
     CreateManualJobView,
-    EnrichAndGenerateCvView,
     FavoriteJobView,
     GenerateCoverLetterView,
     GenerateCvView,
@@ -26,11 +25,6 @@ urlpatterns = [
     path("jobs/stats/", HomeStatsView.as_view(), name="job-stats"),
     path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
     path("jobs/<int:pk>/generate-cv/", GenerateCvView.as_view(), name="job-generate-cv"),
-    path(
-        "jobs/<int:pk>/enrich-and-generate-cv/",
-        EnrichAndGenerateCvView.as_view(),
-        name="job-enrich-and-generate-cv",
-    ),
     path(
         "jobs/<int:pk>/generate-cover-letter/",
         GenerateCoverLetterView.as_view(),
