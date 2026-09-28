@@ -81,8 +81,11 @@ class Job(models.Model):
     # creati da qui in avanti.
     discarded_by_cap = models.BooleanField(default=False)
 
+    # Scala 1-10 da Sprint 46 (prima 1-5): i punteggi storici precedenti a
+    # questo sprint restano nel vecchio range 1-5, mai retroattivamente
+    # riscalati (nessuna migrazione dati — vedi ai_scoring.py).
     score = models.PositiveSmallIntegerField(
-        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)]
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(10)]
     )
     score_match = models.JSONField(default=list, blank=True)
     score_gaps = models.JSONField(default=list, blank=True)

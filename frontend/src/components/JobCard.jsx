@@ -5,16 +5,9 @@ import { Badge } from '@/components/ui/badge'
 import SwipeToArchive from '@/components/SwipeToArchive'
 import { useLanguage } from '../i18n/LanguageContext'
 import { scoreItemLabel } from '../utils/scoreItems'
+import { scoreStyle } from '../utils/scoreStyle'
 import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
-
-const SCORE_STYLE = {
-  1: 'bg-score-1-soft text-score-1',
-  2: 'bg-score-2-soft text-score-2',
-  3: 'bg-score-3-soft text-score-3',
-  4: 'bg-score-4-soft text-score-4',
-  5: 'bg-score-5-soft text-score-5',
-}
 
 export default function JobCard({ job, onSwipe, swipeLabel, onGenerateCv, onToggleFavorite, generating }) {
   const { t, lang } = useLanguage()
@@ -99,7 +92,7 @@ export default function JobCard({ job, onSwipe, swipeLabel, onGenerateCv, onTogg
           </button>
           {job.score != null && (
             <div
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl font-bold tabular-nums ${SCORE_STYLE[job.score]}`}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl font-bold tabular-nums ${scoreStyle(job.score)}`}
             >
               {job.score}
             </div>

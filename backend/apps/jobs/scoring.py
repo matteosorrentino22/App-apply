@@ -28,7 +28,7 @@ def _get_profile(user):
 
 
 def _apply_score_result(job, result):
-    job.score = max(1, min(5, int(result["score"])))
+    job.score = max(1, min(10, int(result["score"])))
     job.score_match = result["score_match"]
     job.score_gaps = result["score_gaps"]
     job.score_reasoning = result["score_reasoning"]

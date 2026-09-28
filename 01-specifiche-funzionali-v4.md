@@ -130,7 +130,7 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 ### 4.4 Ciclo quotidiano
 - Raccolta notturna dei job pubblicati nelle 24 ore precedenti, per le ricerche attive dell'utente. Il vincolo delle 24 ore è applicato **alla fonte** (filtro nella richiesta di raccolta — dettaglio nelle tecniche).
 - **Limite di raccolta per piano:** la fonte restituisce al massimo **50 job/notte per l'utente Free** e **100 job/notte per l'utente Pro**, sommando tutte le ricerche attive. Questi limiti contengono i costi di valutazione a monte del cap di intake.
-- **Scoring** di ogni offerta raccolta (entro il limite di cui sopra): punteggio di affinità da 1 a 5 rispetto al profilo master, con breve motivazione e scomposizione *match/gap* (cosa è affine, cosa manca). Lo scoring non inventa competenze non presenti. Se lo scoring di una singola offerta **fallisce** durante il ciclo notturno, l'offerta è **scartata per quella notte** (non entra nel cap, non viene ritentata); la diagnosi resta lato backend.
+- **Scoring** di ogni offerta raccolta (entro il limite di cui sopra): punteggio di affinità da 1 a 10 rispetto al profilo master, con breve motivazione e scomposizione *match/gap* (cosa è affine, cosa manca). Lo scoring non inventa competenze non presenti. Se lo scoring di una singola offerta **fallisce** durante il ciclo notturno, l'offerta è **scartata per quella notte** (non entra nel cap, non viene ritentata); la diagnosi resta lato backend.
 - **Cap giornaliero di intake:** dopo lo scoring, vengono acquisiti al massimo **15 job al giorno per utente**, scelti come i **15 a punteggio più alto** sommando tutte le ricerche attive. In caso di **pareggio di punteggio** al confine (es. più job con lo stesso score al 15°/16° posto), si tiene il job **pubblicato più di recente** secondo la data restituita da LinkedIn; se la data manca o il pareggio persiste, la scelta tra i job a pari merito è **casuale**. I job eccedenti vengono **scartati** per quel giorno e **non** riproposti nei giorni successivi.
 - Notifica alle 10:00 (ora locale dell'utente) **solo se** ci sono nuovi job (definizione di "nuovi": §4.12). Nessun job nuovo → nessuna notifica.
 
@@ -148,7 +148,7 @@ La sezione in cui un job appare dipende dall'archiviazione e dall'origine, **non
 **Filtri temporali.** Sotto la barra di ricerca, filtri preimpostati: **oggi (default)**, **ultima settimana**, **ultimo mese**, **tutti**.
 
 **Filtri aggiuntivi** (raggiungibili da un pulsante "filtri" che apre il pannello completo, per non affollare la pagina):
-- **Score** — multiselect sui valori **1–5**.
+- **Score** — multiselect sui valori **1–10**.
 - **Stato** — multiselect sui tre stati stabili: **nuovo**, **CV generato**, **candidatura fatta** (il transitorio *CV in generazione* **non** è selezionabile).
 
 **Ambito dei filtri.** Tutti i filtri sopra (temporale, score, stato) valgono in **tutte e tre le sezioni**.
@@ -353,7 +353,7 @@ Formato: checklist di condizioni verificabili.
 - ☐ Se l'utente non marca alcuna candidatura come "fatta" per 7 giorni, riceve la notifica di inattività, anche se non ha mai avuto un CV pronto e anche se è per altri versi attivo nell'app.
 
 ### Scoring
-- ☐ Ogni offerta mostra un punteggio da 1 a 5.
+- ☐ Ogni offerta mostra un punteggio da 1 a 10.
 - ☐ Ogni offerta mostra una breve motivazione e la scomposizione match/gap.
 - ☐ Il punteggio non fa riferimento a competenze non presenti nel profilo master.
 
@@ -362,7 +362,7 @@ Formato: checklist di condizioni verificabili.
 - ☐ All'apertura, la lista mostra i job di oggi ordinati per punteggio decrescente.
 - ☐ Ogni riga mostra titolo, azienda, località, punteggio e match/gap.
 - ☐ È possibile filtrare per periodo (oggi/ultima settimana/ultimo mese/tutti) e vedere job passati.
-- ☐ È possibile filtrare per score (multiselect 1–5) e per stato (multiselect: nuovo, CV generato, candidatura fatta).
+- ☐ È possibile filtrare per score (multiselect 1–10) e per stato (multiselect: nuovo, CV generato, candidatura fatta).
 - ☐ I filtri temporale, score e stato valgono in tutte e tre le sezioni.
 - ☐ La barra di ricerca trova job per titolo, azienda o località su tutto lo storico a database della sezione corrente, e non attraversa le altre sezioni.
 - ☐ Quando la barra di ricerca è attiva, gli altri filtri (temporale, score, stato) vengono ignorati.

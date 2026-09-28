@@ -30,6 +30,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import JobCard from '@/components/JobCard'
+import MultiSelectFilter from '@/components/MultiSelectFilter'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 import { todayInputValue } from '../utils/date'
 
@@ -43,7 +44,7 @@ const EMPTY_MANUAL_JOB = {
 }
 
 const SECTIONS = ['main', 'imported', 'favorites', 'archived']
-const SCORES = [1, 2, 3, 4, 5]
+const SCORES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 const STATUSES = ['new', 'cv_generated', 'application_done']
 const APPLICANTS_RANGES = ['under_25', '25_50', '51_100', '101_200', 'over_200']
 
@@ -392,26 +393,13 @@ export default function JobListPage() {
           </Select>
         )}
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">{t('jobs.scoreLabel')}</span>
-          {SCORES.map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={searching}
-              onClick={() => toggleValue(scores, setScores, value)}
-              aria-pressed={scores.includes(value)}
-              className={
-                'h-7 w-7 rounded-md text-sm font-semibold tabular-nums transition-colors ' +
-                (scores.includes(value)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground')
-              }
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+        <MultiSelectFilter
+          label={t('jobs.scoreLabel')}
+          options={SCORES.map((value) => ({ value, label: String(value) }))}
+          selected={scores}
+          onToggle={(value) => toggleValue(scores, setScores, value)}
+          disabled={searching}
+        />
 
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t('jobs.statusLabel')}</span>

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Progetto
-App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte, ne valuta l'affinità con il profilo dell'utente (punteggio 1–5 + match/gap) e genera automaticamente un CV personalizzato in PDF per le offerte più promettenti. L'utente riceve una notifica mattutina e trova la lista già pronta, con possibilità di generazione manuale, import di job, arricchimento del profilo e tracciamento minimo della candidatura.
+App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte, ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap) e genera automaticamente un CV personalizzato in PDF per le offerte più promettenti. L'utente riceve una notifica mattutina e trova la lista già pronta, con possibilità di generazione manuale, import di job, arricchimento del profilo e tracciamento minimo della candidatura.
 Riferimenti: `01-specifiche-funzionali-v4.md`, `02-specifiche-tecniche-v3.md`
 
 ## Stack

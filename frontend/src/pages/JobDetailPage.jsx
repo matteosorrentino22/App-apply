@@ -5,21 +5,18 @@ import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchJob,
   generateCv,
-  enrichAndGenerateCv,
   markApplicationDone,
   generateCoverLetter,
   fetchCoverLetterInstructions,
   favoriteJob,
   unfavoriteJob,
 } from '../api/jobs'
-import { fetchProfile } from '../api/profile'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -29,24 +26,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import ChipInput from '@/components/ChipInput'
 import { scoreItemLabel, scoreItemReason } from '../utils/scoreItems'
+import { scoreStyle } from '../utils/scoreStyle'
 import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
-
-const SCORE_STYLE = {
-  1: 'bg-score-1-soft text-score-1',
-  2: 'bg-score-2-soft text-score-2',
-  3: 'bg-score-3-soft text-score-3',
-  4: 'bg-score-4-soft text-score-4',
-  5: 'bg-score-5-soft text-score-5',
-}
-
-const EMPTY_ENRICHMENT = {
-  experience_id: '',
-  additional_bullets: [],
-  save_to_profile: false,
-}
 
 export default function JobDetailPage() {
   const { id } = useParams()
@@ -55,13 +38,13 @@ export default function JobDetailPage() {
   const { showToast } = useToast()
 
   const [job, setJob] = useState(null)
-  const [experiences, setExperiences] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [generating, setGenerating] = useState(false)
   const [marking, setMarking] = useState(false)
-  const [showEnrichment, setShowEnrichment] = useState(false)
-  const [enrichment, setEnrichment] = useState(EMPTY_ENRICHMENT)
+  const [showGapPanel, setShowGapPanel] = useState(false)
+  const [selectedGaps, setSelectedGaps] = useState([])
+  const [gapInstructions, setGapInstructions] = useState('')
   const [showReasons, setShowReasons] = useState(false)
 
   const [showCoverLetterDialog, setShowCoverLetterDialog] = useState(false)
@@ -74,11 +57,9 @@ export default function JobDetailPage() {
     let cancelled = false
     setLoading(true)
     setError('')
-    Promise.all([fetchJob(id), fetchProfile()])
-      .then(([jobData, profileData]) => {
-        if (cancelled) return
-        setJob(jobData)
-        setExperiences(profileData.experiences || [])
+    fetchJob(id)
+      .then((jobData) => {
+        if (!cancelled) setJob(jobData)
       })
       .catch(() => {
         if (!cancelled) setError(t('jobs.notFound'))
@@ -91,26 +72,21 @@ export default function JobDetailPage() {
     }
   }, [id, t])
 
-  // L'arricchimento va agganciato a un'esperienza già presente nel
-  // profilo (Docs/03 §5.6): finché non è selezionata un'esperienza e non
-  // c'è almeno un'attività aggiuntiva, non c'è nulla di valido da inviare.
-  const enrichmentStarted = enrichment.experience_id || enrichment.additional_bullets.length > 0
-  const enrichmentComplete = Boolean(enrichment.experience_id) && enrichment.additional_bullets.length > 0
-  const enrichmentIncomplete = enrichmentStarted && !enrichmentComplete
+  function toggleGap(text) {
+    setSelectedGaps((current) =>
+      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
+    )
+  }
 
   async function handleGenerate() {
-    if (enrichmentIncomplete) return
     setGenerating(true)
     try {
-      if (enrichmentComplete) {
-        await enrichAndGenerateCv(id, enrichment)
-      } else {
-        await generateCv(id)
-      }
+      await generateCv(id, selectedGaps, gapInstructions)
       const updated = await fetchJob(id)
       setJob(updated)
-      setEnrichment(EMPTY_ENRICHMENT)
-      setShowEnrichment(false)
+      setSelectedGaps([])
+      setGapInstructions('')
+      setShowGapPanel(false)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         // Il backend distingue più cause dietro lo stesso 409 (concorrenza,
@@ -282,7 +258,7 @@ export default function JobDetailPage() {
             </button>
             {job.score != null && (
               <div
-                className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${SCORE_STYLE[job.score]}`}
+                className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${scoreStyle(job.score)}`}
               >
                 <span className="text-2xl font-bold tabular-nums leading-none">{job.score}</span>
               </div>
@@ -366,83 +342,63 @@ export default function JobDetailPage() {
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <button
           type="button"
-          onClick={() => setShowEnrichment((open) => !open)}
+          onClick={() => setShowGapPanel((open) => !open)}
           className="text-sm font-medium text-primary hover:underline"
         >
-          {showEnrichment ? '▾ ' : '▸ '}
-          {t('jobs.enrichmentToggle')}
+          {showGapPanel ? '▾ ' : '▸ '}
+          {t('jobs.gapPanelToggle')}
         </button>
-        {showEnrichment && (
+        {showGapPanel && (
           <div className="mt-4 flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">{t('jobs.enrichmentHint')}</p>
-            {experiences.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t('jobs.enrichmentNoExperiences')}</p>
+            <p className="text-sm text-muted-foreground">{t('jobs.gapPanelHint')}</p>
+            {job.score_gaps?.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {job.score_gaps.map((item, index) => {
+                  const label = scoreItemLabel(item)
+                  const reason = scoreItemReason(item)
+                  // Il testo inviato al backend include il motivo, quando
+                  // c'è: più contesto per il modello su perché è un gap,
+                  // non solo la sua etichetta breve mostrata in lista.
+                  const gapText = reason ? `${label} (${reason})` : label
+                  return (
+                    <label key={index} className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={selectedGaps.includes(gapText)}
+                        onCheckedChange={() => toggleGap(gapText)}
+                      />
+                      <span className="text-foreground">
+                        {index + 1}. {label}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
             ) : (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="enr-experience">{t('jobs.enrichmentExperience')}</Label>
-                  <Select
-                    value={enrichment.experience_id ? String(enrichment.experience_id) : ''}
-                    onValueChange={(value) =>
-                      setEnrichment({ ...enrichment, experience_id: Number(value) })
-                    }
-                  >
-                    <SelectTrigger id="enr-experience">
-                      <SelectValue placeholder={t('jobs.enrichmentExperiencePlaceholder')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {experiences.map((exp) => (
-                        <SelectItem key={exp.id} value={String(exp.id)}>
-                          {exp.role} — {exp.company}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="enr-bullets">{t('jobs.enrichmentBullets')}</Label>
-                  <ChipInput
-                    id="enr-bullets"
-                    value={enrichment.additional_bullets}
-                    onChange={(additional_bullets) =>
-                      setEnrichment({ ...enrichment, additional_bullets })
-                    }
-                    placeholder={t('onboarding.activitiesPlaceholder')}
-                  />
-                </div>
-                <label className="flex items-center gap-2.5 text-sm">
-                  <Checkbox
-                    checked={enrichment.save_to_profile}
-                    onCheckedChange={(checked) =>
-                      setEnrichment({ ...enrichment, save_to_profile: checked === true })
-                    }
-                  />
-                  {t('jobs.enrichmentSaveToProfile')}
-                </label>
-                {enrichmentIncomplete && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {t('jobs.enrichmentIncomplete')}
-                  </p>
-                )}
-              </>
+              <p className="text-sm text-muted-foreground">{t('jobs.gapPanelNoGaps')}</p>
             )}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gap-instructions">{t('jobs.gapInstructionsLabel')}</Label>
+              <Textarea
+                id="gap-instructions"
+                value={gapInstructions}
+                onChange={(event) => setGapInstructions(event.target.value)}
+                placeholder={t('jobs.gapInstructionsPlaceholder')}
+              />
+              {selectedGaps.length > 0 && !gapInstructions.trim() && (
+                <p className="text-xs text-muted-foreground">{t('jobs.gapInstructionsDefaultHint')}</p>
+              )}
+            </div>
           </div>
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          disabled={generating || job.cv_generation_in_progress || enrichmentIncomplete}
-          onClick={handleGenerate}
-        >
+        <Button type="button" disabled={generating || job.cv_generation_in_progress} onClick={handleGenerate}>
           {generating || job.cv_generation_in_progress
             ? t('jobs.generating')
-            : enrichmentComplete
-              ? t('jobs.generateWithEnrichment')
-              : hasCv
-                ? t('jobs.regenerateCv')
-                : t('jobs.generateCv')}
+            : hasCv
+              ? t('jobs.regenerateCv')
+              : t('jobs.generateCv')}
         </Button>
 
         {job.cv_pdf_url && (

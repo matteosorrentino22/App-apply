@@ -155,7 +155,7 @@ Sostituisce integralmente i Google Sheets del prototipo (`JOB_TRACKER`, `SEARCH_
 
 Tutte le operazioni "intelligenti" passano dall'**API di Anthropic (Claude)**, chiamata dal worker:
 
-- **scoring** di ogni offerta (punteggio 1–5 + match/gap), riusando il prompt del prototipo;
+- **scoring** di ogni offerta (punteggio 1–10 + match/gap), riusando il prompt del prototipo;
 - **generazione del CV** (contenuti su misura), riusando e ripulendo il prompt del prototipo;
 - **parsing del CV caricato** in onboarding per pre-popolare il profilo (§4.1 funzionale).
 
@@ -232,7 +232,7 @@ Il cuore del sistema. Un record per ogni offerta raccolta o importata, **per ute
 - `origin` — `collected` (raccolto) | `imported` (importato) — determina la **sezione** insieme all'archiviazione
 - `is_archived` — vero/falso — attributo ortogonale allo stato (§4.6 funzionale)
 - `status` — `new` | `cv_generated` | `application_done` (i tre stati stabili). Lo stato transitorio "CV in generazione" **non** è un valore qui, ma un flag separato `cv_generation_in_progress`, che funge anche da **guardia di concorrenza**: una richiesta di generazione su un job con il flag attivo viene rifiutata (§5.2)
-- `score` — 1–5
+- `score` — 1–10 (scala 1-5 prima di Sprint 46: punteggi storici non riscalati)
 - `score_match` / `score_gaps` — le due liste di punti affinità/lacune
 - `score_reasoning` — breve motivazione
 - date di servizio: `date_collected`, `date_scored`, `date_cv_generated`, `date_application_done` (istante in cui il job è stato marcato "candidatura fatta"; valorizzato solo dopo la marcatura). È il dato di verità del singolo evento; il reset del timer di inattività a livello utente è tenuto in `User.last_activity_reset` (§4.1)
@@ -283,7 +283,7 @@ Ripercorre i tre workflow del prototipo, ma dentro il monolite e per **ogni** ut
    Le offerte tornano, vengono **deduplicate** per `external_id` (già mostrate → scartate) e filtrate: un'offerta senza uno dei campi obbligatori (title, company, location, description, apply_url) **non** viene salvata (§4.3 funzionale). La **data di pubblicazione può mancare**: l'offerta è comunque ammessa, con `published_at` nullo.
    > **Assunzione da validare (§11).** Si assume che l'actor supporti **più coppie keywords/location in una singola chiamata**. Se in fase di implementazione risultasse non supportato, il fallback è una chiamata per ricerca con il tetto complessivo 50/100 applicato dalla nostra logica dopo l'aggregazione — senza alcun effetto visibile all'utente.
    > **Nota (freschezza per fusi non europei).** Con un unico batch alle 02:00 Europe/Rome, gli utenti europei ricevono job appena raccolti prima delle loro 10:00 locali; un utente in un fuso lontano vede alla propria notifica delle 10:00 job raccolti diverse ore prima nel suo tempo locale. Effetto atteso, accettato per l'MVP (cerchia di test perlopiù europea) e registrato lato funzionale (§8.19) e in §11. Da tenere presente anche il piccolo scostamento DST di Europe/Rome (§11).
-2. **Scoring.** Ogni offerta raccolta (entro il limite 50/100) viene valutata da Claude (1–5 + match/gap). Se lo scoring di una singola offerta **fallisce** (timeout, errore API), l'offerta viene **scartata per quella notte**: non entra nel passo successivo, non viene ritentata; l'evento è registrato nel `RunLog`. Nessun messaggio d'errore all'utente (coerente con §6 funzionale).
+2. **Scoring.** Ogni offerta raccolta (entro il limite 50/100) viene valutata da Claude (1–10 + match/gap). Se lo scoring di una singola offerta **fallisce** (timeout, errore API), l'offerta viene **scartata per quella notte**: non entra nel passo successivo, non viene ritentata; l'evento è registrato nel `RunLog`. Nessun messaggio d'errore all'utente (coerente con §6 funzionale).
 3. **Cap di intake.** Tra le offerte scorate si tengono le **15 a punteggio più alto**. In caso di pareggio al confine: si preferisce la **più recente** per `published_at`; se la data manca o il pareggio persiste, la scelta tra i pari merito è **casuale** (§4.4 funzionale). Le eccedenti sono scartate e non riproposte. *(Lo scoring avviene su tutto ciò che passa il limite 50/100 — al massimo 100 valutazioni per utente Pro a notte; costo Claude contenuto dal limite stesso, vedi §11.)*
 4. **CV automatici.** Per i job 4–5 tenuti, il worker genera subito il CV (§6). Vale per **tutti i piani**, Free incluso (§4.7 funzionale). I job nascono `new` (1–3) o `cv_generated` (4–5).
 5. **Notifica.** Alle 10:00 **locali** dell'utente, se ci sono job nuovi rispetto all'ultima notifica, parte la notifica (§5.5, §7).
@@ -432,7 +432,7 @@ Riepilogo esplicito, utile a chi conosce il prototipo, di cosa viene **riusato**
 
 **Riusato (con adattamenti):**
 - l'**actor Apify** e la modalità di chiamata (ora una chiamata per utente con più filtri e limite di risultati — assunzione da validare, §11);
-- il **prompt di scoring** (scala 1–5, criteri prioritizzati, JSON match/gaps): quasi invariato;
+- il **prompt di scoring** (scala 1–10 da Sprint 46, criteri prioritizzati, JSON match/gaps): quasi invariato;
 - l'impianto logico del **prompt CV** (grounding, no invenzioni, traduzione sì, controllo lunghezze): mantenuto, ripulito dalle parti personali;
 - il **layout visivo** del CV come punto di partenza per il template HTML.
 
