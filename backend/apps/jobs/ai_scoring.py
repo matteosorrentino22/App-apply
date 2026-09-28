@@ -17,6 +17,23 @@ _SCORE_ITEM_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Verifica deterministica in scoring.py (Sprint 48): il modello identifica
+# la lingua richiesta, ma il confronto con le lingue reali del profilo (e il
+# conseguente cap sul punteggio) è fatto in Python, non lasciato al giudizio
+# del modello — osservato in produzione che il modello, pur citando
+# testualmente un requisito di lingua come gap, assegnava comunque un
+# punteggio alto (media/dilutione con gli altri match positivi).
+_LANGUAGE_CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "required": {"type": "boolean"},
+        "language": {"type": "string"},
+        "international_exception": {"type": "boolean"},
+    },
+    "required": ["required", "language", "international_exception"],
+    "additionalProperties": False,
+}
+
 SCORE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -24,8 +41,9 @@ SCORE_JSON_SCHEMA = {
         "score_match": {"type": "array", "items": _SCORE_ITEM_SCHEMA},
         "score_gaps": {"type": "array", "items": _SCORE_ITEM_SCHEMA},
         "score_reasoning": {"type": "string"},
+        "language_check": _LANGUAGE_CHECK_SCHEMA,
     },
-    "required": ["score", "score_match", "score_gaps", "score_reasoning"],
+    "required": ["score", "score_match", "score_gaps", "score_reasoning", "language_check"],
     "additionalProperties": False,
 }
 
@@ -57,6 +75,23 @@ SCORING_SYSTEM_PROMPT = (
     "Usa l'intera scala in modo differenziato: due offerte con un requisito "
     "hard mancante diverso l'una dall'altra possono avere punteggi diversi "
     "(es. 5 e 6), non lo stesso valore di default.\n"
+    "Attenzione particolare alla lingua (Sprint 48): se l'offerta dichiara "
+    "esplicitamente una lingua necessaria (es. \"Deutschkenntnisse\", "
+    "\"fluent German required\", \"maîtrise du français\"), oppure è "
+    "scritta per intero in una lingua diversa dall'inglese (segnale che "
+    "quella è probabilmente la lingua di lavoro, anche senza una frase "
+    "esplicita), quella lingua è un vincolo a parte, più severo di un "
+    "normale requisito hard: se non è presente nel profilo candidato (Lingue) "
+    "a nessun livello, il candidato non può realisticamente operare nel "
+    "ruolo, indipendentemente da quanto il resto del profilo sia affine — "
+    "non fare come nell'errore osservato in produzione, dove il modello ha "
+    "giustificato l'assenza del tedesco richiesto scrivendo che il "
+    "candidato \"mostra adattabilità linguistica\" parlando altre lingue: "
+    "non è un match, è un'invenzione vietata dalla regola 3, e non deve mai "
+    "comparire in score_match. Eccezione: se il testo dichiara "
+    "esplicitamente un ambiente di lavoro internazionale o in inglese (es. "
+    "\"international team\", \"English-speaking environment\", \"no German "
+    "required\"), il vincolo non si applica.\n"
     "Regole vincolanti:\n"
     "1. Ogni voce di score_match e di score_gaps deve corrispondere a un "
     "requisito o un'informazione esplicita e individuabile nel testo "
@@ -81,7 +116,18 @@ SCORING_SYSTEM_PROMPT = (
     "`label`, cortissima (poche parole, solo il fatto, senza spiegazioni — "
     "es. \"5 anni di esperienza PM\"), e `reason`, una frase che motiva "
     "quella voce collegandola al requisito preciso dell'offerta (il "
-    "dettaglio che altrimenti andrebbe tra parentesi dopo l'etichetta)."
+    "dettaglio che altrimenti andrebbe tra parentesi dopo l'etichetta).\n"
+    "7. Non elencare mai in score_match una lingua assente dal profilo "
+    "candidato: se una lingua richiesta (secondo il criterio sopra) non è "
+    "nel profilo, può comparire solo in score_gaps, mai in score_match con "
+    "giustificazioni indirette (\"adattabilità linguistica\", \"lingue "
+    "simili\", \"può impararla velocemente\").\n"
+    "8. Compila sempre language_check: `required` (true se hai individuato "
+    "una lingua necessaria secondo il criterio sopra, false altrimenti), "
+    "`language` (nome della lingua individuata, stringa vuota se required è "
+    "false), `international_exception` (true se hai trovato un'esplicita "
+    "dichiarazione di ambiente internazionale/inglese che esclude il "
+    "vincolo)."
 )
 
 

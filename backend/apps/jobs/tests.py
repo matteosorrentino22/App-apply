@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from apps.cv.manual_generation import request_manual_cv_generation
 from apps.cv.models import CVDocument
-from apps.profiles.models import Education, Experience, Profile
+from apps.profiles.models import Education, Experience, Language, Profile
 from apps.searches.models import SavedSearch
 
 from .application import ApplicationMarkRejected, mark_application_done
@@ -146,6 +146,7 @@ FAKE_SCORE_RESULT = {
     "score_match": ["Esperienza di project management"],
     "score_gaps": ["Nessuna certificazione PMP"],
     "score_reasoning": "Buona affinità con il ruolo richiesto.",
+    "language_check": {"required": False, "language": "", "international_exception": False},
 }
 
 
@@ -240,6 +241,70 @@ class ScoreJobTests(TestCase):
 
         self.assertEqual(len(scored), len(jobs))
         self.assertGreater(peak, 1)
+
+    def test_language_mismatch_caps_score_regardless_of_model_value(self):
+        """Il modello può assegnare un punteggio alto anche quando cita una
+        lingua richiesta assente dal profilo (osservato in produzione,
+        Sprint 48): il cap deterministico in scoring.py deve prevalere."""
+        job = self._make_job("ext-lang-1")
+        result = {
+            **FAKE_SCORE_RESULT,
+            "score": 9,
+            "language_check": {"required": True, "language": "German", "international_exception": False},
+        }
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=result):
+            score_job(job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.score, 3)
+        self.assertIn("German", job.score_reasoning)
+
+    def test_language_present_in_profile_is_not_capped(self):
+        profile = Profile.objects.create(user=self.user)
+        Language.objects.create(profile=profile, language="de", level="fluent")
+        job = self._make_job("ext-lang-2")
+        result = {
+            **FAKE_SCORE_RESULT,
+            "score": 9,
+            "language_check": {"required": True, "language": "German", "international_exception": False},
+        }
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=result):
+            score_job(job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.score, 9)
+
+    def test_language_code_substring_does_not_cause_a_false_match(self):
+        """Regressione: il codice lingua a due lettere ("es" per lo
+        spagnolo) è una sottostringa di "Tedesco" — un confronto per
+        sottostringa invece che per parola intera farebbe risultare il
+        tedesco erroneamente già presente nel profilo."""
+        profile = Profile.objects.create(user=self.user)
+        Language.objects.create(profile=profile, language="es", level="fluent")
+        job = self._make_job("ext-lang-4")
+        result = {
+            **FAKE_SCORE_RESULT,
+            "score": 9,
+            "language_check": {"required": True, "language": "Tedesco", "international_exception": False},
+        }
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=result):
+            score_job(job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.score, 3)
+
+    def test_international_exception_skips_the_cap(self):
+        job = self._make_job("ext-lang-3")
+        result = {
+            **FAKE_SCORE_RESULT,
+            "score": 9,
+            "language_check": {"required": True, "language": "German", "international_exception": True},
+        }
+        with patch("apps.jobs.scoring.score_job_with_claude", return_value=result):
+            score_job(job)
+
+        job.refresh_from_db()
+        self.assertEqual(job.score, 9)
 
 
 class RunNightlyCycleForUserTests(TestCase):

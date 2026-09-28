@@ -1,11 +1,20 @@
 import concurrent.futures
+import re
 
 from django.utils import timezone
 
+from apps.profiles.language_options import LANGUAGE_NAME_LABELS
 from apps.profiles.models import Profile
 
 from .ai_scoring import score_job_with_claude
 from .models import RunLog
+
+# Punteggio massimo se la lingua richiesta dall'offerta (language_check,
+# ai_scoring.py) non è presente nel profilo a nessun livello: verifica
+# deterministica, non lasciata al modello — osservato in produzione che il
+# modello citava testualmente il requisito come gap e assegnava comunque un
+# punteggio alto (Sprint 48).
+LANGUAGE_MISMATCH_SCORE_CAP = 3
 
 # Le chiamate Bedrock di un batch sono indipendenti tra loro (nessuno stato
 # condiviso oltre alla propria riga): eseguirle in parallelo accorcia di
@@ -27,11 +36,64 @@ def _get_profile(user):
     return Profile.objects.prefetch_related(*_PROFILE_PREFETCH).filter(user=user).first()
 
 
-def _apply_score_result(job, result):
-    job.score = max(1, min(10, int(result["score"])))
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _words(text):
+    """Tokenizza in parole intere, case-insensitive. Confrontare per parola
+    intera (non per sottostringa) è necessario: il codice lingua a due
+    lettere di una lingua del profilo può comparire per puro caso dentro il
+    nome di un'altra lingua (es. "es" — codice spagnolo — è una sottostringa
+    di "tedesco"), causando un match spurio con una sottostringa naive."""
+    return {w.casefold() for w in _WORD_RE.findall(text)}
+
+
+def _profile_language_words(profile):
+    """Parole di tutte le etichette localizzate (it/en/fr/de/es) di ogni
+    lingua del profilo, per confrontare in modo tollerante con la stringa
+    libera restituita dal modello in `language_check.language` (può essere
+    in qualunque lingua: "German", "Tedesco", "Deutsch"). Il codice ISO a
+    due lettere non è incluso: troppo corto, rischia collisioni spurie, e il
+    prompt chiede comunque un nome esteso, non un codice."""
+    if profile is None:
+        return set()
+    words = set()
+    for lang in profile.languages.all():
+        for label in LANGUAGE_NAME_LABELS.get(lang.language, {}).values():
+            words.update(_words(label))
+    return words
+
+
+def _language_score_cap(result, profile):
+    """None se nessun cap si applica, altrimenti il punteggio massimo
+    consentito (vedi LANGUAGE_MISMATCH_SCORE_CAP)."""
+    check = result.get("language_check") or {}
+    if not check.get("required") or check.get("international_exception"):
+        return None
+    required_words = _words(check.get("language") or "")
+    if not required_words:
+        return None
+    if required_words & _profile_language_words(profile):
+        return None
+    return LANGUAGE_MISMATCH_SCORE_CAP
+
+
+def _apply_score_result(job, result, profile):
+    score = max(1, min(10, int(result["score"])))
+    reasoning = result["score_reasoning"]
+
+    cap = _language_score_cap(result, profile)
+    if cap is not None and score > cap:
+        score = cap
+        reasoning = (
+            f"Punteggio limitato a {cap}/10: lingua richiesta "
+            f"({result['language_check']['language']}) assente dal profilo. {reasoning}"
+        )
+
+    job.score = score
     job.score_match = result["score_match"]
     job.score_gaps = result["score_gaps"]
-    job.score_reasoning = result["score_reasoning"]
+    job.score_reasoning = reasoning
     job.date_scored = timezone.now()
     job.save(update_fields=["score", "score_match", "score_gaps", "score_reasoning", "date_scored"])
 
@@ -56,13 +118,14 @@ def score_job(job):
     in RunLog (01-specifiche-funzionali-v4.md §4.4).
     """
     started_at = timezone.now()
+    profile = _get_profile(job.user)
     try:
-        result = score_job_with_claude(job, _get_profile(job.user))
+        result = score_job_with_claude(job, profile)
     except Exception as exc:
         _log_scoring_failure(job, exc, started_at)
         return False
 
-    _apply_score_result(job, result)
+    _apply_score_result(job, result, profile)
     return True
 
 
@@ -75,8 +138,8 @@ def _score_call(item):
     try:
         result = score_job_with_claude(job, profile)
     except Exception as exc:
-        return job, None, exc, started_at
-    return job, result, None, started_at
+        return job, profile, None, exc, started_at
+    return job, profile, result, None, started_at
 
 
 def score_jobs(jobs):
@@ -101,11 +164,11 @@ def score_jobs(jobs):
 
     scored = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=SCORING_CONCURRENCY) as pool:
-        for job, result, exc, started_at in pool.map(_score_call, prepared):
+        for job, profile, result, exc, started_at in pool.map(_score_call, prepared):
             if exc is not None:
                 _log_scoring_failure(job, exc, started_at)
                 continue
-            _apply_score_result(job, result)
+            _apply_score_result(job, result, profile)
             scored.append(job)
 
     return scored
