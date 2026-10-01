@@ -5,11 +5,35 @@ from .sources import get_job_source
 
 REQUIRED_FIELDS = ("title", "company", "location", "description", "apply_url")
 
+# Campi testuali con un max_length sul modello: un'offerta che lo supera (es.
+# un apply_url LinkedIn con tracking query-string molto lungo) fa fallire
+# `Job.objects.create()` con un DataError non catturato — osservato in
+# produzione, interrompe l'intero batch a metà, lasciando le offerte già
+# create senza possibilità di essere scorate (Sprint 49). Scartata come le
+# offerte con campi obbligatori mancanti, non troncata: un apply_url
+# troncato porterebbe a un link di candidatura rotto.
+_LENGTH_CHECKED_FIELDS = (
+    "title",
+    "company",
+    "location",
+    "apply_url",
+    "matched_search",
+    "salary",
+    "recruiter_name",
+    "recruiter_profile_url",
+)
+
 WINDOW_HOURS = 24
 
 
 def _is_valid_offer(offer):
-    return all(offer.get(field) for field in REQUIRED_FIELDS)
+    if not all(offer.get(field) for field in REQUIRED_FIELDS):
+        return False
+    for field in _LENGTH_CHECKED_FIELDS:
+        max_length = Job._meta.get_field(field).max_length
+        if max_length and len(str(offer.get(field) or "")) > max_length:
+            return False
+    return True
 
 
 def collect_jobs_for_user(user):

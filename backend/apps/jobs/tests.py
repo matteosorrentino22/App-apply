@@ -88,6 +88,23 @@ class CollectJobsForUserTests(TestCase):
         self.assertEqual(len(created), 1)
         self.assertEqual(Job.objects.filter(user=self.free_user).count(), 1)
 
+    def test_offer_with_apply_url_too_long_is_skipped_not_crashed(self):
+        """Regressione (Sprint 49): un apply_url LinkedIn con tracking
+        query-string oltre i 1000 caratteri del campo faceva fallire
+        `Job.objects.create()` a metà batch, interrompendo l'intera
+        raccolta e lasciando senza punteggio le offerte già create prima di
+        quella malformata."""
+        offers = [
+            _offer("ext-1"),
+            _offer("ext-2", apply_url="https://linkedin.com/jobs/view/123?" + "a" * 1000),
+            _offer("ext-3"),
+        ]
+        with patch("apps.jobs.collection.get_job_source") as mock_get_source:
+            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            created = collect_jobs_for_user(self.free_user)
+
+        self.assertEqual({j.external_id for j in created}, {"ext-1", "ext-3"})
+
     def test_offer_without_published_at_is_saved_with_null(self):
         offers = [_offer("ext-1", published_at=None)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
