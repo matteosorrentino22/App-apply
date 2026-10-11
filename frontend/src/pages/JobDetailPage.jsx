@@ -8,6 +8,9 @@ import {
   markApplicationDone,
   generateCoverLetter,
   fetchCoverLetterInstructions,
+  generateReferralMessage,
+  fetchReferralMessages,
+  fetchReferralMessageInstructions,
   favoriteJob,
   unfavoriteJob,
 } from '../api/jobs'
@@ -15,8 +18,10 @@ import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -53,6 +58,16 @@ export default function JobDetailPage() {
   const [selectedPastInstructions, setSelectedPastInstructions] = useState([])
   const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false)
 
+  const [showReferralDialog, setShowReferralDialog] = useState(false)
+  const [referralChannel, setReferralChannel] = useState('linkedin')
+  const [referralRecipientName, setReferralRecipientName] = useState('')
+  const [referralRecipientLinkedinUrl, setReferralRecipientLinkedinUrl] = useState('')
+  const [referralText, setReferralText] = useState('')
+  const [referralPastInstructions, setReferralPastInstructions] = useState([])
+  const [selectedReferralPastInstructions, setSelectedReferralPastInstructions] = useState([])
+  const [generatingReferralMessage, setGeneratingReferralMessage] = useState(false)
+  const [referralMessages, setReferralMessages] = useState([])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -66,6 +81,13 @@ export default function JobDetailPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
+      })
+    fetchReferralMessages(id)
+      .then((messages) => {
+        if (!cancelled) setReferralMessages(messages)
+      })
+      .catch(() => {
+        if (!cancelled) setReferralMessages([])
       })
     return () => {
       cancelled = true
@@ -135,6 +157,61 @@ export default function JobDetailPage() {
       }
     } finally {
       setGeneratingCoverLetter(false)
+    }
+  }
+
+  function openReferralDialog() {
+    setReferralChannel('linkedin')
+    setReferralRecipientName('')
+    setReferralRecipientLinkedinUrl('')
+    setReferralText('')
+    setSelectedReferralPastInstructions([])
+    setShowReferralDialog(true)
+    fetchReferralMessageInstructions()
+      .then((data) => setReferralPastInstructions(data.instructions || []))
+      .catch(() => setReferralPastInstructions([]))
+  }
+
+  function toggleReferralPastInstruction(text) {
+    setSelectedReferralPastInstructions((current) =>
+      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
+    )
+  }
+
+  async function handleGenerateReferralMessage() {
+    setGeneratingReferralMessage(true)
+    try {
+      const instructions = [...selectedReferralPastInstructions, referralText.trim()]
+        .filter(Boolean)
+        .join('\n\n')
+      const document = await generateReferralMessage(id, {
+        channel: referralChannel,
+        recipient_name: referralRecipientName.trim(),
+        recipient_linkedin_url: referralRecipientLinkedinUrl.trim(),
+        instructions,
+      })
+      setReferralMessages((current) => [document, ...current])
+      setShowReferralDialog(false)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        showToast(err.data?.detail || t('jobs.generationConflict'))
+      } else {
+        showToast(t('jobs.referralGenerationFailed'))
+      }
+    } finally {
+      setGeneratingReferralMessage(false)
+    }
+  }
+
+  async function handleCopyReferralMessage(document) {
+    const text = document.subject
+      ? `${t('jobs.referralSubjectPrefix')} ${document.subject}\n\n${document.content}`
+      : document.content
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast(t('jobs.referralCopied'))
+    } catch {
+      showToast(t('jobs.referralCopyFailed'))
     }
   }
 
@@ -433,6 +510,17 @@ export default function JobDetailPage() {
           </Button>
         )}
 
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={generatingReferralMessage || job.referral_message_generation_in_progress}
+          onClick={openReferralDialog}
+        >
+          {generatingReferralMessage || job.referral_message_generation_in_progress
+            ? t('jobs.generatingReferralMessage')
+            : t('jobs.generateReferralMessage')}
+        </Button>
+
         {job.apply_url ? (
           <Button variant="secondary" asChild>
             <a href={job.apply_url} target="_blank" rel="noreferrer">
@@ -449,6 +537,139 @@ export default function JobDetailPage() {
           </Button>
         )}
       </div>
+
+      {referralMessages.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t('jobs.referralMessagesTitle')}
+          </h2>
+          <div className="flex flex-col gap-3">
+            {referralMessages.map((document) => (
+              <div key={document.id} className="rounded-lg border border-border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">
+                      {document.channel === 'email' ? t('jobs.referralChannelEmail') : t('jobs.referralChannelLinkedin')}
+                    </Badge>
+                    {document.recipient_name && (
+                      <span className="text-sm font-medium text-foreground">{document.recipient_name}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatShortDate(document.generated_at, lang)}
+                    </span>
+                  </div>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => handleCopyReferralMessage(document)}>
+                    {t('jobs.referralCopy')}
+                  </Button>
+                </div>
+                {document.subject && (
+                  <p className="mt-2 text-sm font-semibold text-foreground">{document.subject}</p>
+                )}
+                <p className="mt-1 whitespace-pre-line text-sm text-foreground">{document.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Dialog open={showReferralDialog} onOpenChange={setShowReferralDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('jobs.referralDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('jobs.referralDialogHint')}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('jobs.referralChannelLabel')}</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReferralChannel('linkedin')}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                    referralChannel === 'linkedin'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t('jobs.referralChannelLinkedin')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReferralChannel('email')}
+                  className={cn(
+                    'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                    referralChannel === 'email'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t('jobs.referralChannelEmail')}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="referral-recipient-name">{t('jobs.referralRecipientNameLabel')}</Label>
+              <Input
+                id="referral-recipient-name"
+                value={referralRecipientName}
+                onChange={(event) => setReferralRecipientName(event.target.value)}
+                placeholder={t('jobs.referralRecipientNamePlaceholder')}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="referral-recipient-linkedin">
+                {t('jobs.referralRecipientLinkedinLabel')}
+              </Label>
+              <Input
+                id="referral-recipient-linkedin"
+                value={referralRecipientLinkedinUrl}
+                onChange={(event) => setReferralRecipientLinkedinUrl(event.target.value)}
+                placeholder={t('jobs.referralRecipientLinkedinPlaceholder')}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="referral-instructions">{t('jobs.referralInstructionsLabel')}</Label>
+              <Textarea
+                id="referral-instructions"
+                value={referralText}
+                onChange={(event) => setReferralText(event.target.value)}
+                placeholder={t('jobs.referralInstructionsPlaceholder')}
+              />
+            </div>
+
+            {referralPastInstructions.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('jobs.coverLetterPastInstructionsLabel')}</Label>
+                <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
+                  {referralPastInstructions.map((text, index) => (
+                    <label key={index} className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={selectedReferralPastInstructions.includes(text)}
+                        onCheckedChange={() => toggleReferralPastInstruction(text)}
+                      />
+                      <span className="text-foreground">{text}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setShowReferralDialog(false)}>
+              {t('jobs.cancel')}
+            </Button>
+            <Button type="button" disabled={generatingReferralMessage} onClick={handleGenerateReferralMessage}>
+              {generatingReferralMessage ? t('jobs.generatingReferralMessage') : t('jobs.generateReferralMessage')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCoverLetterDialog} onOpenChange={setShowCoverLetterDialog}>
         <DialogContent>

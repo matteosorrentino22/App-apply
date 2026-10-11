@@ -74,6 +74,10 @@ class Job(models.Model):
     # una cover letter non tocca lo status del job né interferisce con una
     # generazione di CV in corso sullo stesso job (Sprint 42).
     cover_letter_generation_in_progress = models.BooleanField(default=False)
+    # Stessa natura delle due guardie sopra, indipendente (Sprint 50): un
+    # messaggio di networking non tocca lo status del job né interferisce
+    # con una generazione di CV/cover letter in corso sullo stesso job.
+    referral_message_generation_in_progress = models.BooleanField(default=False)
     # Storico: cap di intake giornaliero (15 job/utente/notte), rimosso
     # nello sprint corrente — non più impostato da nessun percorso di
     # raccolta. Campo lasciato sul modello (righe passate già marcate,
@@ -122,6 +126,9 @@ class DailyQuota(models.Model):
     # e importarlo da un link LinkedIn sono due budget indipendenti, anche
     # se numericamente identici (3/giorno, stesso credito di sblocco).
     manual_job_count = models.PositiveIntegerField(default=0)
+    # Massimale separato da CV/cover letter (Sprint 50): budget indipendente
+    # anche per i messaggi di networking/referral.
+    referral_message_count = models.PositiveIntegerField(default=0)
     # Raccolta manuale (sezione Home): massimo 1/utente/giorno, uguale per
     # tutti i piani e senza estensione a credito — il limite esiste per non
     # sprecare chiamate Apify, che pagare per superarlo vanificherebbe.
@@ -142,6 +149,7 @@ class RunLog(models.Model):
         SCORING = "scoring", "Scoring"
         CV_GENERATION = "cv_generation", "Generazione CV"
         COVER_LETTER_GENERATION = "cover_letter_generation", "Generazione cover letter"
+        REFERRAL_MESSAGE_GENERATION = "referral_message_generation", "Generazione messaggio di networking"
 
     class Status(models.TextChoices):
         SUCCESS = "success", "Successo"
@@ -153,7 +161,7 @@ class RunLog(models.Model):
     job = models.ForeignKey(
         Job, on_delete=models.SET_NULL, null=True, blank=True, related_name="run_logs"
     )
-    task_type = models.CharField(max_length=25, choices=TaskType.choices)
+    task_type = models.CharField(max_length=30, choices=TaskType.choices)
     status = models.CharField(max_length=10, choices=Status.choices)
     message = models.TextField(blank=True, default="")
     started_at = models.DateTimeField()

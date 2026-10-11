@@ -58,6 +58,21 @@ export function fetchCoverLetterInstructions() {
   return apiFetch('/api/cover-letter-instructions/')
 }
 
+export function generateReferralMessage(id, payload) {
+  return apiFetch(`/api/jobs/${id}/generate-referral-message/`, {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function fetchReferralMessages(id) {
+  return apiFetch(`/api/jobs/${id}/referral-messages/`)
+}
+
+export function fetchReferralMessageInstructions() {
+  return apiFetch('/api/referral-message-instructions/')
+}
+
 export function archiveJob(id) {
   return apiFetch(`/api/jobs/${id}/archive/`, { method: 'POST', body: {} })
 }

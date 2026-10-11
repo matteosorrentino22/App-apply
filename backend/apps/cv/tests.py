@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 
-from apps.jobs.models import DailyQuota, Job
+from apps.jobs.models import DailyQuota, Job, RunLog
 from apps.profiles.models import Education, Experience, Profile, Skill
 
 from .generation import generate_cv
@@ -19,7 +19,14 @@ from .manual_generation import (
     ManualGenerationRejected,
     request_manual_cv_generation,
 )
-from .models import CVDocument
+from .models import CVDocument, ReferralMessageDocument
+from .referral_message_manual_generation import (
+    ReferralMessageGenerationFailed,
+    ReferralMessageGenerationRejected,
+    get_messages_for_job,
+    get_recent_instructions as get_recent_referral_instructions,
+    request_referral_message_generation,
+)
 
 User = get_user_model()
 
@@ -530,3 +537,178 @@ class ManualCvGenerationTests(TestCase):
         job.refresh_from_db()
         self.assertFalse(job.is_archived)
 
+
+
+class ManualReferralMessageGenerationTests(TestCase):
+    def _make_user(self, plan=User.Plan.FREE, extra_credit=Decimal("0")):
+        user = User.objects.create_user(
+            username=f"referral-{plan}-{extra_credit}@example.com",
+            email=f"referral-{plan}-{extra_credit}@example.com",
+            password="pw-Referral-12345!",
+            plan=plan,
+            extra_credit=extra_credit,
+        )
+        Profile.objects.create(user=user)
+        return user
+
+    def _make_job(self, user, external_id="ext-1"):
+        return Job.objects.create(
+            user=user,
+            source=Job.Source.LINKEDIN,
+            external_id=external_id,
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+        )
+
+    def _make_document(self, job, **overrides):
+        kwargs = {
+            "job": job,
+            "user": job.user,
+            "channel": ReferralMessageDocument.Channel.LINKEDIN,
+            "subject": "",
+            "content": "Ciao, ...",
+        }
+        kwargs.update(overrides)
+        return ReferralMessageDocument.objects.create(**kwargs)
+
+    def test_free_user_first_generation_consumes_quota_and_does_not_touch_job_status(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            mock_generate.return_value = self._make_document(job)
+            request_referral_message_generation(job, "linkedin", recipient_name="Mario")
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.referral_message_count, 1)
+        self.assertEqual(quota.manual_cv_count, 0)
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.NEW)
+        self.assertFalse(job.referral_message_generation_in_progress)
+
+    def test_multiple_messages_allowed_on_the_same_job(self):
+        """A differenza del CV/cover letter, più messaggi per lo stesso job
+        sono previsti (destinatari diversi): nessuna guardia lo impedisce
+        una volta che la generazione precedente è conclusa."""
+        user = self._make_user(plan=User.Plan.PRO)
+        job = self._make_job(user)
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            mock_generate.side_effect = lambda job, channel, **kw: self._make_document(
+                job, channel=channel
+            )
+            request_referral_message_generation(job, "linkedin", recipient_name="Mario")
+            request_referral_message_generation(job, "email", recipient_name="Giulia")
+
+        messages = list(get_messages_for_job(job))
+        self.assertEqual(len(messages), 2)
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.referral_message_count, 2)
+
+    def test_concurrent_request_on_same_job_is_rejected_without_consuming_quota(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+        job.referral_message_generation_in_progress = True
+        job.save(update_fields=["referral_message_generation_in_progress"])
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            with self.assertRaises(ReferralMessageGenerationRejected):
+                request_referral_message_generation(job, "linkedin")
+            mock_generate.assert_not_called()
+
+        self.assertFalse(DailyQuota.objects.filter(user=user).exists())
+
+    def test_free_user_second_generation_rejected_without_enough_credit(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("0.50"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            mock_generate.return_value = self._make_document(job_1)
+            request_referral_message_generation(job_1, "linkedin")
+
+            with self.assertRaises(ReferralMessageGenerationRejected):
+                request_referral_message_generation(job_2, "linkedin")
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.referral_message_count, 1)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("0.50"))
+
+    def test_free_user_second_generation_proceeds_on_credit_and_scales_price(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("5.00"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            mock_generate.side_effect = lambda job, channel, **kw: self._make_document(job)
+            request_referral_message_generation(job_1, "linkedin")
+            request_referral_message_generation(job_2, "linkedin")
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.referral_message_count, 1)
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("4.00"))
+
+    def test_failed_generation_refunds_quota_and_resets_flag(self):
+        user = self._make_user(plan=User.Plan.FREE)
+        job = self._make_job(user)
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message",
+            side_effect=RuntimeError("errore simulato"),
+        ):
+            with self.assertRaises(ReferralMessageGenerationFailed):
+                request_referral_message_generation(job, "linkedin")
+
+        quota = DailyQuota.objects.get(user=user)
+        self.assertEqual(quota.referral_message_count, 0)
+        job.refresh_from_db()
+        self.assertFalse(job.referral_message_generation_in_progress)
+        run_log = RunLog.objects.get(job=job, task_type=RunLog.TaskType.REFERRAL_MESSAGE_GENERATION)
+        self.assertEqual(run_log.status, RunLog.Status.FAILURE)
+
+    def test_failed_generation_refunds_credit_when_charged_to_credit(self):
+        user = self._make_user(plan=User.Plan.FREE, extra_credit=Decimal("5.00"))
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message"
+        ) as mock_generate:
+            mock_generate.return_value = self._make_document(job_1)
+            request_referral_message_generation(job_1, "linkedin")
+
+        with patch(
+            "apps.cv.referral_message_manual_generation.generate_referral_message",
+            side_effect=RuntimeError("errore simulato"),
+        ):
+            with self.assertRaises(ReferralMessageGenerationFailed):
+                request_referral_message_generation(job_2, "linkedin")
+
+        user.refresh_from_db()
+        self.assertEqual(user.extra_credit, Decimal("5.00"))
+
+    def test_get_recent_instructions_deduplicates_across_jobs_most_recent_first(self):
+        user = self._make_user(plan=User.Plan.PRO)
+        job_1 = self._make_job(user, external_id="ext-1")
+        job_2 = self._make_job(user, external_id="ext-2")
+        self._make_document(job_1, instructions_used="Istruzione A")
+        self._make_document(job_2, instructions_used="Istruzione B")
+        self._make_document(job_2, instructions_used="Istruzione A")
+
+        recent = get_recent_referral_instructions(user)
+        self.assertEqual(recent, ["Istruzione A", "Istruzione B"])

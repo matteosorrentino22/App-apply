@@ -207,6 +207,9 @@ PRICE_COVER_LETTER_EXTRA = Decimal(os.environ.get("PRICE_COVER_LETTER_EXTRA", "1
 # Massimale giornaliero separato da quello dell'import LinkedIn, stesso
 # valore/prezzo di default ma budget indipendente (Sprint 43).
 PRICE_MANUAL_JOB_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_JOB_EXTRA", "0.50"))
+# Massimale giornaliero separato da CV/cover letter, stessi tetti Free/Pro
+# (Sprint 50): budget indipendente, prezzo a credito configurabile a parte.
+PRICE_REFERRAL_MESSAGE_EXTRA = Decimal(os.environ.get("PRICE_REFERRAL_MESSAGE_EXTRA", "1.00"))
 
 # Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
 # l'autenticazione standard del protocollo, nessun servizio a pagamento.

@@ -1694,3 +1694,92 @@ class SeedE2eJobsCommandTests(TestCase):
 
         with self.assertRaises(CommandError):
             call_command("seed_e2e_jobs", "e2e-seed@example.com", stdout=StringIO())
+
+
+class GenerateReferralMessageApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="referral-api@example.com",
+            email="referral-api@example.com",
+            password="pw-ReferralApi-12345!",
+            plan=User.Plan.PRO,
+        )
+        Profile.objects.create(user=self.user)
+        self.job = Job.objects.create(
+            user=self.user,
+            source=Job.Source.LINKEDIN,
+            external_id="ext-referral-1",
+            title="Project Manager",
+            company="Acme S.p.A.",
+            location="Roma",
+            description="Descrizione della posizione.",
+            apply_url="https://linkedin.com/jobs/view/1",
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_generates_a_message_and_returns_its_content(self):
+        fake_content = {"subject": "", "message": "Ciao Mario, ..."}
+        with patch(
+            "apps.cv.referral_message_generation.generate_referral_message_content",
+            return_value=fake_content,
+        ):
+            response = self.client.post(
+                f"/api/jobs/{self.job.pk}/generate-referral-message/",
+                {"channel": "linkedin", "recipient_name": "Mario"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["content"], "Ciao Mario, ...")
+        self.assertEqual(response.data["channel"], "linkedin")
+        self.assertEqual(response.data["recipient_name"], "Mario")
+
+    def test_invalid_channel_is_rejected_with_400(self):
+        response = self.client.post(
+            f"/api/jobs/{self.job.pk}/generate-referral-message/",
+            {"channel": "whatsapp"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_history_endpoint_returns_all_messages_most_recent_first(self):
+        fake_content = {"subject": "Oggetto", "message": "Corpo"}
+        with patch(
+            "apps.cv.referral_message_generation.generate_referral_message_content",
+            return_value=fake_content,
+        ):
+            self.client.post(
+                f"/api/jobs/{self.job.pk}/generate-referral-message/",
+                {"channel": "linkedin", "recipient_name": "Mario"},
+                format="json",
+            )
+            self.client.post(
+                f"/api/jobs/{self.job.pk}/generate-referral-message/",
+                {"channel": "email", "recipient_name": "Giulia"},
+                format="json",
+            )
+
+        response = self.client.get(f"/api/jobs/{self.job.pk}/referral-messages/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]["recipient_name"], "Giulia")
+        self.assertEqual(response.data[1]["recipient_name"], "Mario")
+
+    def test_instructions_endpoint_returns_recent_instructions(self):
+        fake_content = {"subject": "", "message": "Corpo"}
+        with patch(
+            "apps.cv.referral_message_generation.generate_referral_message_content",
+            return_value=fake_content,
+        ):
+            self.client.post(
+                f"/api/jobs/{self.job.pk}/generate-referral-message/",
+                {"channel": "linkedin", "instructions": "Collega ex, team design"},
+                format="json",
+            )
+
+        response = self.client.get("/api/referral-message-instructions/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["instructions"], ["Collega ex, team design"])

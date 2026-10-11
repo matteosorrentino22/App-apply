@@ -17,6 +17,14 @@ from apps.cv.manual_generation import (
     ManualGenerationRejected,
     request_manual_cv_generation,
 )
+from apps.cv.models import ReferralMessageDocument
+from apps.cv.referral_message_manual_generation import (
+    ReferralMessageGenerationFailed,
+    ReferralMessageGenerationRejected,
+    get_messages_for_job,
+    get_recent_instructions as get_recent_referral_instructions,
+    request_referral_message_generation,
+)
 
 from .application import ApplicationMarkRejected, mark_application_done
 from .import_service import (
@@ -104,6 +112,75 @@ class CoverLetterInstructionsView(APIView):
 
     def get(self, request):
         return Response({"instructions": get_recent_instructions(request.user)})
+
+
+def _serialize_referral_message(document):
+    return {
+        "id": document.pk,
+        "channel": document.channel,
+        "recipient_name": document.recipient_name,
+        "recipient_linkedin_url": document.recipient_linkedin_url,
+        "subject": document.subject,
+        "content": document.content,
+        "generated_at": document.generated_at,
+    }
+
+
+class GenerateReferralMessageView(APIView):
+    """Generazione di un messaggio di networking (LinkedIn o email) per un
+    Job dell'utente autenticato (Sprint 50): sempre manuale, budget
+    quota/credito indipendente da CV e cover letter. A differenza di questi
+    ultimi, più messaggi hanno senso sullo stesso job (destinatari
+    diversi): ogni generazione crea una nuova riga, nessuna sostituisce le
+    precedenti — la risposta porta già il testo generato, non solo un id,
+    perché qui non c'è un PDF da scaricare in un secondo giro."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        channel = request.data.get("channel", "")
+        if channel not in ReferralMessageDocument.Channel.values:
+            return Response({"detail": "Canale non valido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            document = request_referral_message_generation(
+                job,
+                channel,
+                recipient_name=request.data.get("recipient_name", ""),
+                recipient_linkedin_url=request.data.get("recipient_linkedin_url", ""),
+                instructions=request.data.get("instructions", ""),
+            )
+        except ReferralMessageGenerationRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ReferralMessageGenerationFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(_serialize_referral_message(document), status=status.HTTP_201_CREATED)
+
+
+class ReferralMessageListView(APIView):
+    """Storico dei messaggi di networking generati per un job (Sprint 50):
+    a differenza di CV/cover letter, mostrati tutti, non solo l'ultimo."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        documents = get_messages_for_job(job)
+        return Response([_serialize_referral_message(doc) for doc in documents])
+
+
+class ReferralMessageInstructionsView(APIView):
+    """Indicazioni testuali distinte usate nelle generazioni passate di
+    messaggi di networking dell'utente, più recenti in cima (Sprint 50) —
+    non è legato a un job specifico, stesso principio delle istruzioni
+    cover letter."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response({"instructions": get_recent_referral_instructions(request.user)})
 
 
 class ImportJobView(APIView):
