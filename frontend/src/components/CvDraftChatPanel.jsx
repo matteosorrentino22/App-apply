@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { Sparkles, X } from 'lucide-react'
 import { fetchCvDraftChat, sendCvDraftChatMessage } from '../api/jobs'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -24,54 +24,54 @@ function describeAction(action, content, t) {
 
   switch (action.type) {
     case 'update_summary':
-      return { label: t('cvEditor.chat.actionSummary'), before: content.summary, after: action.text }
+      return { label: t('cvEditor.chatActionSummary'), before: content.summary, after: action.text }
     case 'update_qualification':
-      return { label: t('cvEditor.chat.actionQualification'), before: content.qualification, after: action.text }
+      return { label: t('cvEditor.chatActionQualification'), before: content.qualification, after: action.text }
     case 'update_role':
-      return { label: t('cvEditor.chat.actionRole').replace('{company}', company), before: exp?.role, after: action.text }
+      return { label: t('cvEditor.chatActionRole').replace('{company}', company), before: exp?.role, after: action.text }
     case 'update_bullet':
       return {
-        label: t('cvEditor.chat.actionBullet').replace('{company}', company),
+        label: t('cvEditor.chatActionBullet').replace('{company}', company),
         before: exp?.bullets?.[action.bullet_index]?.text,
         after: action.text,
       }
     case 'add_bullet':
-      return { label: t('cvEditor.chat.actionNewBullet').replace('{company}', company), before: null, after: action.text }
+      return { label: t('cvEditor.chatActionNewBullet').replace('{company}', company), before: null, after: action.text }
     case 'hide_bullet':
       return {
-        label: t('cvEditor.chat.actionHideBullet').replace('{company}', company),
+        label: t('cvEditor.chatActionHideBullet').replace('{company}', company),
         before: exp?.bullets?.[action.bullet_index]?.text,
         after: null,
       }
     case 'show_bullet':
       return {
-        label: t('cvEditor.chat.actionShowBullet').replace('{company}', company),
+        label: t('cvEditor.chatActionShowBullet').replace('{company}', company),
         before: exp?.bullets?.[action.bullet_index]?.text,
         after: null,
       }
     case 'hide_experience':
-      return { label: t('cvEditor.chat.actionHideExperience').replace('{company}', company), before: null, after: null }
+      return { label: t('cvEditor.chatActionHideExperience').replace('{company}', company), before: null, after: null }
     case 'show_experience':
-      return { label: t('cvEditor.chat.actionShowExperience').replace('{company}', company), before: null, after: null }
+      return { label: t('cvEditor.chatActionShowExperience').replace('{company}', company), before: null, after: null }
     case 'update_area':
-      return { label: t('cvEditor.chat.actionArea'), before: content.areas_of_expertise[action.area_index], after: action.text }
+      return { label: t('cvEditor.chatActionArea'), before: content.areas_of_expertise[action.area_index], after: action.text }
     case 'add_area':
-      return { label: t('cvEditor.chat.actionNewArea'), before: null, after: action.text }
+      return { label: t('cvEditor.chatActionNewArea'), before: null, after: action.text }
     case 'remove_area':
-      return { label: t('cvEditor.chat.actionRemoveArea'), before: content.areas_of_expertise[action.area_index], after: null }
+      return { label: t('cvEditor.chatActionRemoveArea'), before: content.areas_of_expertise[action.area_index], after: null }
     case 'toggle_skill':
-      return { label: t('cvEditor.chat.actionSkill').replace('{name}', action.name), before: null, after: null }
+      return { label: t('cvEditor.chatActionSkill').replace('{name}', action.name), before: null, after: null }
     case 'toggle_certification':
-      return { label: t('cvEditor.chat.actionCertification').replace('{name}', action.name), before: null, after: null }
+      return { label: t('cvEditor.chatActionCertification').replace('{name}', action.name), before: null, after: null }
     case 'update_education_notes':
       return {
-        label: t('cvEditor.chat.actionEducationNotes').replace('{institution}', edu?.institution || ''),
+        label: t('cvEditor.chatActionEducationNotes').replace('{institution}', edu?.institution || ''),
         before: edu?.notes,
         after: action.text,
       }
     case 'update_language_level':
       return {
-        label: t('cvEditor.chat.actionLanguageLevel').replace('{language}', language?.language || ''),
+        label: t('cvEditor.chatActionLanguageLevel').replace('{language}', language?.language || ''),
         before: language?.level,
         after: action.level,
       }
@@ -83,21 +83,28 @@ function describeAction(action, content, t) {
 function ActionCard({ action, content, t, decision, onDecide }) {
   const { label, before, after } = describeAction(action, content, t)
   return (
-    <div className="rounded-md border border-border bg-background p-2.5 text-xs">
-      <p className="mb-1 font-medium text-foreground">{label}</p>
-      {before ? <p className="text-muted-foreground line-through">{before}</p> : null}
-      {after ? <p className="text-foreground">{after}</p> : null}
+    <div
+      className={cn(
+        'rounded-lg border p-3 text-xs shadow-sm transition-opacity',
+        decision ? 'border-border bg-muted/40 opacity-70' : 'border-border bg-background',
+      )}
+    >
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      {before ? (
+        <p className="mb-1 rounded bg-destructive-soft px-2 py-1 text-destructive line-through">{before}</p>
+      ) : null}
+      {after ? <p className="rounded bg-success-soft px-2 py-1 text-success">{after}</p> : null}
       {decision ? (
-        <p className="mt-1.5 font-medium text-muted-foreground">
-          {decision === 'accepted' ? t('cvEditor.chat.accepted') : t('cvEditor.chat.rejected')}
+        <p className="mt-2 text-xs font-medium text-muted-foreground">
+          {decision === 'accepted' ? `✓ ${t('cvEditor.chatAccepted')}` : `✕ ${t('cvEditor.chatRejected')}`}
         </p>
       ) : (
-        <div className="mt-1.5 flex gap-2">
-          <Button type="button" size="sm" variant="secondary" onClick={() => onDecide('accepted')}>
-            {t('cvEditor.chat.accept')}
+        <div className="mt-2.5 flex gap-2">
+          <Button type="button" size="sm" variant="primary" onClick={() => onDecide('accepted')}>
+            {t('cvEditor.chatAccept')}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => onDecide('rejected')}>
-            {t('cvEditor.chat.reject')}
+            {t('cvEditor.chatReject')}
           </Button>
         </div>
       )}
@@ -143,9 +150,9 @@ export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClos
       setInput('')
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
-        setError(t('cvEditor.chat.errorCredit'))
+        setError(t('cvEditor.chatErrorCredit'))
       } else {
-        setError(t('cvEditor.chat.errorGeneric'))
+        setError(t('cvEditor.chatErrorGeneric'))
       }
     } finally {
       setSending(false)
@@ -158,18 +165,31 @@ export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClos
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/20 sm:bg-transparent">
-      <div className="flex h-full w-full max-w-sm flex-col border-l border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h2 className="text-sm font-semibold text-foreground">{t('cvEditor.chat.title')}</h2>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+      <div
+        className="flex h-full w-full max-w-sm flex-col bg-card shadow-2xl sm:rounded-l-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border p-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <h2 className="text-sm font-semibold text-foreground">{t('cvEditor.chatTitle')}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('cvEditor.chatClose')}
+            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {history.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('cvEditor.chat.empty')}</p>
+            <p className="text-xs text-muted-foreground">{t('cvEditor.chatEmpty')}</p>
           ) : (
             <div className="flex flex-col gap-3">
               {history.map((turn, messageIndex) => (
@@ -207,7 +227,7 @@ export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClos
 
         {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
-        <div className="flex items-end gap-2 border-t border-border p-3">
+        <div className="flex items-end gap-2 border-t border-border bg-muted/30 p-3">
           <Textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -217,11 +237,11 @@ export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClos
                 handleSend()
               }
             }}
-            placeholder={t('cvEditor.chat.placeholder')}
+            placeholder={t('cvEditor.chatPlaceholder')}
             className="min-h-10 flex-1 resize-none"
           />
           <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
-            {sending ? t('cvEditor.chat.sending') : t('cvEditor.chat.send')}
+            {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
           </Button>
         </div>
       </div>

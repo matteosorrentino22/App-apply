@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Sparkles, Trash2 } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchCvDraft,
@@ -370,14 +370,20 @@ export default function CvDraftEditorPage() {
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-balance">
-          {t('cvEditor.navTitle')} — {job?.title}
-        </h1>
-        <Button type="button" variant="secondary" onClick={() => setChatOpen(true)}>
-          {t('cvEditor.chat.toggle')}
-        </Button>
-      </div>
+      <h1 className="text-2xl font-bold tracking-tight text-balance">
+        {t('cvEditor.navTitle')} — {job?.title}
+      </h1>
+
+      {!chatOpen && (
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:bg-primary/90"
+        >
+          <Sparkles className="h-4 w-4" />
+          {t('cvEditor.chatToggle')}
+        </button>
+      )}
 
       {chatOpen && (
         <CvDraftChatPanel
