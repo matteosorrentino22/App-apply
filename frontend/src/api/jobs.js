@@ -67,8 +67,11 @@ export function fetchCvDraftChat(id) {
   return apiFetch(`/api/jobs/${id}/cv-draft/chat/`)
 }
 
-export function sendCvDraftChatMessage(id, message) {
-  return apiFetch(`/api/jobs/${id}/cv-draft/chat/`, { method: 'POST', body: { message } })
+export function sendCvDraftChatMessage(id, message, focusExperienceIds = []) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/chat/`, {
+    method: 'POST',
+    body: { message, focus_experience_ids: focusExperienceIds },
+  })
 }
 
 // Non passa da `apiFetch`: la risposta è un PDF binario, non JSON (serve

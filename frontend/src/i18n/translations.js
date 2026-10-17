@@ -370,6 +370,8 @@ export const translations = {
       chatActionCertification: 'Certificazione — {name}',
       chatActionEducationNotes: 'Note istruzione — {institution}',
       chatActionLanguageLevel: 'Livello lingua — {language}',
+      chatFocusToggle: 'Usa come contesto per la chat AI',
+      chatFocusLabel: 'Contesto:',
     },
     account: {
       navLink: 'Impostazioni',
@@ -776,6 +778,8 @@ export const translations = {
       chatActionCertification: 'Certification — {name}',
       chatActionEducationNotes: 'Education notes — {institution}',
       chatActionLanguageLevel: 'Language level — {language}',
+      chatFocusToggle: 'Use as context for the AI chat',
+      chatFocusLabel: 'Context:',
     },
     account: {
       navLink: 'Settings',

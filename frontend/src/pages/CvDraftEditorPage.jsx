@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageCircle, Sparkles, Trash2 } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchCvDraft,
@@ -22,6 +22,7 @@ import CvDraftChatPanel from '@/components/CvDraftChatPanel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
+import { cn } from '@/lib/utils'
 
 function moveItem(list, index, delta) {
   const target = index + delta
@@ -85,6 +86,20 @@ export default function CvDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  // Esperienze "puntate" come contesto per la chat (Sprint 60): clic sul
+  // pulsante sulla scheda di ciascuna esperienza, cumulabile su più
+  // esperienze insieme — niente di persistito, si azzera lasciando la
+  // pagina. Passato ad ogni messaggio così l'AI non deve indovinare a
+  // quale esperienza si riferiscono pronomi/numeri di bullet nel testo.
+  const [focusedExperienceIds, setFocusedExperienceIds] = useState([])
+
+  function toggleFocusExperience(profileExperienceId) {
+    setFocusedExperienceIds((current) =>
+      current.includes(profileExperienceId)
+        ? current.filter((id) => id !== profileExperienceId)
+        : [...current, profileExperienceId],
+    )
+  }
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
@@ -389,6 +404,7 @@ export default function CvDraftEditorPage() {
         open={chatOpen}
         jobId={id}
         content={content}
+        focusedExperienceIds={focusedExperienceIds}
         onApplyAction={applyChatAction}
         onClose={() => setChatOpen(false)}
       />
@@ -437,13 +453,29 @@ export default function CvDraftEditorPage() {
                         {exp.dates}
                       </p>
                     </div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={exp.shown}
-                        onCheckedChange={(checked) => updateExperience(expIndex, { shown: checked === true })}
-                      />
-                      {t('cvEditor.showInCv')}
-                    </label>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={exp.shown}
+                          onCheckedChange={(checked) => updateExperience(expIndex, { shown: checked === true })}
+                        />
+                        {t('cvEditor.showInCv')}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => toggleFocusExperience(exp.profile_experience_id)}
+                        aria-label={t('cvEditor.chatFocusToggle')}
+                        title={t('cvEditor.chatFocusToggle')}
+                        className={cn(
+                          'rounded-full p-1.5 transition-colors',
+                          focusedExperienceIds.includes(exp.profile_experience_id)
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mb-3 flex flex-col gap-1.5">

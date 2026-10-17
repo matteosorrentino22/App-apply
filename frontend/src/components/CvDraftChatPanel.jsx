@@ -112,7 +112,7 @@ function ActionCard({ action, content, t, decision, onDecide }) {
   )
 }
 
-export default function CvDraftChatPanel({ open, jobId, content, onApplyAction, onClose }) {
+export default function CvDraftChatPanel({ open, jobId, content, focusedExperienceIds, onApplyAction, onClose }) {
   const { t } = useLanguage()
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
@@ -146,7 +146,7 @@ export default function CvDraftChatPanel({ open, jobId, content, onApplyAction, 
     setSending(true)
     setError('')
     try {
-      const { reply, actions } = await sendCvDraftChatMessage(jobId, message)
+      const { reply, actions } = await sendCvDraftChatMessage(jobId, message, focusedExperienceIds)
       setHistory((current) => [
         ...current,
         { role: 'user', message },
@@ -169,86 +169,101 @@ export default function CvDraftChatPanel({ open, jobId, content, onApplyAction, 
     if (decision === 'accepted') onApplyAction(action)
   }
 
+  const focusedCompanies = (focusedExperienceIds || [])
+    .map((experienceId) => findExperience(content, experienceId)?.company)
+    .filter(Boolean)
+
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-sm flex-col bg-card shadow-2xl sm:rounded-l-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-border p-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Sparkles className="h-4 w-4" />
+    // Niente sfondo/overlay a tutta pagina (Sprint 60): a differenza del
+    // primo rilascio, qui il pannello deve restare apribile mentre si
+    // clicca sulle schede delle esperienze a sinistra per "puntarle" come
+    // contesto — un overlay che intercetta i click fuori dal pannello lo
+    // impedirebbe. Si chiude solo con il pulsante X.
+    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col bg-card shadow-2xl sm:rounded-l-2xl">
+      <div className="flex items-center justify-between gap-2 border-b border-border p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <h2 className="text-sm font-semibold text-foreground">{t('cvEditor.chatTitle')}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('cvEditor.chatClose')}
+          className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {focusedCompanies.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-b border-border bg-primary/5 px-4 py-2">
+          <span className="text-[11px] font-medium text-muted-foreground">{t('cvEditor.chatFocusLabel')}</span>
+          {focusedCompanies.map((company, index) => (
+            <span key={index} className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+              {company}
             </span>
-            <h2 className="text-sm font-semibold text-foreground">{t('cvEditor.chatTitle')}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('cvEditor.chatClose')}
-            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          ))}
         </div>
+      )}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-          {history.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('cvEditor.chatEmpty')}</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {history.map((turn, messageIndex) => (
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        {history.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('cvEditor.chatEmpty')}</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {history.map((turn, messageIndex) => (
+              <div
+                key={messageIndex}
+                className={cn('flex flex-col gap-2', turn.role === 'user' ? 'items-end' : 'items-start')}
+              >
                 <div
-                  key={messageIndex}
-                  className={cn('flex flex-col gap-2', turn.role === 'user' ? 'items-end' : 'items-start')}
-                >
-                  <div
-                    className={cn(
-                      'max-w-[90%] rounded-lg px-3 py-2 text-sm',
-                      turn.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
-                    )}
-                  >
-                    {turn.message}
-                  </div>
-                  {turn.actions?.length > 0 && (
-                    <div className="flex w-[90%] flex-col gap-2">
-                      {turn.actions.map((action, actionIndex) => (
-                        <ActionCard
-                          key={actionIndex}
-                          action={action}
-                          content={content}
-                          t={t}
-                          decision={decisions[`${messageIndex}-${actionIndex}`]}
-                          onDecide={(decision) => handleDecide(messageIndex, actionIndex, action, decision)}
-                        />
-                      ))}
-                    </div>
+                  className={cn(
+                    'max-w-[90%] rounded-lg px-3 py-2 text-sm',
+                    turn.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
                   )}
+                >
+                  {turn.message}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                {turn.actions?.length > 0 && (
+                  <div className="flex w-[90%] flex-col gap-2">
+                    {turn.actions.map((action, actionIndex) => (
+                      <ActionCard
+                        key={actionIndex}
+                        action={action}
+                        content={content}
+                        t={t}
+                        decision={decisions[`${messageIndex}-${actionIndex}`]}
+                        onDecide={(decision) => handleDecide(messageIndex, actionIndex, action, decision)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-        {error && <p className="px-4 text-xs text-destructive">{error}</p>}
+      {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
-        <div className="flex items-end gap-2 border-t border-border bg-muted/30 p-3">
-          <Textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                handleSend()
-              }
-            }}
-            placeholder={t('cvEditor.chatPlaceholder')}
-            className="min-h-10 flex-1 resize-none"
-          />
-          <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
-            {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
-          </Button>
-        </div>
+      <div className="flex items-end gap-2 border-t border-border bg-muted/30 p-3">
+        <Textarea
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              handleSend()
+            }
+          }}
+          placeholder={t('cvEditor.chatPlaceholder')}
+          className="min-h-10 flex-1 resize-none"
+        />
+        <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
+          {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
+        </Button>
       </div>
     </div>
   )
