@@ -67,10 +67,16 @@ export function fetchCvDraftChat(id) {
   return apiFetch(`/api/jobs/${id}/cv-draft/chat/`)
 }
 
-export function sendCvDraftChatMessage(id, message, focusExperienceIds = []) {
+export function sendCvDraftChatMessage(id, message, focusedBullets = []) {
   return apiFetch(`/api/jobs/${id}/cv-draft/chat/`, {
     method: 'POST',
-    body: { message, focus_experience_ids: focusExperienceIds },
+    body: {
+      message,
+      focus_bullets: focusedBullets.map(({ profileExperienceId, bulletIndex }) => ({
+        profile_experience_id: profileExperienceId,
+        bullet_index: bulletIndex,
+      })),
+    },
   })
 }
 

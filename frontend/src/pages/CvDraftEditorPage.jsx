@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, MessageCircle, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Sparkles, Trash2 } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchCvDraft,
@@ -86,18 +86,29 @@ export default function CvDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
-  // Esperienze "puntate" come contesto per la chat (Sprint 60): clic sul
-  // pulsante sulla scheda di ciascuna esperienza, cumulabile su più
-  // esperienze insieme — niente di persistito, si azzera lasciando la
-  // pagina. Passato ad ogni messaggio così l'AI non deve indovinare a
-  // quale esperienza si riferiscono pronomi/numeri di bullet nel testo.
-  const [focusedExperienceIds, setFocusedExperienceIds] = useState([])
+  // Bullet "puntati" come contesto per la chat (Sprint 61): clic sul
+  // pulsante sotto la spunta mostra/nascondi di ciascun singolo bullet,
+  // cumulabile su più bullet anche di esperienze diverse — niente di
+  // persistito, si azzera lasciando la pagina. Passato ad ogni messaggio
+  // così l'AI non deve indovinare a quale bullet si riferiscono pronomi o
+  // frasi generiche nel testo. Chiave: `profile_experience_id` + indice
+  // del bullet in quell'esperienza (stessa logica posizionale già usata
+  // dalle azioni che l'AI propone).
+  const [focusedBullets, setFocusedBullets] = useState([])
 
-  function toggleFocusExperience(profileExperienceId) {
-    setFocusedExperienceIds((current) =>
-      current.includes(profileExperienceId)
-        ? current.filter((id) => id !== profileExperienceId)
-        : [...current, profileExperienceId],
+  function isBulletFocused(profileExperienceId, bulletIndex) {
+    return focusedBullets.some(
+      (item) => item.profileExperienceId === profileExperienceId && item.bulletIndex === bulletIndex,
+    )
+  }
+
+  function toggleFocusBullet(profileExperienceId, bulletIndex) {
+    setFocusedBullets((current) =>
+      isBulletFocused(profileExperienceId, bulletIndex)
+        ? current.filter(
+            (item) => !(item.profileExperienceId === profileExperienceId && item.bulletIndex === bulletIndex),
+          )
+        : [...current, { profileExperienceId, bulletIndex }],
     )
   }
 
@@ -404,7 +415,7 @@ export default function CvDraftEditorPage() {
         open={chatOpen}
         jobId={id}
         content={content}
-        focusedExperienceIds={focusedExperienceIds}
+        focusedBullets={focusedBullets}
         onApplyAction={applyChatAction}
         onClose={() => setChatOpen(false)}
       />
@@ -453,29 +464,13 @@ export default function CvDraftEditorPage() {
                         {exp.dates}
                       </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={exp.shown}
-                          onCheckedChange={(checked) => updateExperience(expIndex, { shown: checked === true })}
-                        />
-                        {t('cvEditor.showInCv')}
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => toggleFocusExperience(exp.profile_experience_id)}
-                        aria-label={t('cvEditor.chatFocusToggle')}
-                        title={t('cvEditor.chatFocusToggle')}
-                        className={cn(
-                          'rounded-full p-1.5 transition-colors',
-                          focusedExperienceIds.includes(exp.profile_experience_id)
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        )}
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={exp.shown}
+                        onCheckedChange={(checked) => updateExperience(expIndex, { shown: checked === true })}
+                      />
+                      {t('cvEditor.showInCv')}
+                    </label>
                   </div>
 
                   <div className="mb-3 flex flex-col gap-1.5">
@@ -497,13 +492,28 @@ export default function CvDraftEditorPage() {
                           onMove={(i, delta) => moveBullet(expIndex, i, delta)}
                           t={t}
                         />
-                        <Checkbox
-                          className="mt-2.5"
-                          checked={bullet.shown}
-                          onCheckedChange={(checked) =>
-                            updateBullet(expIndex, bulletIndex, { shown: checked === true })
-                          }
-                        />
+                        <div className="mt-2.5 flex flex-col items-center gap-1.5">
+                          <Checkbox
+                            checked={bullet.shown}
+                            onCheckedChange={(checked) =>
+                              updateBullet(expIndex, bulletIndex, { shown: checked === true })
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleFocusBullet(exp.profile_experience_id, bulletIndex)}
+                            aria-label={t('cvEditor.chatFocusToggle')}
+                            title={t('cvEditor.chatFocusToggle')}
+                            className={cn(
+                              'rounded-full p-1',
+                              isBulletFocused(exp.profile_experience_id, bulletIndex)
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                            )}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                          </button>
+                        </div>
                         <RichBulletInput
                           value={bullet.text}
                           onChange={(text) => updateBullet(expIndex, bulletIndex, { text })}

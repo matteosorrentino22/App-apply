@@ -187,11 +187,17 @@ class CvDraftChatView(APIView):
         message = (request.data.get("message") or "").strip()
         if not message:
             return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
-        raw_focus_ids = request.data.get("focus_experience_ids") or []
-        focus_experience_ids = [value for value in raw_focus_ids if isinstance(value, int)]
+        raw_focus_bullets = request.data.get("focus_bullets") or []
+        focus_bullets = [
+            item
+            for item in raw_focus_bullets
+            if isinstance(item, dict)
+            and isinstance(item.get("profile_experience_id"), int)
+            and isinstance(item.get("bullet_index"), int)
+        ]
 
         try:
-            reply, actions = send_chat_message(job, message, focus_experience_ids=focus_experience_ids)
+            reply, actions = send_chat_message(job, message, focus_bullets=focus_bullets)
         except ChatMessageRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
         except ChatMessageFailed as exc:

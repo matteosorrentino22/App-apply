@@ -11,6 +11,11 @@ function findExperience(content, profileExperienceId) {
   return content.experiences.find((exp) => exp.profile_experience_id === profileExperienceId)
 }
 
+function truncate(text, maxLength) {
+  if (!text) return ''
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}…` : text
+}
+
 // Etichetta leggibile di una singola azione proposta (Sprint 59): usata sia
 // per il titolo della card sia per il "prima" mostrato all'utente — nessuna
 // chiamata di rete, solo lettura dello stato attuale della bozza (`content`,
@@ -112,7 +117,7 @@ function ActionCard({ action, content, t, decision, onDecide }) {
   )
 }
 
-export default function CvDraftChatPanel({ open, jobId, content, focusedExperienceIds, onApplyAction, onClose }) {
+export default function CvDraftChatPanel({ open, jobId, content, focusedBullets, onApplyAction, onClose }) {
   const { t } = useLanguage()
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
@@ -146,7 +151,7 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedExperien
     setSending(true)
     setError('')
     try {
-      const { reply, actions } = await sendCvDraftChatMessage(jobId, message, focusedExperienceIds)
+      const { reply, actions } = await sendCvDraftChatMessage(jobId, message, focusedBullets)
       setHistory((current) => [
         ...current,
         { role: 'user', message },
@@ -169,14 +174,17 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedExperien
     if (decision === 'accepted') onApplyAction(action)
   }
 
-  const focusedCompanies = (focusedExperienceIds || [])
-    .map((experienceId) => findExperience(content, experienceId)?.company)
+  const focusedSnippets = (focusedBullets || [])
+    .map(({ profileExperienceId, bulletIndex }) => {
+      const exp = findExperience(content, profileExperienceId)
+      return truncate(exp?.bullets?.[bulletIndex]?.text, 40)
+    })
     .filter(Boolean)
 
   return (
     // Niente sfondo/overlay a tutta pagina (Sprint 60): a differenza del
     // primo rilascio, qui il pannello deve restare apribile mentre si
-    // clicca sulle schede delle esperienze a sinistra per "puntarle" come
+    // clicca sui bullet dell'editor a sinistra per "puntarli" come
     // contesto — un overlay che intercetta i click fuori dal pannello lo
     // impedirebbe. Si chiude solo con il pulsante X.
     <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col bg-card shadow-2xl sm:rounded-l-2xl">
@@ -196,17 +204,6 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedExperien
           <X className="h-4 w-4" />
         </button>
       </div>
-
-      {focusedCompanies.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-b border-border bg-primary/5 px-4 py-2">
-          <span className="text-[11px] font-medium text-muted-foreground">{t('cvEditor.chatFocusLabel')}</span>
-          {focusedCompanies.map((company, index) => (
-            <span key={index} className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
-              {company}
-            </span>
-          ))}
-        </div>
-      )}
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         {history.length === 0 ? (
@@ -248,22 +245,34 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedExperien
 
       {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
-      <div className="flex items-end gap-2 border-t border-border bg-muted/30 p-3">
-        <Textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              handleSend()
-            }
-          }}
-          placeholder={t('cvEditor.chatPlaceholder')}
-          className="min-h-10 flex-1 resize-none"
-        />
-        <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
-          {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
-        </Button>
+      <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-3">
+        {focusedSnippets.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">{t('cvEditor.chatFocusLabel')}</span>
+            {focusedSnippets.map((snippet, index) => (
+              <span key={index} className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {snippet}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder={t('cvEditor.chatPlaceholder')}
+            className="min-h-10 flex-1 resize-none"
+          />
+          <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
+            {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
+          </Button>
+        </div>
       </div>
     </div>
   )

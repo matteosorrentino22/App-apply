@@ -123,32 +123,45 @@ CHAT_SYSTEM_PROMPT = (
     "Gli indici (bullet_index, area_index, education_index, "
     "language_index) si riferiscono sempre alla posizione nell'elenco così "
     "come te lo fornisco in questo messaggio, a partire da 0.\n\n"
-    "ESPERIENZE PUNTATE: se il messaggio include un blocco 'ESPERIENZE "
-    "PUNTATE DALL'UTENTE', l'utente le ha selezionate esplicitamente "
-    "nell'interfaccia (un pulsante su ogni scheda esperienza) come "
-    "riferimento per questo messaggio — usale per risolvere pronomi o "
-    "riferimenti generici ('questa esperienza', 'il secondo punto') invece "
-    "di indovinare dal solo testo. Se il messaggio nomina chiaramente "
-    "un'azienda diversa da quelle puntate, segui comunque il testo: le "
-    "esperienze puntate sono un aiuto per i casi ambigui, non un vincolo "
-    "assoluto."
+    "BULLET PUNTATI: se il messaggio include un blocco 'BULLET PUNTATI "
+    "DALL'UTENTE', l'utente ha selezionato esplicitamente quei singoli "
+    "bullet nell'interfaccia (un pulsante su ciascuna singola attività, "
+    "non sull'intera esperienza) come riferimento per questo messaggio — "
+    "usali per risolvere pronomi o riferimenti generici ('questo punto', "
+    "'questa attività') invece di indovinare dal solo testo. Se il "
+    "messaggio nomina chiaramente un'azienda o un bullet diverso da quelli "
+    "puntati, segui comunque il testo: i bullet puntati sono un aiuto per "
+    "i casi ambigui, non un vincolo assoluto."
 )
 
 
-def _build_user_content(draft, job, profile, chat_history, user_message, focus_experience_ids):
+def _build_user_content(draft, job, profile, chat_history, user_message, focus_bullets):
     profile_skill_names = [skill.name for skill in profile.skills.all()]
     profile_certification_names = [cert.name for cert in profile.certifications.all()]
     history_lines = [
         {"role": turn["role"], "message": turn["message"]} for turn in chat_history
     ]
-    focused_experiences = [
-        exp
-        for exp in draft.content_json.get("experiences", [])
-        if exp["profile_experience_id"] in (focus_experience_ids or [])
-    ]
+    experiences_by_id = {
+        exp["profile_experience_id"]: exp for exp in draft.content_json.get("experiences", [])
+    }
+    focused_bullets_info = []
+    for ref in focus_bullets or []:
+        exp = experiences_by_id.get(ref["profile_experience_id"])
+        bullets = exp["bullets"] if exp else []
+        if exp is None or ref["bullet_index"] >= len(bullets):
+            continue
+        focused_bullets_info.append(
+            {
+                "profile_experience_id": exp["profile_experience_id"],
+                "company": exp["company"],
+                "role": exp["role"],
+                "bullet_index": ref["bullet_index"],
+                "bullet_text": bullets[ref["bullet_index"]]["text"],
+            }
+        )
     focus_block = (
-        f"\n\nESPERIENZE PUNTATE DALL'UTENTE: {json.dumps(focused_experiences, ensure_ascii=False)}"
-        if focused_experiences
+        f"\n\nBULLET PUNTATI DALL'UTENTE: {json.dumps(focused_bullets_info, ensure_ascii=False)}"
+        if focused_bullets_info
         else ""
     )
     return (
@@ -213,15 +226,16 @@ def _refund_credit(user):
         locked_user.save(update_fields=["extra_credit"])
 
 
-def send_chat_message(job, user_message, focus_experience_ids=None):
-    """Punto d'ingresso della chat (Sprint 59, `focus_experience_ids`
-    Sprint 60): riserva il credito del messaggio, chiama Claude con la
-    bozza corrente come contesto, applica il filtro di grounding difensivo
-    sulle azioni, e accoda sia il messaggio dell'utente sia la risposta
-    alla cronologia persistita nel draft. Nessuna modifica al
-    `content_json` del draft: resta compito del frontend applicare le
-    azioni che l'utente accetta, con un PATCH separato (`CvDraftView`) —
-    stessa autosave già esistente di Fase 1."""
+def send_chat_message(job, user_message, focus_bullets=None):
+    """Punto d'ingresso della chat (Sprint 59, `focus_bullets` Sprint 61,
+    riferimento a singoli bullet invece che a intere esperienze): riserva
+    il credito del messaggio, chiama Claude con la bozza corrente come
+    contesto, applica il filtro di grounding difensivo sulle azioni, e
+    accoda sia il messaggio dell'utente sia la risposta alla cronologia
+    persistita nel draft. Nessuna modifica al `content_json` del draft:
+    resta compito del frontend applicare le azioni che l'utente accetta,
+    con un PATCH separato (`CvDraftView`) — stessa autosave già esistente
+    di Fase 1."""
     try:
         draft = job.cv_draft
     except CVDraft.DoesNotExist as exc:
@@ -237,7 +251,7 @@ def send_chat_message(job, user_message, focus_experience_ids=None):
             model=settings.BEDROCK_CV_GENERATION_MODEL,
             system=CHAT_SYSTEM_PROMPT,
             user_content=_build_user_content(
-                draft, job, profile, draft.chat_history, user_message, focus_experience_ids
+                draft, job, profile, draft.chat_history, user_message, focus_bullets
             ),
             schema=CHAT_SCHEMA,
             max_tokens=2000,
