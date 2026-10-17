@@ -385,14 +385,13 @@ export default function CvDraftEditorPage() {
         </button>
       )}
 
-      {chatOpen && (
-        <CvDraftChatPanel
-          jobId={id}
-          content={content}
-          onApplyAction={applyChatAction}
-          onClose={() => setChatOpen(false)}
-        />
-      )}
+      <CvDraftChatPanel
+        open={chatOpen}
+        jobId={id}
+        content={content}
+        onApplyAction={applyChatAction}
+        onClose={() => setChatOpen(false)}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-5">

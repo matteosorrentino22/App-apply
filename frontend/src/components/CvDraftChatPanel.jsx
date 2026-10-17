@@ -112,16 +112,19 @@ function ActionCard({ action, content, t, decision, onDecide }) {
   )
 }
 
-export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClose }) {
+export default function CvDraftChatPanel({ open, jobId, content, onApplyAction, onClose }) {
   const { t } = useLanguage()
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   // Clé = "<indice messaggio>-<indice azione>" → 'accepted' | 'rejected'
-  // (Sprint 59): solo in memoria, non persistita — alla ricarica della
-  // pagina le card tornano in attesa di decisione, scelta deliberata per
-  // non aggiungere un giro di rete solo per questo stato ausiliario.
+  // (Sprint 59): solo in memoria, non persistita sul server — ma il
+  // componente resta montato anche a pannello chiuso (vedi `if (!open)
+  // return null` sotto, DOPO gli hook: il genitore lo rende sempre, mai
+  // dentro un `{chatOpen && ...}`) così chiudere e riaprire la chat non
+  // perde le decisioni già prese — perderle solo ricaricando la pagina è
+  // una scelta deliberata, per non aggiungere un giro di rete in più.
   const [decisions, setDecisions] = useState({})
   const scrollRef = useRef(null)
 
@@ -134,6 +137,8 @@ export default function CvDraftChatPanel({ jobId, content, onApplyAction, onClos
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [history])
+
+  if (!open) return null
 
   async function handleSend() {
     const message = input.trim()
