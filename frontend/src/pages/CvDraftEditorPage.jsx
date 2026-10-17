@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import RichBulletInput from '@/components/RichBulletInput'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
@@ -389,10 +390,9 @@ export default function CvDraftEditorPage() {
                             updateBullet(expIndex, bulletIndex, { shown: checked === true })
                           }
                         />
-                        <Textarea
+                        <RichBulletInput
                           value={bullet.text}
-                          onChange={(event) => updateBullet(expIndex, bulletIndex, { text: event.target.value })}
-                          className="min-h-16 flex-1"
+                          onChange={(text) => updateBullet(expIndex, bulletIndex, { text })}
                         />
                         <button
                           type="button"

@@ -1,3 +1,4 @@
+{% load cv_extras %}
 <!DOCTYPE html>
 <html lang="{{ html_lang }}">
 <head>
@@ -248,7 +249,7 @@
             {% if exp.bullets %}
             <ul class="bullets">
                 {% for bullet in exp.bullets %}
-                <li>{{ bullet }}</li>
+                <li>{{ bullet|bold_markup }}</li>
                 {% endfor %}
             </ul>
             {% endif %}
