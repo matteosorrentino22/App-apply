@@ -9,7 +9,7 @@ from weasyprint import HTML
 # ri-renderizzato sempre a questa stessa dimensione): mai un font più
 # piccolo, nel caso residuo si accetta un PDF multi-pagina.
 COMPACT_LEVELS = [
-    {"base_font_size": 9, "line_height": "1.25", "section_gap": "9pt", "heading_gap": "4pt", "item_gap": "7pt", "page_margin": "1.4cm", "photo_size": "65pt"},
+    {"base_font_size": 9, "line_height": "1.25", "section_gap": "8pt", "heading_gap": "4pt", "item_gap": "6pt", "page_margin": "1cm", "photo_size": "65pt"},
 ]
 
 # Stessa logica di COMPACT_LEVELS, senza `photo_size` (la cover letter non ha
