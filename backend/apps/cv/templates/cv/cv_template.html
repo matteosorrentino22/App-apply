@@ -154,12 +154,15 @@
         gap: 1pt 16pt;
     }
     ul.bullets li, .areas-list li {
-        padding-left: 12pt;
+        /* text-indent resta -12pt: solo padding-left sale, così marcatore
+        e testo si spostano insieme a destra di 4pt rispetto a prima
+        (12pt-12pt=0 → 16pt-12pt=4pt), senza cambiare lo spazio tra i due. */
+        padding-left: 16pt;
         text-indent: -12pt;
     }
     ul.bullets li::before, .areas-list li::before {
         content: "•";
-        font-size: {{ base_font_size|add:3 }}pt;
+        font-size: {{ base_font_size|add:5 }}pt;
         line-height: 0;
         vertical-align: -1pt;
         padding-right: 5pt;
