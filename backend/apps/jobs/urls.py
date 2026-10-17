@@ -5,7 +5,10 @@ from .views import (
     CollectJobsView,
     CoverLetterInstructionsView,
     CreateManualJobView,
+    CvDraftPreviewView,
+    CvDraftView,
     FavoriteJobView,
+    FinalizeCvDraftView,
     GenerateCoverLetterView,
     GenerateCvView,
     GenerateReferralMessageView,
@@ -28,6 +31,17 @@ urlpatterns = [
     path("jobs/stats/", HomeStatsView.as_view(), name="job-stats"),
     path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
     path("jobs/<int:pk>/generate-cv/", GenerateCvView.as_view(), name="job-generate-cv"),
+    path("jobs/<int:pk>/cv-draft/", CvDraftView.as_view(), name="job-cv-draft"),
+    path(
+        "jobs/<int:pk>/cv-draft/preview/",
+        CvDraftPreviewView.as_view(),
+        name="job-cv-draft-preview",
+    ),
+    path(
+        "jobs/<int:pk>/cv-draft/finalize/",
+        FinalizeCvDraftView.as_view(),
+        name="job-cv-draft-finalize",
+    ),
     path(
         "jobs/<int:pk>/generate-cover-letter/",
         GenerateCoverLetterView.as_view(),

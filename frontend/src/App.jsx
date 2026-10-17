@@ -13,6 +13,7 @@ import OnboardingPage from './pages/onboarding/OnboardingPage'
 import HomePage from './pages/HomePage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
+import CvDraftEditorPage from './pages/CvDraftEditorPage'
 import AccountPage from './pages/AccountPage'
 import ProfilePage from './pages/ProfilePage'
 
@@ -113,6 +114,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <JobDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/jobs/:id/cv-editor"
+                element={
+                  <ProtectedRoute>
+                    <CvDraftEditorPage />
                   </ProtectedRoute>
                 }
               />

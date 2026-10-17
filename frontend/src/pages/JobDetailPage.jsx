@@ -486,6 +486,12 @@ export default function JobDetailPage() {
           </Button>
         )}
 
+        {job.cv_pdf_url && (
+          <Button variant="secondary" asChild>
+            <Link to={`/jobs/${id}/cv-editor`}>{t('cvEditor.editCvButton')}</Link>
+          </Button>
+        )}
+
         <Button
           type="button"
           variant="secondary"

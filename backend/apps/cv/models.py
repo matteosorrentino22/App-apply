@@ -26,9 +26,38 @@ class CVDocument(models.Model):
     # in fase di tuning del prompt (verificare che le aree siano riconducibili
     # a contenuto reale del profilo). Dato di servizio, non una nuova tabella.
     areas_of_expertise_grounding = models.JSONField(default=list, blank=True)
+    # Snapshot strutturato del contenuto (Sprint 51, editor CV): prima si
+    # salvava solo l'HTML finale, mai la struttura — senza questo campo non
+    # si potrebbe riaprire un CV già generato (automatico o manuale) in
+    # `CVDraft` per modificarlo. Vuoto (`{}`) per i CVDocument creati prima
+    # di questo campo. Vedi `apps.cv.draft` per la forma esatta.
+    content_json = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"CV — {self.job} ({self.generated_at})"
+
+
+class CVDraft(models.Model):
+    """Copia di lavoro, modificabile, del contenuto strutturato di un CV
+    (Sprint 51): a differenza di `CVDocument`, non ha mai un PDF proprio —
+    serve solo come stato intermedio tra "generato dall'AI" e "PDF finale".
+    Un solo draft "corrente" per job (non uno storico): aprire di nuovo
+    l'editor o generare un nuovo CV sovrascrive il draft esistente, non lo
+    duplica. Il PDF finale nasce da `apps.cv.draft.finalize_cv_draft`, che
+    riusa la stessa pipeline di rendering di `generate_cv` ma senza
+    richiamare Claude né il taglio automatico al budget — qui le scelte sono
+    già quelle dell'utente."""
+
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cv_draft")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cv_drafts"
+    )
+    content_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Draft CV — {self.job} ({self.updated_at})"
 
 
 class CoverLetterDocument(models.Model):

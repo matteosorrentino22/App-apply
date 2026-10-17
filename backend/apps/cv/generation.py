@@ -201,7 +201,11 @@ def _attach_facts(ai_experiences, profile, ongoing_label):
     """`location`/`dates`/`technologies` sono dati fattuali del profilo, non
     riformulati dall'AI (grounding): il prompt garantisce stesso ordine e
     stesso numero di voci in output (Docs/03 §11 punto 3), quindi si
-    riattaccano per indice invece di chiederli al modello."""
+    riattaccano per indice invece di chiederli al modello.
+    `profile_experience_id` (Sprint 51): sopravvive a tutte le trasformazioni
+    successive (shallow copy ovunque) fino al CV finale e al draft — è la
+    chiave con cui l'editor fa corrispondere ciò che l'AI ha prodotto
+    all'esperienza reale del profilo da cui viene."""
     ordered_profile_experiences = list(
         profile.experiences.all().order_by("-end_date", "-start_date")
     )
@@ -211,6 +215,7 @@ def _attach_facts(ai_experiences, profile, ongoing_label):
         result.append(
             {
                 **exp,
+                "profile_experience_id": profile_experience.pk,
                 "location": _format_location(
                     profile_experience.location, profile_experience.location_country_code
                 ),
@@ -229,10 +234,17 @@ def _build_shown_experiences(content, bullet_budget, profile, ongoing_label):
     per punto 3. I bullet restano dict `{text, relevance_rank}` — il loop di
     ripiego per overflow (§6) deve poterli continuare a rimuovere per
     rilevanza; l'appiattimento a stringa avviene solo subito prima del primo
-    rendering (`generate_cv`)."""
+    rendering (`generate_cv`).
+
+    Ritorna anche `with_facts` (Sprint 51): la lista COMPLETA, con tutti i
+    bullet prodotti dall'AI per ogni esperienza del profilo, prima del
+    taglio al cap/budget — serve a `apps.cv.draft` per costruire il draft
+    con tutti i bullet disponibili (non solo quelli sopravvissuti), ciascuno
+    con un flag mostra/nascondi che riflette la selezione automatica senza
+    perdere ciò che è stato tagliato."""
     with_facts = _attach_facts(content["experiences"], profile, ongoing_label)
     selected = select_and_cut_experiences(with_facts, bullet_budget)
-    return [
+    shown = [
         {
             "company": exp["company"],
             "role": exp["role"],
@@ -240,9 +252,11 @@ def _build_shown_experiences(content, bullet_budget, profile, ongoing_label):
             "dates": exp["dates"],
             "bullets": exp["bullets"],
             "technologies": exp["technologies"],
+            "profile_experience_id": exp["profile_experience_id"],
         }
         for exp in selected
     ]
+    return shown, with_facts
 
 
 def _build_render_context(user, profile, content):
@@ -253,7 +267,11 @@ def _build_render_context(user, profile, content):
     profile_skill_names = {skill.name for skill in profile.skills.all()}
     profile_certification_names = {cert.name for cert in profile.certifications.all()}
 
-    return {
+    shown_experiences, full_pool_experiences = _build_shown_experiences(
+        content, bullet_budget, profile, ongoing_label
+    )
+
+    context = {
         "html_lang": html_lang,
         "labels": SECTION_LABELS[html_lang],
         "full_name": _build_full_name(user),
@@ -262,11 +280,77 @@ def _build_render_context(user, profile, content):
         "qualification": content["qualification"],
         "summary": content["summary"],
         "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
-        "experiences": _build_shown_experiences(content, bullet_budget, profile, ongoing_label),
+        "experiences": shown_experiences,
         "educations": shown_educations,
         "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
         "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
         "languages": _build_languages(profile, html_lang),
+    }
+    return context, full_pool_experiences, html_lang, ongoing_label
+
+
+def build_draft_content_json(
+    content, full_pool_experiences, final_experiences, profile, html_lang, ongoing_label
+):
+    """Struttura dati editabile per `CVDraft`/`CVDocument.content_json`
+    (Sprint 51): a differenza di `context["experiences"]` (già tagliato al
+    budget, bullet appiattiti a stringa), qui ogni esperienza del profilo
+    compare con TUTTI i suoi bullet, ciascuno con un flag `shown` che
+    riflette la selezione automatica — l'utente può riaccendere un bullet
+    tagliato senza riscriverlo. Stesso principio per le esperienze escluse
+    dal cap delle 5 mostrate: compaiono con `shown=False`, mai eliminate."""
+    final_by_id = {exp["profile_experience_id"]: exp for exp in final_experiences}
+    experiences_json = []
+    for exp in full_pool_experiences:
+        final = final_by_id.get(exp["profile_experience_id"])
+        shown_bullet_texts = set(final["bullets"]) if final else None
+        bullets_json = [
+            {
+                "text": bullet["text"],
+                "shown": True if shown_bullet_texts is None else bullet["text"] in shown_bullet_texts,
+            }
+            for bullet in exp["bullets"]
+        ]
+        experiences_json.append(
+            {
+                "profile_experience_id": exp["profile_experience_id"],
+                "company": exp["company"],
+                "role": exp["role"],
+                "location": exp["location"],
+                "dates": exp["dates"],
+                "technologies": exp["technologies"],
+                "shown": final is not None,
+                "bullets": bullets_json,
+            }
+        )
+
+    educations_json = [
+        {
+            "institution": edu.institution,
+            "title": edu.title,
+            "location": _format_location(edu.location, edu.location_country_code),
+            "dates": _format_date_range(edu.start_date, edu.end_date, ongoing_label),
+            "notes": edu.notes,
+        }
+        for edu in select_educations_to_show(list(profile.educations.all()))
+    ]
+    languages_json = [
+        {"language": lang.language, "level": lang.level} for lang in profile.languages.all()
+    ]
+    profile_skill_names = {skill.name for skill in profile.skills.all()}
+    profile_certification_names = {cert.name for cert in profile.certifications.all()}
+
+    return {
+        "summary": content["summary"],
+        "qualification": content["qualification"],
+        "translated_city": content["translated_city"],
+        "content_language": html_lang,
+        "areas_of_expertise": [area["label"] for area in content["areas_of_expertise"]],
+        "experiences": experiences_json,
+        "educations": educations_json,
+        "skills": _filter_grounded_skills(content["skills"], profile_skill_names),
+        "certifications": _filter_grounded_skills(content["certifications"], profile_certification_names),
+        "languages": languages_json,
     }
 
 
@@ -330,8 +414,14 @@ def generate_cv(job, generation_type, extra_instructions=""):
         raise ProfileIncomplete("Il profilo non ha ancora almeno un titolo di studio.")
 
     content = generate_cv_content(profile, job, user.cv_language_mode, extra_instructions)
-    context = _build_render_context(user, profile, content)
+    context, full_pool_experiences, html_lang, ongoing_label = _build_render_context(
+        user, profile, content
+    )
     html, pdf_bytes = _render_with_overflow_retry(job, context)
+
+    content_json = build_draft_content_json(
+        content, full_pool_experiences, context["experiences"], profile, html_lang, ongoing_label
+    )
 
     cv_document = CVDocument.objects.create(
         job=job,
@@ -339,6 +429,7 @@ def generate_cv(job, generation_type, extra_instructions=""):
         html_source=html,
         generation_type=generation_type,
         extra_instructions_used=extra_instructions,
+        content_json=content_json,
         areas_of_expertise_grounding=[
             {"label": area["label"], "grounding_reference": area["grounding_reference"]}
             for area in content["areas_of_expertise"]

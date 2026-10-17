@@ -1,4 +1,4 @@
-import { apiFetch } from './client'
+import { apiFetch, getToken } from './client'
 
 export function fetchJobs({
   section = 'main',
@@ -45,6 +45,45 @@ export function generateCv(id, gaps = [], gapInstructions = '') {
     method: 'POST',
     body: { gaps, gap_instructions: gapInstructions },
   })
+}
+
+export function openCvDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/`, { method: 'POST', body: {} })
+}
+
+export function fetchCvDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/`)
+}
+
+export function updateCvDraft(id, content) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/`, { method: 'PATCH', body: content })
+}
+
+export function finalizeCvDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/finalize/`, { method: 'POST', body: {} })
+}
+
+// Non passa da `apiFetch`: la risposta è un PDF binario, non JSON (serve
+// leggerla come blob), e il conteggio pagine arriva in un header custom,
+// non nel body — un fetch diretto resta più semplice che adattare il
+// wrapper generico per questo unico caso.
+export async function previewCvDraft(id, content) {
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers.Authorization = `Token ${token}`
+
+  const response = await fetch(`/api/jobs/${id}/cv-draft/preview/`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(content),
+  })
+  if (!response.ok) {
+    throw new Error('Preview non disponibile')
+  }
+  const pageCount = Number(response.headers.get('X-Page-Count')) || 1
+  const blob = await response.blob()
+  return { blob, pageCount }
 }
 
 export function generateCoverLetter(id, instructions) {

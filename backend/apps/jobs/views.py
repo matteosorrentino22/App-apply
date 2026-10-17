@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.http import HttpResponse
 from rest_framework import permissions, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
@@ -11,13 +12,20 @@ from apps.cv.cover_letter_manual_generation import (
     get_recent_instructions,
     request_cover_letter_generation,
 )
+from apps.cv.draft import (
+    NoCvDocumentToEdit,
+    NoDraftToFinalize,
+    finalize_cv_draft,
+    render_draft_preview,
+    seed_draft_for_job,
+)
 from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
     ManualGenerationRejected,
     request_manual_cv_generation,
 )
-from apps.cv.models import ReferralMessageDocument
+from apps.cv.models import CVDraft, ReferralMessageDocument
 from apps.cv.referral_message_manual_generation import (
     ReferralMessageGenerationFailed,
     ReferralMessageGenerationRejected,
@@ -78,6 +86,83 @@ class GenerateCvView(APIView):
         except ManualGenerationFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
+        return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+
+
+class CvDraftView(APIView):
+    """Bozza modificabile del CV in corso (Sprint 51, editor interattivo):
+    GET la recupera, POST la apre/riapre a partire dall'ultimo CVDocument
+    (sovrascrivendo una bozza già in corso — mai duplicata), PATCH salva le
+    modifiche (autosave lato frontend, intero `content_json` sostituito a
+    ogni chiamata: più semplice di operazioni granulari, e sufficiente dato
+    che il frontend tiene comunque l'intero stato in memoria)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            return Response(job.cv_draft.content_json)
+        except CVDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            draft = seed_draft_for_job(job)
+        except NoCvDocumentToEdit as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(draft.content_json, status=status.HTTP_201_CREATED)
+
+    def patch(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        if not isinstance(request.data, dict):
+            return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            draft = job.cv_draft
+        except CVDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        draft.content_json = request.data
+        draft.save(update_fields=["content_json", "updated_at"])
+        return Response(draft.content_json)
+
+
+class CvDraftPreviewView(APIView):
+    """Rendering PDF della bozza per la preview live nell'editor (Sprint
+    51): accetta il contenuto corrente nel body (non necessariamente ancora
+    salvato dall'autosave, cosa fondamentale per una preview che segua le
+    modifiche mentre l'utente scrive) — se assente, usa l'ultimo salvato.
+    Nessuna chiamata AI, solo rendering: economico, pensato per essere
+    richiamato spesso (debounced) dal frontend."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            draft = job.cv_draft
+        except CVDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+        draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
+        pdf_bytes, page_count = render_draft_preview(request.user, request.user.profile, draft_content)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["X-Page-Count"] = str(page_count)
+        return response
+
+
+class FinalizeCvDraftView(APIView):
+    """Genera il PDF finale dalla bozza corrente (Sprint 51): nessun
+    consumo di quota/credito, non è una nuova generazione AI."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            cv_document = finalize_cv_draft(job)
+        except NoDraftToFinalize as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
 
 
