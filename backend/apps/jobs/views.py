@@ -19,7 +19,13 @@ from apps.cv.draft import (
     render_draft_preview,
     seed_draft_for_job,
 )
-from apps.cv.draft_chat import ChatMessageFailed, ChatMessageRejected, send_chat_message
+from apps.cv.draft_chat import (
+    ChatMessageFailed,
+    ChatMessageRejected,
+    InvalidChatDecision,
+    record_action_decision,
+    send_chat_message,
+)
 from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
@@ -204,6 +210,26 @@ class CvDraftChatView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response({"reply": reply, "actions": actions})
+
+    def patch(self, request, pk):
+        """Registra la scelta (accetta/rifiuta) di una singola azione già
+        proposta (Sprint 62): senza questo la scelta viveva solo nello
+        stato locale del pannello, perdendosi chiudendo/riaprendo la chat
+        o ricaricando la pagina — vedi `apps.cv.draft_chat.
+        record_action_decision`."""
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        message_index = request.data.get("message_index")
+        action_index = request.data.get("action_index")
+        decision = request.data.get("decision")
+        if not isinstance(message_index, int) or not isinstance(action_index, int):
+            return Response({"detail": "Indici non validi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            record_action_decision(job, message_index, action_index, decision)
+        except InvalidChatDecision as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class GenerateCoverLetterView(APIView):

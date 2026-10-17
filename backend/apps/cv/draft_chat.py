@@ -277,3 +277,39 @@ def send_chat_message(job, user_message, focus_bullets=None):
     ]
     draft.save(update_fields=["chat_history", "updated_at"])
     return result["reply"], actions
+
+
+class InvalidChatDecision(Exception):
+    """Indici fuori range o decisione non valida: nessuna scrittura."""
+
+
+def record_action_decision(job, message_index, action_index, decision):
+    """Persiste la scelta (accetta/rifiuta) di una singola azione proposta
+    (Sprint 62): senza questo, la scelta viveva solo nello stato locale del
+    pannello React — chiudendo e riaprendo la chat (o ricaricando la
+    pagina) le card tornavano "in attesa", permettendo di riapplicare la
+    stessa azione una seconda volta. Scrive `decision` dentro l'azione
+    stessa in `chat_history`, letta dal frontend al prossimo caricamento
+    per disabilitare di nuovo i pulsanti già usati. Non applica né
+    disapplica nulla sul `content_json` del draft: resta responsabilità
+    del frontend, qui si registra solo la scelta già fatta."""
+    if decision not in ("accepted", "rejected"):
+        raise InvalidChatDecision("Decisione non valida.")
+    try:
+        draft = job.cv_draft
+    except CVDraft.DoesNotExist as exc:
+        raise InvalidChatDecision("Nessuna bozza per questo job.") from exc
+
+    history = draft.chat_history
+    if (
+        message_index < 0
+        or message_index >= len(history)
+        or history[message_index].get("role") != "assistant"
+    ):
+        raise InvalidChatDecision("Messaggio non valido.")
+    actions = history[message_index].get("actions") or []
+    if action_index < 0 or action_index >= len(actions):
+        raise InvalidChatDecision("Azione non valida.")
+
+    actions[action_index]["decision"] = decision
+    draft.save(update_fields=["chat_history", "updated_at"])

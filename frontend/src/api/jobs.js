@@ -80,6 +80,13 @@ export function sendCvDraftChatMessage(id, message, focusedBullets = []) {
   })
 }
 
+export function recordCvDraftChatDecision(id, messageIndex, actionIndex, decision) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/chat/`, {
+    method: 'PATCH',
+    body: { message_index: messageIndex, action_index: actionIndex, decision },
+  })
+}
+
 // Non passa da `apiFetch`: la risposta è un PDF binario, non JSON (serve
 // leggerla come blob), e il conteggio pagine arriva in un header custom,
 // non nel body — un fetch diretto resta più semplice che adattare il

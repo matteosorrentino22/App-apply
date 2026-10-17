@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
-import { fetchCvDraftChat, sendCvDraftChatMessage } from '../api/jobs'
+import { fetchCvDraftChat, recordCvDraftChatDecision, sendCvDraftChatMessage } from '../api/jobs'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
@@ -124,18 +124,29 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   // Clé = "<indice messaggio>-<indice azione>" → 'accepted' | 'rejected'
-  // (Sprint 59): solo in memoria, non persistita sul server — ma il
-  // componente resta montato anche a pannello chiuso (vedi `if (!open)
-  // return null` sotto, DOPO gli hook: il genitore lo rende sempre, mai
-  // dentro un `{chatOpen && ...}`) così chiudere e riaprire la chat non
-  // perde le decisioni già prese — perderle solo ricaricando la pagina è
-  // una scelta deliberata, per non aggiungere un giro di rete in più.
+  // (Sprint 59, persistita sul server dalla Sprint 62): inizializzata dal
+  // campo `decision` già salvato in ogni azione della cronologia (vedi
+  // sotto) — così un'azione già decisa resta disabilitata anche dopo un
+  // reload completo della pagina, non solo chiudendo/riaprendo la chat
+  // nella stessa sessione (il componente comunque resta montato a
+  // pannello chiuso, vedi `if (!open) return null` dopo gli hook).
   const [decisions, setDecisions] = useState({})
   const scrollRef = useRef(null)
 
   useEffect(() => {
     fetchCvDraftChat(jobId)
-      .then((data) => setHistory(data.history || []))
+      .then((data) => {
+        const loadedHistory = data.history || []
+        setHistory(loadedHistory)
+        const loadedDecisions = {}
+        loadedHistory.forEach((turn, messageIndex) => {
+          const actions = turn.actions || []
+          actions.forEach((action, actionIndex) => {
+            if (action.decision) loadedDecisions[`${messageIndex}-${actionIndex}`] = action.decision
+          })
+        })
+        setDecisions(loadedDecisions)
+      })
       .catch(() => {})
   }, [jobId])
 
@@ -172,6 +183,12 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
   function handleDecide(messageIndex, actionIndex, action, decision) {
     setDecisions((current) => ({ ...current, [`${messageIndex}-${actionIndex}`]: decision }))
     if (decision === 'accepted') onApplyAction(action)
+    // Persistita lato server (Sprint 62): se questa chiamata fallisce, la
+    // card resta comunque disabilitata per il resto della sessione (stato
+    // locale già aggiornato sopra) — solo un reload prematuro prima che
+    // la richiesta arrivi potrebbe far tornare la card "in attesa", un
+    // rischio residuo minimo che non vale un meccanismo di retry.
+    recordCvDraftChatDecision(jobId, messageIndex, actionIndex, decision).catch(() => {})
   }
 
   const focusedSnippets = (focusedBullets || [])
