@@ -5,6 +5,7 @@ from .views import (
     CollectJobsView,
     CoverLetterInstructionsView,
     CreateManualJobView,
+    CvDraftChatView,
     CvDraftPreviewView,
     CvDraftView,
     FavoriteJobView,
@@ -41,6 +42,11 @@ urlpatterns = [
         "jobs/<int:pk>/cv-draft/finalize/",
         FinalizeCvDraftView.as_view(),
         name="job-cv-draft-finalize",
+    ),
+    path(
+        "jobs/<int:pk>/cv-draft/chat/",
+        CvDraftChatView.as_view(),
+        name="job-cv-draft-chat",
     ),
     path(
         "jobs/<int:pk>/generate-cover-letter/",

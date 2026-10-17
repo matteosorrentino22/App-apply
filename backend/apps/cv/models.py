@@ -53,6 +53,13 @@ class CVDraft(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cv_drafts"
     )
     content_json = models.JSONField(default=dict, blank=True)
+    # Cronologia della chat di assistenza (Sprint 59): lista di turni
+    # `{"role": "user"|"assistant", "message": str, "actions": [...]}` (solo
+    # per "assistant", le modifiche proposte in quel turno, con lo stato di
+    # accettazione/rifiuto scelto dall'utente) — persistita così la
+    # conversazione non si perde ricaricando la pagina, a differenza della
+    # preview che è sempre ricalcolata al volo.
+    chat_history = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

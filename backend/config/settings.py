@@ -210,6 +210,10 @@ PRICE_MANUAL_JOB_EXTRA = Decimal(os.environ.get("PRICE_MANUAL_JOB_EXTRA", "0.50"
 # Massimale giornaliero separato da CV/cover letter, stessi tetti Free/Pro
 # (Sprint 50): budget indipendente, prezzo a credito configurabile a parte.
 PRICE_REFERRAL_MESSAGE_EXTRA = Decimal(os.environ.get("PRICE_REFERRAL_MESSAGE_EXTRA", "1.00"))
+# Chat dell'editor CV (Sprint 59): niente massimale giornaliero come le
+# altre azioni — ogni messaggio scala sempre il credito extra, come scelto
+# dal committente (un turno di chat costa meno di una generazione intera).
+PRICE_CV_DRAFT_CHAT_MESSAGE = Decimal(os.environ.get("PRICE_CV_DRAFT_CHAT_MESSAGE", "0.20"))
 
 # Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
 # l'autenticazione standard del protocollo, nessun servizio a pagamento.

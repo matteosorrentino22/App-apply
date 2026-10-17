@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import RichBulletInput from '@/components/RichBulletInput'
+import CvDraftChatPanel from '@/components/CvDraftChatPanel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
@@ -83,6 +84,7 @@ export default function CvDraftEditorPage() {
   const [pageCount, setPageCount] = useState(null)
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
@@ -214,8 +216,8 @@ export default function CvDraftEditorPage() {
   function removeArea(index) {
     setField('areas_of_expertise', content.areas_of_expertise.filter((_, i) => i !== index))
   }
-  function addArea() {
-    setField('areas_of_expertise', [...content.areas_of_expertise, ''])
+  function addArea(text = '') {
+    setField('areas_of_expertise', [...content.areas_of_expertise, text])
   }
   function moveArea(index, delta) {
     setField('areas_of_expertise', moveItem(content.areas_of_expertise, index, delta))
@@ -235,9 +237,9 @@ export default function CvDraftEditorPage() {
     const exp = content.experiences[expIndex]
     updateExperience(expIndex, { bullets: exp.bullets.filter((_, i) => i !== bulletIndex) })
   }
-  function addBullet(expIndex) {
+  function addBullet(expIndex, text = '') {
     const exp = content.experiences[expIndex]
-    updateExperience(expIndex, { bullets: [...exp.bullets, { text: '', shown: true }] })
+    updateExperience(expIndex, { bullets: [...exp.bullets, { text, shown: true }] })
   }
   function moveBullet(expIndex, bulletIndex, delta) {
     const exp = content.experiences[expIndex]
@@ -289,6 +291,67 @@ export default function CvDraftEditorPage() {
     ])
   }
 
+  // --- Chat AI (Sprint 59): applica una singola azione accettata dall'utente
+  // richiamando le stesse funzioni di stato di sopra — mai una scrittura
+  // diretta nel JSON, così autosave e preview restano quelle già esistenti.
+  function applyChatAction(action) {
+    const expIndex = content.experiences.findIndex(
+      (exp) => exp.profile_experience_id === action.profile_experience_id,
+    )
+    switch (action.type) {
+      case 'update_summary':
+        setField('summary', action.text)
+        break
+      case 'update_qualification':
+        setField('qualification', action.text)
+        break
+      case 'update_role':
+        if (expIndex !== -1) updateExperience(expIndex, { role: action.text })
+        break
+      case 'update_bullet':
+        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { text: action.text })
+        break
+      case 'add_bullet':
+        if (expIndex !== -1) addBullet(expIndex, action.text)
+        break
+      case 'hide_bullet':
+        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { shown: false })
+        break
+      case 'show_bullet':
+        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { shown: true })
+        break
+      case 'hide_experience':
+        if (expIndex !== -1) updateExperience(expIndex, { shown: false })
+        break
+      case 'show_experience':
+        if (expIndex !== -1) updateExperience(expIndex, { shown: true })
+        break
+      case 'update_area':
+        updateArea(action.area_index, action.text)
+        break
+      case 'add_area':
+        addArea(action.text)
+        break
+      case 'remove_area':
+        removeArea(action.area_index)
+        break
+      case 'toggle_skill':
+        toggleSkill(action.name)
+        break
+      case 'toggle_certification':
+        toggleCertification(action.name)
+        break
+      case 'update_education_notes':
+        updateEducation(action.education_index, { notes: action.text })
+        break
+      case 'update_language_level':
+        updateLanguage(action.language_index, { level: action.level })
+        break
+      default:
+        break
+    }
+  }
+
   const pageCountLabel =
     pageCount == null
       ? ''
@@ -307,9 +370,23 @@ export default function CvDraftEditorPage() {
         </span>
       </div>
 
-      <h1 className="text-2xl font-bold tracking-tight text-balance">
-        {t('cvEditor.navTitle')} — {job?.title}
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight text-balance">
+          {t('cvEditor.navTitle')} — {job?.title}
+        </h1>
+        <Button type="button" variant="secondary" onClick={() => setChatOpen(true)}>
+          {t('cvEditor.chat.toggle')}
+        </Button>
+      </div>
+
+      {chatOpen && (
+        <CvDraftChatPanel
+          jobId={id}
+          content={content}
+          onApplyAction={applyChatAction}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-5">

@@ -63,6 +63,14 @@ export function finalizeCvDraft(id) {
   return apiFetch(`/api/jobs/${id}/cv-draft/finalize/`, { method: 'POST', body: {} })
 }
 
+export function fetchCvDraftChat(id) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/chat/`)
+}
+
+export function sendCvDraftChatMessage(id, message) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/chat/`, { method: 'POST', body: { message } })
+}
+
 // Non passa da `apiFetch`: la risposta è un PDF binario, non JSON (serve
 // leggerla come blob), e il conteggio pagine arriva in un header custom,
 // non nel body — un fetch diretto resta più semplice che adattare il

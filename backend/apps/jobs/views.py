@@ -19,6 +19,7 @@ from apps.cv.draft import (
     render_draft_preview,
     seed_draft_for_job,
 )
+from apps.cv.draft_chat import ChatMessageFailed, ChatMessageRejected, send_chat_message
 from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
@@ -164,6 +165,37 @@ class FinalizeCvDraftView(APIView):
         except NoDraftToFinalize as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+
+
+class CvDraftChatView(APIView):
+    """Chat di assistenza sulla bozza (Sprint 59, Fase 2): un messaggio
+    dell'utente per richiesta, risposta con 0+ modifiche proposte — mai
+    applicate automaticamente, vedi `apps.cv.draft_chat`. Il GET restituisce
+    la cronologia già persistita (apertura/ricarica dell'editor)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            return Response({"history": job.cv_draft.chat_history})
+        except CVDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        message = (request.data.get("message") or "").strip()
+        if not message:
+            return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reply, actions = send_chat_message(job, message)
+        except ChatMessageRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
+        except ChatMessageFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({"reply": reply, "actions": actions})
 
 
 class GenerateCoverLetterView(APIView):
