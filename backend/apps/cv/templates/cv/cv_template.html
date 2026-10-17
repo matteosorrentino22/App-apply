@@ -76,7 +76,11 @@
         margin-bottom: {{ section_gap }};
     }
     section > p {
+        /* Giustificato (Sprint 57): copre sia il sommario sia le righe
+        "Certified in"/"Skilled in" — entrambi sono <p> figli diretti di
+        una <section>, nessun'altra riga del template lo è. */
         margin: 0;
+        text-align: justify;
     }
     h2 {
         font-size: 11pt;
@@ -147,6 +151,7 @@
     }
     ul.bullets li {
         margin-bottom: 1pt;
+        text-align: justify;
     }
     .areas-list {
         display: grid;
@@ -175,7 +180,12 @@
         padding: 0;
         list-style: none;
         display: flex;
-        justify-content: flex-start;
+        /* "Giustificato" per una riga flessibile (Sprint 57): non è un
+        paragrafo di testo che va a capo, quindi non si usa text-align —
+        space-between stira la riga da margine a margine mantenendo la
+        STESSA distanza tra ogni coppia di lingue (gap resta un minimo,
+        lo spazio in più si distribuisce in parti uguali tra tutte). */
+        justify-content: space-between;
         gap: 18pt;
         text-align: left;
     }
