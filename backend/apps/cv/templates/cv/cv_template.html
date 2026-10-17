@@ -15,7 +15,10 @@
         font-family: "Cambria", "Caladea", "DejaVu Serif", serif;
         font-size: {{ base_font_size }}pt;
         line-height: {{ line_height }};
-        color: #1a1a1a;
+        /* Nero classico (Sprint 56): prima qualifica/contatti/tecnologie
+        avevano ciascuno un proprio grigio (#333/#444/#555) — ora ereditano
+        tutti questo stesso nero, nessun colore proprio su quegli elementi. */
+        color: #000;
         /* Solo i titoli di sezione (h2) avevano una spaziatura lettere
         dedicata (0.5pt) — qui si imposta quella di tutto il resto, che
         prima era "normal" (0). L'h2 resta a 0.5pt perché imposta la sua
@@ -52,12 +55,10 @@
     }
     .qualification {
         font-size: {{ base_font_size|add:5 }}pt;
-        color: #333;
         margin: 0 0 4pt 0;
     }
     .contact {
         font-size: {{ base_font_size }}pt;
-        color: #444;
         margin: 0;
     }
     .contact a {
@@ -95,14 +96,17 @@
         text-transform: uppercase;
     }
     .experience-role {
-        text-transform: uppercase;
         display: flex;
         justify-content: space-between;
         gap: 8pt;
     }
+    .experience-role-title {
+        /* Sprint 56: non più tutto maiuscolo — il ruolo compare come
+        scritto dal candidato nel profilo, solo in corsivo. */
+        font-style: italic;
+    }
     .experience-role-meta {
         font-weight: normal;
-        text-transform: none;
         white-space: nowrap;
     }
     .experience-role-meta strong {
@@ -112,9 +116,6 @@
         display: flex;
         justify-content: space-between;
         gap: 8pt;
-    }
-    .education-title-main {
-        font-weight: bold;
     }
     .education-title-meta {
         font-weight: normal;
@@ -128,7 +129,6 @@
     }
     .experience-technologies {
         font-style: italic;
-        color: #555;
         font-size: {{ base_font_size|add:-1 }}pt;
         margin: 1pt 0 0 0;
     }
@@ -232,7 +232,7 @@
         <div class="experience">
             {% ifchanged exp.company %}<div class="experience-company">{{ exp.company }}</div>{% endifchanged %}
             <div class="experience-role">
-                <span>{{ exp.role }}</span>
+                <span class="experience-role-title">{{ exp.role }}</span>
                 <span class="experience-role-meta">{{ exp.location }}{% if exp.location and exp.dates %} | {% endif %}<strong>{{ exp.dates }}</strong></span>
             </div>
             {% if exp.bullets %}
@@ -256,7 +256,7 @@
         {% for edu in educations %}
         <div class="education-item">
             <div class="education-title">
-                <span class="education-title-main">{{ edu.title }} — {{ edu.institution }}</span>
+                <span><strong>{{ edu.title }}</strong> — {{ edu.institution }}</span>
                 <span class="education-title-meta">{{ edu.location }}{% if edu.location and edu.dates %} | {% endif %}<strong>{{ edu.dates }}</strong></span>
             </div>
             {% if edu.notes %}<p>{{ edu.notes }}</p>{% endif %}
