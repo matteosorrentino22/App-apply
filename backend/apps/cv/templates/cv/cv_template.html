@@ -16,6 +16,11 @@
         font-size: {{ base_font_size }}pt;
         line-height: {{ line_height }};
         color: #1a1a1a;
+        /* Solo i titoli di sezione (h2) avevano una spaziatura lettere
+        dedicata (0.5pt) — qui si imposta quella di tutto il resto, che
+        prima era "normal" (0). L'h2 resta a 0.5pt perché imposta la sua
+        stessa proprietà esplicitamente, più specifica di questa su body. */
+        letter-spacing: 0.2pt;
     }
     .header {
         display: flex;
@@ -127,27 +132,36 @@
         font-size: {{ base_font_size|add:-1 }}pt;
         margin: 1pt 0 0 0;
     }
+    /* Marcatore unico per entrambi gli elenchi (prima: "ul.bullets" usava
+    il pallino nativo del motore di rendering, "areas-list" un carattere
+    "•" via ::before con rientro proprio — risultato diverso e non allineato
+    tra le due sezioni). Stesso carattere, stesso rientro, stesso pallino
+    più grande del testo in entrambe. */
+    ul.bullets, .areas-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
     ul.bullets {
-        margin: 2pt 0 0 0;
-        padding-left: 12pt;
+        margin-top: 2pt;
     }
     ul.bullets li {
         margin-bottom: 1pt;
     }
     .areas-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 1pt 16pt;
     }
-    .areas-list li {
+    ul.bullets li, .areas-list li {
         padding-left: 12pt;
         text-indent: -12pt;
     }
-    .areas-list li::before {
+    ul.bullets li::before, .areas-list li::before {
         content: "•";
+        font-size: {{ base_font_size|add:3 }}pt;
+        line-height: 0;
+        vertical-align: -1pt;
         padding-right: 5pt;
     }
     .skills-certifications p {
