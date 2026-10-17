@@ -10,6 +10,10 @@ WORKDIR /app
 # anche se il pacchetto pip è installato correttamente. postgresql-client
 # fornisce `pg_dump`/`pg_restore`, usati dal backup giornaliero e dal
 # ripristino di prova (Sprint 21) — psycopg2-binary non include i binari CLI.
+# fonts-crosextra-caladea (Sprint 52): l'immagine di base non ha né Calibri
+# né Cambria (solo DejaVu) — Pango ricadeva silenziosamente su DejaVu Sans
+# per qualunque font-family richiesta nel template, mai realmente "Calibri".
+# Caladea è il font open source metricamente compatibile con Cambria.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
@@ -17,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     shared-mime-info \
     postgresql-client \
+    fonts-crosextra-caladea \
     && (apt-get install -y --no-install-recommends libgdk-pixbuf-2.0-0 \
         || apt-get install -y --no-install-recommends libgdk-pixbuf2.0-0) \
     && rm -rf /var/lib/apt/lists/*

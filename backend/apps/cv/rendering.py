@@ -1,14 +1,15 @@
 from django.template.loader import render_to_string
 from weasyprint import HTML
 
-# Livelli di compattamento CSS applicati in ordine finché il PDF risultante
-# non entra in 1 pagina (02-specifiche-tecniche-v3.md §6.2 punto 4): il
-# template è già progettato per starci con un profilo di dimensioni standard,
-# questo è solo un margine di sicurezza per profili più ricchi della norma.
+# Un solo livello, dimensione fissa (Sprint 52): prima c'erano 3 livelli che
+# rimpicciolivano progressivamente il font se il CV superava 1 pagina —
+# scelta esplicita del committente di non farlo più. Se il contenuto non
+# entra in 1 pagina a questa dimensione, il ripiego resta solo quello già
+# esistente in `generation.py` (rimozione del bullet meno rilevante,
+# ri-renderizzato sempre a questa stessa dimensione): mai un font più
+# piccolo, nel caso residuo si accetta un PDF multi-pagina.
 COMPACT_LEVELS = [
     {"base_font_size": 9, "line_height": "1.25", "section_gap": "9pt", "heading_gap": "4pt", "item_gap": "7pt", "page_margin": "1.4cm", "photo_size": "65pt"},
-    {"base_font_size": 8, "line_height": "1.15", "section_gap": "6pt", "heading_gap": "3pt", "item_gap": "5pt", "page_margin": "1.1cm", "photo_size": "55pt"},
-    {"base_font_size": 7, "line_height": "1.1", "section_gap": "4pt", "heading_gap": "2pt", "item_gap": "3pt", "page_margin": "0.9cm", "photo_size": "45pt"},
 ]
 
 # Stessa logica di COMPACT_LEVELS, senza `photo_size` (la cover letter non ha

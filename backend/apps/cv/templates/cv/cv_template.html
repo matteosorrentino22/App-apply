@@ -9,7 +9,10 @@
         margin: {{ page_margin }};
     }
     body {
-        font-family: "Helvetica", "Arial", sans-serif;
+        /* Cambria non è installato nel container di rendering: "Caladea" è
+        il font open source metricamente compatibile, usato come effettivo
+        fallback (Sprint 52) — vedi commento in backend/Dockerfile. */
+        font-family: "Cambria", "Caladea", "DejaVu Serif", serif;
         font-size: {{ base_font_size }}pt;
         line-height: {{ line_height }};
         color: #1a1a1a;
