@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 
-export default function MultiSelectFilter({ label, options, selected, onToggle, disabled }) {
+export default function MultiSelectFilter({ label, options, selected, onToggle, disabled, layout = 'grid' }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -36,17 +36,24 @@ export default function MultiSelectFilter({ label, options, selected, onToggle, 
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-20 mt-1 grid min-w-40 grid-cols-2 gap-1.5 rounded-md border border-border bg-card p-2 shadow-md">
+        <div
+          className={cn(
+            'absolute top-full left-0 z-20 mt-1 max-h-64 overflow-y-auto rounded-md border border-border bg-card p-2 shadow-md',
+            layout === 'list'
+              ? 'flex min-w-56 flex-col gap-0.5'
+              : 'grid min-w-40 grid-cols-2 gap-1.5',
+          )}
+        >
           {options.map((option) => (
             <label
               key={option.value}
-              className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-secondary"
+              className="flex items-center gap-2 rounded px-1 py-1.5 text-sm hover:bg-secondary"
             >
               <Checkbox
                 checked={selected.includes(option.value)}
                 onCheckedChange={() => onToggle(option.value)}
               />
-              {option.label}
+              <span className={layout === 'list' ? 'leading-snug' : undefined}>{option.label}</span>
             </label>
           ))}
         </div>

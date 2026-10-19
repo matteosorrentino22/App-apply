@@ -58,7 +58,7 @@ export default function JobListPage() {
   const [dateTo, setDateTo] = useState(todayInputValue)
   const [scores, setScores] = useState([])
   const [statuses, setStatuses] = useState([])
-  const [searchFilter, setSearchFilter] = useState('all')
+  const [searchFilters, setSearchFilters] = useState([])
   const [savedSearches, setSavedSearches] = useState([])
   const [query, setQuery] = useState('')
   const [queryInput, setQueryInput] = useState('')
@@ -92,7 +92,7 @@ export default function JobListPage() {
       // ricerca di provenienza): ignorato lato client per questa sezione,
       // anche se resta selezionato per quando l'utente torna su Raccolti/
       // Archiviati.
-      const searchId = section === 'imported' ? undefined : searchFilter
+      const searchIds = section === 'imported' ? undefined : searchFilters
       const data = await fetchJobs({
         section,
         dateFrom,
@@ -100,7 +100,7 @@ export default function JobListPage() {
         scores,
         statuses,
         q: query,
-        searchId,
+        searchIds,
         location,
         applicantsRanges,
         hasRecruiter: recruiterFilter === 'all' ? undefined : recruiterFilter,
@@ -117,7 +117,7 @@ export default function JobListPage() {
     dateTo,
     scores,
     statuses,
-    searchFilter,
+    searchFilters,
     query,
     location,
     applicantsRanges,
@@ -376,21 +376,22 @@ export default function JobListPage() {
         />
 
         {section !== 'imported' && (
-          <Select value={searchFilter} onValueChange={setSearchFilter} disabled={searching}>
-            <SelectTrigger aria-label={t('jobs.searchFilterLabel')} className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('jobs.searchFilter_all')}</SelectItem>
-              {savedSearches.map((search) => (
-                <SelectItem key={search.id} value={String(search.id)}>
-                  {t(`account.searchType_${search.search_type}`)}: {search.keywords} — {search.city},{' '}
-                  {search.country}
-                </SelectItem>
-              ))}
-              <SelectItem value="none">{t('jobs.searchFilter_none')}</SelectItem>
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label={t('jobs.searchFilterLabel')}
+            layout="list"
+            options={[
+              ...savedSearches.map((search) => ({
+                value: String(search.id),
+                label:
+                  `${t(`account.searchType_${search.search_type}`)}: ${search.keywords} — ` +
+                  `${search.city}, ${search.country}`,
+              })),
+              { value: 'none', label: t('jobs.searchFilter_none') },
+            ]}
+            selected={searchFilters}
+            onToggle={(value) => toggleValue(searchFilters, setSearchFilters, value)}
+            disabled={searching}
+          />
         )}
 
         <MultiSelectFilter

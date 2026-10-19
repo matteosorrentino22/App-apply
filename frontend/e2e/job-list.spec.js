@@ -236,6 +236,43 @@ test('il filtro location mostra solo i job la cui località contiene il testo ce
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 })
 
+test('il filtro ricerca è multi-selezione: più spunte contemporanee e contatore nel trigger', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { token } = await loginAsSeededUser(page, request, baseURL)
+
+  await request.post(`${baseURL}/api/searches/`, {
+    headers: { Authorization: `Token ${token}` },
+    data: { keywords: 'Business analyst', city: 'Zurich', country: 'Switzerland' },
+  })
+  await request.post(`${baseURL}/api/searches/`, {
+    headers: { Authorization: `Token ${token}` },
+    data: { keywords: 'IT Project manager', city: 'Geneva', country: 'Switzerland' },
+  })
+  await page.reload()
+
+  const trigger = page.getByRole('button', { name: 'Ricerca', exact: true })
+  await expect(trigger).toBeVisible()
+  await trigger.click()
+
+  const firstOption = page.getByText('Business analyst — Zurich, Switzerland')
+  const secondOption = page.getByText('IT Project manager — Geneva, Switzerland')
+  await expect(firstOption).toBeVisible()
+  await expect(secondOption).toBeVisible()
+
+  await firstOption.click()
+  await expect(page.getByRole('button', { name: 'Ricerca (1)' })).toBeVisible()
+
+  await secondOption.click()
+  await expect(page.getByRole('button', { name: 'Ricerca (2)' })).toBeVisible()
+
+  // Rimuovendo una delle due spunte il contatore scende, l'altra resta selezionata.
+  await firstOption.click()
+  await expect(page.getByRole('button', { name: 'Ricerca (1)' })).toBeVisible()
+})
+
 test('il badge candidati evidenzia i job con meno di 25 candidati e mostra il numero esatto quando disponibile', async ({
   page,
   request,

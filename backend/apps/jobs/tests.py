@@ -1204,7 +1204,7 @@ class JobListTests(TestCase):
         )
         self._make_job("search-jobrole-other", matched_search="IT Project manager - Zurich, Switzerland")
 
-        results = list_jobs(self.user, "main", search_id=str(job_role_search.pk))
+        results = list_jobs(self.user, "main", search_ids=[str(job_role_search.pk)])
 
         self.assertEqual({job.pk for job in results}, {match.pk})
 
@@ -1221,7 +1221,7 @@ class JobListTests(TestCase):
         match = self._make_job("search-company-match", matched_search="ubs")
         self._make_job("search-company-other", matched_search="Deloitte")
 
-        results = list_jobs(self.user, "main", search_id=str(company_search.pk))
+        results = list_jobs(self.user, "main", search_ids=[str(company_search.pk)])
 
         self.assertEqual({job.pk for job in results}, {match.pk})
 
@@ -1229,24 +1229,70 @@ class JobListTests(TestCase):
         imported_like = self._make_job("search-none-match", matched_search="")
         self._make_job("search-none-other", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", search_id="none")
+        results = list_jobs(self.user, "main", search_ids=["none"])
 
         self.assertEqual({job.pk for job in results}, {imported_like.pk})
 
-    def test_search_filter_all_returns_everything(self):
+    def test_no_search_filter_returns_everything(self):
         job_a = self._make_job("search-all-a", matched_search="UBS")
         job_b = self._make_job("search-all-b", matched_search="")
 
-        results = list_jobs(self.user, "main", search_id="all")
+        results = list_jobs(self.user, "main", search_ids=None)
 
         self.assertEqual({job.pk for job in results}, {job_a.pk, job_b.pk})
 
     def test_search_filter_with_unknown_id_returns_no_results(self):
         self._make_job("search-unknown", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", search_id="999999")
+        results = list_jobs(self.user, "main", search_ids=["999999"])
 
         self.assertEqual(list(results), [])
+
+    def test_search_filter_combines_multiple_ids_with_or(self):
+        job_role_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.JOB_ROLE,
+            keywords="Business analyst",
+            city="Zurich",
+            country="Switzerland",
+        )
+        company_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        match_job_role = self._make_job(
+            "multi-match-jobrole", matched_search="Business analyst - Zurich, Switzerland"
+        )
+        match_company = self._make_job("multi-match-company", matched_search="ubs")
+        no_match = self._make_job("multi-no-match", matched_search="Deloitte")
+
+        results = list_jobs(
+            self.user, "main", search_ids=[str(job_role_search.pk), str(company_search.pk)]
+        )
+
+        self.assertEqual({job.pk for job in results}, {match_job_role.pk, match_company.pk})
+        self.assertNotIn(no_match.pk, {job.pk for job in results})
+
+    def test_search_filter_ignores_unknown_id_when_combined_with_a_valid_one(self):
+        """A differenza della vecchia versione a singola selezione, un id
+        sconosciuto nella lista non deve annullare il contributo degli id
+        validi selezionati insieme ad esso."""
+        valid_search = SavedSearch.objects.create(
+            user=self.user,
+            search_type=SavedSearch.SearchType.COMPANY,
+            keywords="UBS",
+            city="Zurich",
+            country="Switzerland",
+        )
+        match = self._make_job("multi-unknown-match", matched_search="ubs")
+        self._make_job("multi-unknown-other", matched_search="Deloitte")
+
+        results = list_jobs(self.user, "main", search_ids=[str(valid_search.pk), "999999"])
+
+        self.assertEqual({job.pk for job in results}, {match.pk})
 
     def test_search_filter_does_not_match_another_users_saved_search(self):
         other_user = User.objects.create_user(
@@ -1263,7 +1309,7 @@ class JobListTests(TestCase):
         )
         self._make_job("search-other-user", matched_search="UBS")
 
-        results = list_jobs(self.user, "main", search_id=str(other_search.pk))
+        results = list_jobs(self.user, "main", search_ids=[str(other_search.pk)])
 
         self.assertEqual(list(results), [])
 
@@ -1277,7 +1323,7 @@ class JobListTests(TestCase):
         )
 
         results = list_jobs(
-            self.user, "main", scores=[5], statuses=[Job.Status.NEW], search_id="none"
+            self.user, "main", scores=[5], statuses=[Job.Status.NEW], search_ids=["none"]
         )
         # Nessuno dei tre ha matched_search vuoto: il filtro "none" combinato
         # in AND con score/stato deve restituire l'insieme vuoto, non
@@ -1289,7 +1335,7 @@ class JobListTests(TestCase):
             "main",
             scores=[5],
             statuses=[Job.Status.NEW],
-            search_id=None,
+            search_ids=None,
         )
         # Senza filtro ricerca, contano solo score/stato: entrambi i job con
         # score 5 e stato "new" devono uscire, indipendentemente dalla loro

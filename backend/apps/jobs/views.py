@@ -478,12 +478,15 @@ class JobListView(APIView):
 
         query = request.query_params.get("q", "")
 
-        search_id = request.query_params.get("search")
-        if search_id and search_id not in ("all", "none") and not search_id.isdigit():
-            return Response(
-                {"detail": 'Il filtro ricerca deve essere "all", "none" o l\'id di una ricerca salvata.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        search_ids = None
+        raw_search = request.query_params.get("search")
+        if raw_search:
+            search_ids = [value for value in raw_search.split(",") if value]
+            if not all(value == "none" or value.isdigit() for value in search_ids):
+                return Response(
+                    {"detail": 'Il filtro ricerca deve essere una lista di "none" e/o id di ricerche salvate separati da virgola.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         applicants_ranges = None
         raw_applicants = request.query_params.get("applicants")
@@ -515,7 +518,7 @@ class JobListView(APIView):
             scores=scores,
             statuses=statuses,
             query=query,
-            search_id=search_id,
+            search_ids=search_ids,
             location=location,
             applicants_ranges=applicants_ranges,
             has_recruiter=has_recruiter,

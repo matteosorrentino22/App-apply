@@ -66,31 +66,47 @@ def _apply_status_filter(queryset, statuses):
     return queryset.filter(status__in=statuses) if statuses else queryset
 
 
-def _apply_matched_search_filter(queryset, user, search_id):
-    """Filtra per la SavedSearch che ha prodotto il job.
-
-    `Job.matched_search` è testo libero, non una FK (vedi commento sul
-    campo in models.py): qui si ricostruisce la stringa che l'actor Apify
-    avrebbe restituito per la SavedSearch scelta e si confronta con quella.
-    `search_id="none"` isola i job senza ricerca di provenienza (import
-    manuale, o item Apify malformati — sprint-40)."""
-    if not search_id or search_id == "all":
-        return queryset
-    if search_id == "none":
-        return queryset.filter(matched_search="")
-
-    saved_search = SavedSearch.objects.filter(user=user, pk=search_id).first()
-    if saved_search is None:
-        return queryset.none()
-
+def _saved_search_match_q(saved_search):
     if saved_search.search_type == SavedSearch.SearchType.COMPANY:
         # Il nome azienda restituito da LinkedIn (risolto per ID tramite
         # `companyInclude`) può differire per maiuscole/minuscole da come
         # l'ha digitato l'utente.
-        return queryset.filter(matched_search__iexact=saved_search.keywords)
+        return Q(matched_search__iexact=saved_search.keywords)
 
     location = f"{saved_search.city}, {saved_search.country}"
-    return queryset.filter(matched_search=f"{saved_search.keywords} - {location}")
+    return Q(matched_search=f"{saved_search.keywords} - {location}")
+
+
+def _apply_matched_search_filter(queryset, user, search_ids):
+    """Filtra per le SavedSearch che hanno prodotto il job (multi-selezione,
+    sprint corrente — prima un solo valore).
+
+    `Job.matched_search` è testo libero, non una FK (vedi commento sul
+    campo in models.py): qui si ricostruisce la stringa che l'actor Apify
+    avrebbe restituito per ogni SavedSearch scelta e si combinano tutte in
+    OR (stessa logica di score/stato quando ne sono selezionati più d'uno).
+    Il token `"none"` isola i job senza ricerca di provenienza (import
+    manuale, o item Apify malformati — sprint-40) e può combinarsi con gli
+    altri come una voce qualunque. Un id che non corrisponde a nessuna
+    SavedSearch dell'utente (rimossa nel frattempo, o di un altro utente)
+    non contribuisce nulla all'OR invece di annullare l'intero filtro come
+    nella versione a singola selezione: se è selezionato insieme ad altri id
+    validi, questi ultimi continuano a valere; se è l'unico selezionato, il
+    risultato resta vuoto (nessuna condizione reale da soddisfare)."""
+    if not search_ids:
+        return queryset
+
+    combined = Q(pk__in=[])
+    if "none" in search_ids:
+        combined |= Q(matched_search="")
+
+    numeric_ids = [value for value in search_ids if value != "none"]
+    if numeric_ids:
+        saved_searches = SavedSearch.objects.filter(user=user, pk__in=numeric_ids)
+        for saved_search in saved_searches:
+            combined |= _saved_search_match_q(saved_search)
+
+    return queryset.filter(combined)
 
 
 def _apply_location_filter(queryset, location):
@@ -148,7 +164,7 @@ def list_jobs(
     scores=None,
     statuses=None,
     query="",
-    search_id=None,
+    search_ids=None,
     location="",
     applicants_ranges=None,
     has_recruiter=None,
@@ -171,7 +187,7 @@ def list_jobs(
         queryset = _apply_date_range_filter(queryset, user, date_from, date_to)
         queryset = _apply_score_filter(queryset, scores)
         queryset = _apply_status_filter(queryset, statuses)
-        queryset = _apply_matched_search_filter(queryset, user, search_id)
+        queryset = _apply_matched_search_filter(queryset, user, search_ids)
         queryset = _apply_location_filter(queryset, location)
         queryset = _apply_applicants_filter(queryset, applicants_ranges)
         queryset = _apply_recruiter_filter(queryset, has_recruiter)

@@ -7,7 +7,7 @@ export function fetchJobs({
   scores,
   statuses,
   q,
-  searchId,
+  searchIds,
   location,
   applicantsRanges,
   hasRecruiter,
@@ -20,7 +20,7 @@ export function fetchJobs({
     if (dateTo) params.set('date_to', dateTo)
     if (scores && scores.length) params.set('score', scores.join(','))
     if (statuses && statuses.length) params.set('status', statuses.join(','))
-    if (searchId) params.set('search', searchId)
+    if (searchIds && searchIds.length) params.set('search', searchIds.join(','))
     if (location) params.set('location', location)
     if (applicantsRanges && applicantsRanges.length) params.set('applicants', applicantsRanges.join(','))
     if (hasRecruiter) params.set('recruiter', hasRecruiter)
