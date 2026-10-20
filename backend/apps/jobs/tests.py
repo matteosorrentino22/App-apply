@@ -31,7 +31,7 @@ from .manual_job_service import (
     ManualJobRejected,
     create_manual_job,
 )
-from .models import DailyQuota, Job, RunLog
+from .models import DailyQuota, Job, JobFilterPreset, RunLog
 from .scoring import score_job, score_jobs
 from .tasks import (
     CollectionAlreadyInProgress,
@@ -1829,3 +1829,108 @@ class GenerateReferralMessageApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["instructions"], ["Collega ex, team design"])
+
+
+class JobFilterPresetApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="presets@example.com", email="presets@example.com", password="pw-Presets-12345!"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_creates_a_preset_with_all_filter_dimensions_except_dates(self):
+        payload = {
+            "name": "Hays Ginevra, nuovi, pochi candidati",
+            "scores": [8, 9, 10],
+            "statuses": [Job.Status.NEW, Job.Status.CV_GENERATED],
+            "search_ids": ["12", "none"],
+            "location": "Ginevra",
+            "applicants_ranges": ["under_25"],
+            "has_recruiter": "yes",
+            # Non esiste un campo per le date nel serializer: anche se
+            # inviate, non devono essere salvate né causare un errore.
+            "date_from": "2026-01-01",
+            "date_to": "2026-01-31",
+        }
+
+        response = self.client.post("/api/job-filter-presets/", payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        preset = JobFilterPreset.objects.get(user=self.user)
+        self.assertEqual(preset.name, "Hays Ginevra, nuovi, pochi candidati")
+        self.assertEqual(preset.scores, [8, 9, 10])
+        self.assertEqual(preset.statuses, [Job.Status.NEW, Job.Status.CV_GENERATED])
+        self.assertEqual(preset.search_ids, ["12", "none"])
+        self.assertEqual(preset.location, "Ginevra")
+        self.assertEqual(preset.applicants_ranges, ["under_25"])
+        self.assertEqual(preset.has_recruiter, "yes")
+        self.assertNotIn("date_from", response.data)
+        self.assertNotIn("date_to", response.data)
+
+    def test_rejects_empty_name(self):
+        response = self.client.post("/api/job-filter-presets/", {"name": "   "}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(JobFilterPreset.objects.filter(user=self.user).exists())
+
+    def test_rejects_invalid_status_applicants_range_and_recruiter_value(self):
+        base = {"name": "Preset"}
+
+        response = self.client.post(
+            "/api/job-filter-presets/", {**base, "statuses": ["not-a-status"]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            "/api/job-filter-presets/", {**base, "applicants_ranges": ["not-a-range"]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            "/api/job-filter-presets/", {**base, "has_recruiter": "maybe"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_returns_only_the_authenticated_users_presets(self):
+        other_user = User.objects.create_user(
+            username="other-presets@example.com",
+            email="other-presets@example.com",
+            password="pw-OtherPresets-12345!",
+        )
+        JobFilterPreset.objects.create(user=self.user, name="Mio")
+        JobFilterPreset.objects.create(user=other_user, name="Altrui")
+
+        response = self.client.get("/api/job-filter-presets/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["name"] for item in response.data], ["Mio"])
+
+    def test_delete_removes_the_preset(self):
+        preset = JobFilterPreset.objects.create(user=self.user, name="Da eliminare")
+
+        response = self.client.delete(f"/api/job-filter-presets/{preset.pk}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(JobFilterPreset.objects.filter(pk=preset.pk).exists())
+
+    def test_cannot_delete_another_users_preset(self):
+        other_user = User.objects.create_user(
+            username="other-presets-del@example.com",
+            email="other-presets-del@example.com",
+            password="pw-OtherPresetsDel-12345!",
+        )
+        preset = JobFilterPreset.objects.create(user=other_user, name="Non tuo")
+
+        response = self.client.delete(f"/api/job-filter-presets/{preset.pk}/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(JobFilterPreset.objects.filter(pk=preset.pk).exists())
+
+    def test_rejects_creation_beyond_the_cap(self):
+        for i in range(50):
+            JobFilterPreset.objects.create(user=self.user, name=f"Preset {i}")
+
+        response = self.client.post("/api/job-filter-presets/", {"name": "Uno di troppo"}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(JobFilterPreset.objects.filter(user=self.user).count(), 50)

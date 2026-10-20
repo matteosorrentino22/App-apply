@@ -236,6 +236,41 @@ test('il filtro location mostra solo i job la cui località contiene il testo ce
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 })
 
+test('salvare, applicare e rimuovere un filtro preferito', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  // Imposta punteggio 4 e stato "Nuovo": isola "Project Manager" (score 4,
+  // nuovo) escludendo "Head of Operations" (score 5, CV generato).
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await page.getByRole('button', { name: 'Nuovo', exact: true }).click()
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Salva filtri attuali' }).click()
+  await page.getByLabel('Nome').fill('Nuovi a punteggio 4')
+  await page.getByRole('button', { name: 'Salva', exact: true }).click()
+
+  const presetPill = page.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true })
+  await expect(presetPill).toBeVisible()
+
+  // Cambia i filtri: il preset salvato non cambia.
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await page.getByRole('button', { name: '5', exact: true }).click()
+  await expect(cardFor(page, 'Head of Operations')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+
+  // Riapplicando il preset torna la combinazione salvata (punteggio 4 + nuovo).
+  await presetPill.click()
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
+
+  await page
+    .locator('span', { has: presetPill })
+    .getByRole('button', { name: 'Elimina filtro salvato' })
+    .click()
+  await expect(presetPill).not.toBeVisible()
+})
+
 test('il filtro ricerca è multi-selezione: più spunte contemporanee e contatore nel trigger', async ({
   page,
   request,

@@ -73,8 +73,8 @@ from .list_service import (
     unarchive_job,
     unfavorite_job,
 )
-from .models import Job
-from .serializers import JobSerializer, ManualJobCreateSerializer
+from .models import Job, JobFilterPreset
+from .serializers import JobFilterPresetSerializer, JobSerializer, ManualJobCreateSerializer
 from .stats import get_home_stats
 from .tasks import (
     CollectionAlreadyInProgress,
@@ -652,6 +652,48 @@ class JobListView(APIView):
             has_recruiter=has_recruiter,
         )
         return Response(JobSerializer(jobs, many=True).data)
+
+
+# Tetto tecnico, non legato al piano (a differenza di SavedSearch): un
+# preset di filtri non costa nulla da mantenere, il limite serve solo a
+# evitare un accumulo indefinito per errore (sprint corrente).
+MAX_JOB_FILTER_PRESETS = 50
+
+
+class JobFilterPresetListCreateView(APIView):
+    """Elenco e creazione dei filtri preferiti della lista job (sprint
+    corrente): combinazioni di filtri salvate con un nome, per applicarle
+    di nuovo rapidamente. Mai l'intervallo di date — vedi modello."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        presets = JobFilterPreset.objects.filter(user=request.user)
+        return Response(JobFilterPresetSerializer(presets, many=True).data)
+
+    def post(self, request):
+        if JobFilterPreset.objects.filter(user=request.user).count() >= MAX_JOB_FILTER_PRESETS:
+            return Response(
+                {"detail": f"Hai raggiunto il numero massimo di {MAX_JOB_FILTER_PRESETS} filtri salvati."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = JobFilterPresetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class JobFilterPresetDeleteView(APIView):
+    """Elimina un filtro preferito dell'utente autenticato (sprint
+    corrente): nessun rinomina, si ricrea da capo se serve un nome diverso."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        preset = get_object_or_404(JobFilterPreset, pk=pk, user=request.user)
+        preset.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ArchiveJobView(APIView):

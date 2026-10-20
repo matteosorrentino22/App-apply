@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
@@ -11,6 +12,9 @@ import {
   unfavoriteJob,
   importJob,
   createManualJob,
+  fetchFilterPresets,
+  createFilterPreset,
+  deleteFilterPreset,
 } from '../api/jobs'
 import { fetchSearches } from '../api/searches'
 import { ApiError } from '../api/client'
@@ -66,6 +70,12 @@ export default function JobListPage() {
   const [locationInput, setLocationInput] = useState('')
   const [applicantsRanges, setApplicantsRanges] = useState([])
   const [recruiterFilter, setRecruiterFilter] = useState('all')
+
+  const [filterPresets, setFilterPresets] = useState([])
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [savingPreset, setSavingPreset] = useState(false)
+  const [presetError, setPresetError] = useState('')
 
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -134,6 +144,61 @@ export default function JobListPage() {
       .then(setSavedSearches)
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetchFilterPresets()
+      .then(setFilterPresets)
+      .catch(() => {})
+  }, [])
+
+  function openSavePresetDialog() {
+    setPresetName('')
+    setPresetError('')
+    setShowSavePresetDialog(true)
+  }
+
+  async function handleSavePreset(event) {
+    event.preventDefault()
+    setPresetError('')
+    setSavingPreset(true)
+    try {
+      const created = await createFilterPreset({
+        name: presetName,
+        scores,
+        statuses,
+        search_ids: searchFilters,
+        location,
+        applicants_ranges: applicantsRanges,
+        has_recruiter: recruiterFilter === 'all' ? '' : recruiterFilter,
+      })
+      setFilterPresets((current) => [...current, created])
+      setShowSavePresetDialog(false)
+    } catch (err) {
+      const detail = formatApiErrorDetail(err)
+      setPresetError(detail || (err instanceof ApiError && err.data?.detail) || t('jobs.savePresetError'))
+    } finally {
+      setSavingPreset(false)
+    }
+  }
+
+  // Copia i valori del preset nei filtri "di questo momento": l'utente può
+  // poi modificarli liberamente senza toccare il preset salvato (nessun
+  // legame persistente tra i due dopo l'applicazione). Mai le date, che il
+  // preset non contiene.
+  function applyFilterPreset(preset) {
+    setScores(preset.scores || [])
+    setStatuses(preset.statuses || [])
+    setSearchFilters(preset.search_ids || [])
+    setLocation(preset.location || '')
+    setLocationInput(preset.location || '')
+    setApplicantsRanges(preset.applicants_ranges || [])
+    setRecruiterFilter(preset.has_recruiter || 'all')
+  }
+
+  async function handleDeletePreset(id) {
+    setFilterPresets((current) => current.filter((preset) => preset.id !== id))
+    await deleteFilterPreset(id)
+  }
 
   function handleSearchChange(value) {
     setQueryInput(value)
@@ -455,6 +520,36 @@ export default function JobListPage() {
           </SelectContent>
         </Select>
       </div>
+
+      <div className={'flex flex-wrap items-center gap-2' + (searching ? ' opacity-40' : '')}>
+        {filterPresets.map((preset) => (
+          <span
+            key={preset.id}
+            className="flex items-center gap-1 rounded-full bg-secondary pl-2.5 pr-1.5 py-1 text-xs font-medium text-muted-foreground"
+          >
+            <button
+              type="button"
+              disabled={searching}
+              onClick={() => applyFilterPreset(preset)}
+              className="hover:text-foreground"
+            >
+              {preset.name}
+            </button>
+            <button
+              type="button"
+              disabled={searching}
+              onClick={() => handleDeletePreset(preset.id)}
+              aria-label={t('jobs.deletePreset')}
+              className="text-muted-foreground/60 hover:text-destructive"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <Button type="button" variant="secondary" size="sm" disabled={searching} onClick={openSavePresetDialog}>
+          {t('jobs.savePresetButton')}
+        </Button>
+      </div>
       {searching && <p className="text-xs text-muted-foreground">{t('jobs.filtersDisabledWhileSearching')}</p>}
 
       {error && (
@@ -562,6 +657,43 @@ export default function JobListPage() {
               </Button>
               <Button type="submit" disabled={creatingManualJob}>
                 {creatingManualJob ? t('jobs.manualJobSubmitting') : t('jobs.manualJobSubmit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSavePresetDialog} onOpenChange={setShowSavePresetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('jobs.savePresetDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('jobs.savePresetDialogHint')}</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSavePreset} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="preset-name">{t('jobs.presetNameLabel')}</Label>
+              <Input
+                id="preset-name"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+
+            {presetError && (
+              <p role="alert" className="text-sm text-destructive">
+                {presetError}
+              </p>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setShowSavePresetDialog(false)}>
+                {t('jobs.cancel')}
+              </Button>
+              <Button type="submit" disabled={savingPreset}>
+                {savingPreset ? t('jobs.savingPreset') : t('jobs.savePresetSubmit')}
               </Button>
             </DialogFooter>
           </form>

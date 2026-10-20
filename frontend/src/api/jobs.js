@@ -32,6 +32,18 @@ export function fetchJob(id) {
   return apiFetch(`/api/jobs/${id}/`)
 }
 
+export function fetchFilterPresets() {
+  return apiFetch('/api/job-filter-presets/')
+}
+
+export function createFilterPreset(payload) {
+  return apiFetch('/api/job-filter-presets/', { method: 'POST', body: payload })
+}
+
+export function deleteFilterPreset(id) {
+  return apiFetch(`/api/job-filter-presets/${id}/`, { method: 'DELETE' })
+}
+
 export function collectJobs() {
   return apiFetch('/api/jobs/collect/', { method: 'POST', body: {} })
 }

@@ -171,3 +171,38 @@ class RunLog(models.Model):
 
     def __str__(self):
         return f"{self.task_type} — {self.status} ({self.started_at})"
+
+
+class JobFilterPreset(models.Model):
+    """Combinazione di filtri della lista job salvata con un nome, per
+    applicarla di nuovo rapidamente (sprint corrente). Mai l'intervallo di
+    date (`date_from`/`date_to`): quello si inserisce sempre al momento,
+    non ha senso congelarlo in un preset.
+
+    `search_ids` è un elenco di id di `SavedSearch` (o il token "none") in
+    JSON puro, non una relazione: se una ricerca salvata viene eliminata in
+    seguito, il suo id semplicemente non risolve più a nulla in
+    `list_service._apply_matched_search_filter` (stessa logica già usata
+    per i job collegati a una ricerca sparita), e gli altri filtri del
+    preset continuano a valere — niente da ripulire qui quando succede.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="job_filter_presets"
+    )
+    name = models.CharField(max_length=100)
+    scores = models.JSONField(default=list, blank=True)
+    statuses = models.JSONField(default=list, blank=True)
+    search_ids = models.JSONField(default=list, blank=True)
+    location = models.CharField(max_length=255, blank=True, default="")
+    applicants_ranges = models.JSONField(default=list, blank=True)
+    # "", "yes" o "no" — stesso valore testuale già usato dal parametro
+    # query `recruiter` in JobListView, nessuna traduzione in/out serve.
+    has_recruiter = models.CharField(max_length=3, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.user})"

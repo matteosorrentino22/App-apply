@@ -2,7 +2,8 @@ import re
 
 from rest_framework import serializers
 
-from .models import Job
+from .list_service import APPLICANTS_RANGES, FILTERABLE_STATUSES
+from .models import Job, JobFilterPreset
 
 # Caratteri non ammessi nei nomi file sui filesystem/browser più comuni:
 # tolti dal nome suggerito per il download (Sprint 42), non dal nome reale
@@ -106,3 +107,57 @@ class JobSerializer(serializers.ModelSerializer):
             return None
         name = _build_full_name_for_filename(job.user)
         return f"{_sanitize_filename_part(f'Cover letter {name} - {job.title}')}.pdf"
+
+
+class JobFilterPresetSerializer(serializers.ModelSerializer):
+    """Combinazione di filtri lista job salvata con un nome (sprint
+    corrente). Niente campo per l'intervallo di date: non viene mai salvato
+    (si inserisce sempre al momento dell'applicazione del preset)."""
+
+    class Meta:
+        model = JobFilterPreset
+        fields = [
+            "id",
+            "name",
+            "scores",
+            "statuses",
+            "search_ids",
+            "location",
+            "applicants_ranges",
+            "has_recruiter",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Il nome non può essere vuoto.")
+        return value
+
+    def validate_scores(self, value):
+        if not isinstance(value, list) or not all(isinstance(item, int) for item in value):
+            raise serializers.ValidationError("Deve essere una lista di punteggi interi.")
+        return value
+
+    def validate_statuses(self, value):
+        if not isinstance(value, list) or not set(value) <= set(FILTERABLE_STATUSES):
+            raise serializers.ValidationError(f"Valori ammessi: {', '.join(FILTERABLE_STATUSES)}.")
+        return value
+
+    def validate_search_ids(self, value):
+        if not isinstance(value, list) or not all(
+            item == "none" or (isinstance(item, str) and item.isdigit()) for item in value
+        ):
+            raise serializers.ValidationError('Deve essere una lista di "none" e/o id (stringa) di ricerche salvate.')
+        return value
+
+    def validate_applicants_ranges(self, value):
+        if not isinstance(value, list) or not set(value) <= set(APPLICANTS_RANGES):
+            raise serializers.ValidationError(f"Valori ammessi: {', '.join(APPLICANTS_RANGES)}.")
+        return value
+
+    def validate_has_recruiter(self, value):
+        if value not in ("", "yes", "no"):
+            raise serializers.ValidationError('Deve essere "", "yes" o "no".')
+        return value
