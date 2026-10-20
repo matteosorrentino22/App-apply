@@ -51,8 +51,17 @@ def generate_cover_letter(job, instructions=""):
     }
     html, pdf_bytes, _page_count = render_cover_letter(context)
 
+    content_json = {
+        "content_language": content["content_language"],
+        "translated_city": content["translated_city"],
+        "paragraphs": content["paragraphs"],
+    }
     document = CoverLetterDocument.objects.create(
-        job=job, user=user, html_source=html, instructions_used=instructions
+        job=job,
+        user=user,
+        html_source=html,
+        instructions_used=instructions,
+        content_json=content_json,
     )
     document.pdf_file.save(
         f"cover_letter_{job.pk}_{document.pk}.pdf", ContentFile(pdf_bytes), save=True

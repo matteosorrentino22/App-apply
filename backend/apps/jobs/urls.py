@@ -3,12 +3,16 @@ from django.urls import path
 from .views import (
     ArchiveJobView,
     CollectJobsView,
+    CoverLetterDraftChatView,
+    CoverLetterDraftPreviewView,
+    CoverLetterDraftView,
     CoverLetterInstructionsView,
     CreateManualJobView,
     CvDraftChatView,
     CvDraftPreviewView,
     CvDraftView,
     FavoriteJobView,
+    FinalizeCoverLetterDraftView,
     FinalizeCvDraftView,
     GenerateCoverLetterView,
     GenerateCvView,
@@ -52,6 +56,26 @@ urlpatterns = [
         "jobs/<int:pk>/generate-cover-letter/",
         GenerateCoverLetterView.as_view(),
         name="job-generate-cover-letter",
+    ),
+    path(
+        "jobs/<int:pk>/cover-letter-draft/",
+        CoverLetterDraftView.as_view(),
+        name="job-cover-letter-draft",
+    ),
+    path(
+        "jobs/<int:pk>/cover-letter-draft/preview/",
+        CoverLetterDraftPreviewView.as_view(),
+        name="job-cover-letter-draft-preview",
+    ),
+    path(
+        "jobs/<int:pk>/cover-letter-draft/finalize/",
+        FinalizeCoverLetterDraftView.as_view(),
+        name="job-cover-letter-draft-finalize",
+    ),
+    path(
+        "jobs/<int:pk>/cover-letter-draft/chat/",
+        CoverLetterDraftChatView.as_view(),
+        name="job-cover-letter-draft-chat",
     ),
     path(
         "cover-letter-instructions/",

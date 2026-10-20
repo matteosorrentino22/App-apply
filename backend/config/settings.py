@@ -214,6 +214,11 @@ PRICE_REFERRAL_MESSAGE_EXTRA = Decimal(os.environ.get("PRICE_REFERRAL_MESSAGE_EX
 # altre azioni — ogni messaggio scala sempre il credito extra, come scelto
 # dal committente (un turno di chat costa meno di una generazione intera).
 PRICE_CV_DRAFT_CHAT_MESSAGE = Decimal(os.environ.get("PRICE_CV_DRAFT_CHAT_MESSAGE", "0.20"))
+# Stesso principio di PRICE_CV_DRAFT_CHAT_MESSAGE, budget indipendente
+# (Sprint 63): editor/chat della cover letter.
+PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE = Decimal(
+    os.environ.get("PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE", "0.20")
+)
 
 # Notifiche Web Push (02-specifiche-tecniche-v3.md §3.8): chiavi VAPID per
 # l'autenticazione standard del protocollo, nessun servizio a pagamento.

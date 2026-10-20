@@ -84,9 +84,35 @@ class CoverLetterDocument(models.Model):
     # CV): alimenta anche il menu "indicazioni precedenti" nel popup di
     # generazione, tra tutti i job dell'utente.
     instructions_used = models.TextField(blank=True, default="")
+    # Snapshot strutturato del contenuto (Sprint 63, editor cover letter):
+    # stesso principio di CVDocument.content_json — senza questo non si
+    # potrebbe riaprire una lettera già generata in CoverLetterDraft per
+    # modificarla. Vuoto (`{}`) per le lettere generate prima di questo
+    # campo. Vedi `apps.cv.cover_letter_draft` per la forma esatta.
+    content_json = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"Cover letter — {self.job} ({self.generated_at})"
+
+
+class CoverLetterDraft(models.Model):
+    """Mirror di CVDraft (Sprint 63): copia di lavoro modificabile dei
+    paragrafi di una cover letter, mai generata da zero — parte sempre
+    dall'ultimo `CoverLetterDocument` generato. Niente logica di
+    selezione/taglio da riflettere (a differenza del CV): qui l'utente
+    aggiunge/modifica/rimuove/riordina direttamente i paragrafi."""
+
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cover_letter_draft")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_letter_drafts"
+    )
+    content_json = models.JSONField(default=dict, blank=True)
+    chat_history = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Draft cover letter — {self.job} ({self.updated_at})"
 
 
 class ReferralMessageDocument(models.Model):

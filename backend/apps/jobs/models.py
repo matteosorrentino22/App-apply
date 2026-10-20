@@ -151,6 +151,7 @@ class RunLog(models.Model):
         COVER_LETTER_GENERATION = "cover_letter_generation", "Generazione cover letter"
         REFERRAL_MESSAGE_GENERATION = "referral_message_generation", "Generazione messaggio di networking"
         CV_DRAFT_CHAT = "cv_draft_chat", "Chat editor CV"
+        COVER_LETTER_DRAFT_CHAT = "cover_letter_draft_chat", "Chat editor cover letter"
 
     class Status(models.TextChoices):
         SUCCESS = "success", "Successo"

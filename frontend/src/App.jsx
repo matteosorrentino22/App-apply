@@ -14,6 +14,7 @@ import HomePage from './pages/HomePage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
 import CvDraftEditorPage from './pages/CvDraftEditorPage'
+import CoverLetterDraftEditorPage from './pages/CoverLetterDraftEditorPage'
 import AccountPage from './pages/AccountPage'
 import ProfilePage from './pages/ProfilePage'
 
@@ -122,6 +123,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <CvDraftEditorPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/jobs/:id/cover-letter-editor"
+                element={
+                  <ProtectedRoute>
+                    <CoverLetterDraftEditorPage />
                   </ProtectedRoute>
                 }
               />

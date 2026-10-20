@@ -121,6 +121,58 @@ export function fetchCoverLetterInstructions() {
   return apiFetch('/api/cover-letter-instructions/')
 }
 
+export function openCoverLetterDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/`, { method: 'POST', body: {} })
+}
+
+export function fetchCoverLetterDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/`)
+}
+
+export function updateCoverLetterDraft(id, content) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/`, { method: 'PATCH', body: content })
+}
+
+export function finalizeCoverLetterDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/finalize/`, { method: 'POST', body: {} })
+}
+
+// Stesso motivo di `previewCvDraft`: risposta PDF binaria con il
+// conteggio pagine in un header custom.
+export async function previewCoverLetterDraft(id, content) {
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers.Authorization = `Token ${token}`
+
+  const response = await fetch(`/api/jobs/${id}/cover-letter-draft/preview/`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(content),
+  })
+  if (!response.ok) {
+    throw new Error('Preview non disponibile')
+  }
+  const pageCount = Number(response.headers.get('X-Page-Count')) || 1
+  const blob = await response.blob()
+  return { blob, pageCount }
+}
+
+export function fetchCoverLetterDraftChat(id) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/chat/`)
+}
+
+export function sendCoverLetterDraftChatMessage(id, message) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/chat/`, { method: 'POST', body: { message } })
+}
+
+export function recordCoverLetterChatDecision(id, messageIndex, actionIndex, decision) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/chat/`, {
+    method: 'PATCH',
+    body: { message_index: messageIndex, action_index: actionIndex, decision },
+  })
+}
+
 export function generateReferralMessage(id, payload) {
   return apiFetch(`/api/jobs/${id}/generate-referral-message/`, {
     method: 'POST',

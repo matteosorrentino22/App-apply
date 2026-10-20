@@ -516,6 +516,12 @@ export default function JobDetailPage() {
           </Button>
         )}
 
+        {job.cover_letter_pdf_url && (
+          <Button variant="secondary" asChild>
+            <Link to={`/jobs/${id}/cover-letter-editor`}>{t('coverLetterEditor.editButton')}</Link>
+          </Button>
+        )}
+
         <Button
           type="button"
           variant="secondary"

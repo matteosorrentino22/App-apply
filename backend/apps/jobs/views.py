@@ -26,13 +26,27 @@ from apps.cv.draft_chat import (
     record_action_decision,
     send_chat_message,
 )
+from apps.cv.cover_letter_draft import (
+    NoCoverLetterDocumentToEdit,
+    NoCoverLetterDraftToFinalize,
+    finalize_cover_letter_draft,
+    render_cover_letter_draft_preview,
+    seed_cover_letter_draft_for_job,
+)
+from apps.cv.cover_letter_draft_chat import (
+    ChatMessageFailed as CoverLetterChatMessageFailed,
+    ChatMessageRejected as CoverLetterChatMessageRejected,
+    InvalidChatDecision as CoverLetterInvalidChatDecision,
+    record_action_decision as record_cover_letter_action_decision,
+    send_chat_message as send_cover_letter_chat_message,
+)
 from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
     ManualGenerationRejected,
     request_manual_cv_generation,
 )
-from apps.cv.models import CVDraft, ReferralMessageDocument
+from apps.cv.models import CoverLetterDraft, CVDraft, ReferralMessageDocument
 from apps.cv.referral_message_manual_generation import (
     ReferralMessageGenerationFailed,
     ReferralMessageGenerationRejected,
@@ -251,6 +265,120 @@ class GenerateCoverLetterView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
+
+
+class CoverLetterDraftView(APIView):
+    """Mirror di CvDraftView (Sprint 63): bozza modificabile della cover
+    letter in corso, stesso pattern GET/POST/PATCH."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            return Response(job.cover_letter_draft.content_json)
+        except CoverLetterDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            draft = seed_cover_letter_draft_for_job(job)
+        except NoCoverLetterDocumentToEdit as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(draft.content_json, status=status.HTTP_201_CREATED)
+
+    def patch(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        if not isinstance(request.data, dict):
+            return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            draft = job.cover_letter_draft
+        except CoverLetterDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        draft.content_json = request.data
+        draft.save(update_fields=["content_json", "updated_at"])
+        return Response(draft.content_json)
+
+
+class CoverLetterDraftPreviewView(APIView):
+    """Mirror di CvDraftPreviewView (Sprint 63): rendering PDF economico
+    della bozza corrente, nessuna chiamata AI."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            draft = job.cover_letter_draft
+        except CoverLetterDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+        draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
+        pdf_bytes, page_count = render_cover_letter_draft_preview(request.user, request.user.profile, job, draft_content)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["X-Page-Count"] = str(page_count)
+        return response
+
+
+class FinalizeCoverLetterDraftView(APIView):
+    """Mirror di FinalizeCvDraftView (Sprint 63): nessun consumo di
+    quota/credito, non è una nuova generazione AI."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            document = finalize_cover_letter_draft(job)
+        except NoCoverLetterDraftToFinalize as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
+
+
+class CoverLetterDraftChatView(APIView):
+    """Mirror di CvDraftChatView (Sprint 63), senza riferimento a singoli
+    elementi (niente 'focus_bullets': con 3-5 paragrafi l'ambiguità è
+    bassa, il solo testo libero basta — vedi apps.cv.cover_letter_draft_chat)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            return Response({"history": job.cover_letter_draft.chat_history})
+        except CoverLetterDraft.DoesNotExist:
+            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        message = (request.data.get("message") or "").strip()
+        if not message:
+            return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reply, actions = send_cover_letter_chat_message(job, message)
+        except CoverLetterChatMessageRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
+        except CoverLetterChatMessageFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({"reply": reply, "actions": actions})
+
+    def patch(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        message_index = request.data.get("message_index")
+        action_index = request.data.get("action_index")
+        decision = request.data.get("decision")
+        if not isinstance(message_index, int) or not isinstance(action_index, int):
+            return Response({"detail": "Indici non validi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            record_cover_letter_action_decision(job, message_index, action_index, decision)
+        except CoverLetterInvalidChatDecision as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CoverLetterInstructionsView(APIView):
