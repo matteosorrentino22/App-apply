@@ -1,24 +1,30 @@
 # CLAUDE.md
 
 ## Progetto
-App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte, ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap) e genera automaticamente un CV personalizzato in PDF per le offerte più promettenti. L'utente riceve una notifica mattutina e trova la lista già pronta, con possibilità di generazione manuale, import di job, arricchimento del profilo e tracciamento minimo della candidatura.
-Riferimenti: `01-specifiche-funzionali-v4.md`, `02-specifiche-tecniche-v3.md`
+App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte e ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap). L'utente riceve una notifica mattutina e trova la lista già pronta; su ogni offerta genera su richiesta CV personalizzato in PDF (con "colma i gap"), cover letter e messaggi di networking, li rifinisce con editor + chat AI e traccia la candidatura. Nessuna generazione automatica di CV (rimossa, Sprint 45).
+
+Riferimenti (as-is al 2026-11-14, Sprint 64):
+- `Docs/01-specifiche-funzionali-v6.md` — cosa fa l'app
+- `Docs/02-specifiche-tecniche-v5.md` — come è costruita (modello dati, flussi, API, test)
+- `Docs/03-specifiche-funzionali-contenuto-cv-v5.md` — regole di contenuto/impaginazione del CV (prevale su 01/02 per questi temi)
+- `Docs/CHANGELOG.md` — storico versioni delle specifiche · `DEPLOY.md` — deploy e runbook · `sprints/` — storico sprint
+- Le versioni precedenti delle specifiche sono in `Docs/archivio/` (solo storico, non usarle come riferimento). I commenti nel codice citano ancora `§` delle versioni v3/v4: la numerazione dei paragrafi esistenti è stata mantenuta nelle nuove versioni.
 
 ## Stack
 - **Backend:** Python + Django (+ Django REST Framework per l'API interna consumata dalla PWA)
-- **Task in background:** Celery + Redis (raccolta notturna, scoring, generazione CV, notifiche)
-- **Scheduler:** Celery Beat (batch notturno alle 02:00 Europe/Rome, controllo notifiche 10:00 locali, promemoria inattività)
+- **Task in background:** Celery + Redis (ciclo notturno raccolta+scoring, notifiche, backup). Le azioni su richiesta (generazione CV/cover letter/messaggi, chat degli editor, raccolta manuale "Collect now") girano invece in modo **sincrono** nella richiesta HTTP (gunicorn `--timeout 1800`)
+- **Scheduler:** Celery Beat con `DatabaseScheduler` (ciclo notturno alle 02:00 Europe/Rome, notifiche ogni 15 min con invio alle 10:00 locali, promemoria inattività, backup 03:30)
 - **Frontend:** React come PWA (no pubblicazione store, no cache offline — solo reattività dell'API)
 - **Database:** PostgreSQL
-- **Fonte offerte:** Apify (LinkedIn), dietro un'interfaccia interna sostituibile — una chiamata per gruppo (tipo ricerca × location) per utente/notte, non per singola ricerca salvata (sprint-39); nessun tetto di piano sui job creati (rimosso nello sprint corrente: ogni chiamata è già a pagamento indipendentemente dai risultati usati, e un tetto unico su tutte le ricerche di un utente rischiava di far scartare intere ricerche schiacciate da un'altra più prolifica nello stesso run). Resta solo il limite per singola chiamata Apify (`MAX_ITEMS_PER_CALL=150`, minimo billing pay-per-result dell'actor)
-- **Motore AI:** Claude via AWS Bedrock (SDK `anthropic`, client `AnthropicBedrock`, non l'API Anthropic diretta — passaggio 18/08/2026 per credito esaurito sulla chiave Anthropic) — scoring, generazione CV, parsing del CV caricato in onboarding. Bedrock non supporta l'output strutturato nativo (`output_config.format`): l'helper condiviso `apps/common/ai.py` forza lo schema via tool-use (`tool_choice`), unico punto da toccare per tutte le chiamate AI
-- **Generazione CV:** template HTML/CSS → PDF (WeasyPrint). Solo PDF nell'MVP, nessuna pipeline Word
+- **Fonte offerte:** Apify (actor `cheap_scraper~linkedin-job-scraper`), dietro un'interfaccia interna sostituibile — una chiamata per gruppo (tipo ricerca × location) per utente/notte, non per singola ricerca salvata (sprint-39); nessun tetto di piano sui job creati né cap di intake (rimossi, Sprint 45–46: ogni chiamata è già a pagamento indipendentemente dai risultati usati). Resta solo il limite per singola chiamata Apify (`MAX_ITEMS_PER_CALL=150`, minimo billing pay-per-result dell'actor). L'import di un singolo job da URL usa invece l'API guest di LinkedIn (sprint-24), senza Apify
+- **Motore AI:** Claude via AWS Bedrock (SDK `anthropic`, client `AnthropicBedrock`, non l'API Anthropic diretta — passaggio 18/08/2026 per credito esaurito sulla chiave Anthropic) — scoring, generazione CV/cover letter/messaggi di networking, chat degli editor, parsing del CV caricato in onboarding. Modelli per uso configurati da env (`BEDROCK_SCORING_MODEL`, `BEDROCK_CV_GENERATION_MODEL`, `BEDROCK_CV_PARSING_MODEL`). Bedrock non supporta l'output strutturato nativo (`output_config.format`): l'helper condiviso `apps/common/ai.py` forza lo schema via tool-use (`tool_choice`), unico punto da toccare per tutte le chiamate AI
+- **Generazione CV/cover letter:** template HTML/CSS → PDF (WeasyPrint, font Caladea compatibile Cambria installato nell'immagine). Solo PDF, nessuna pipeline Word. Editor in-app con bozza (`CVDraft`/`CoverLetterDraft`) e chat AI a proposta→conferma (Sprint 51–63)
 - **Credito extra:** saldo in euro (`Decimal`) con listino prezzi unitari configurabile per azione
-- **Autenticazione:** email/password (nativa Django) + login Google (django-allauth)
+- **Autenticazione:** email/password (nativa Django) + login Google (django-allauth; implementato ma oggi non configurato in produzione)
 - **Notifiche:** Web Push standard (es. libreria `pywebpush`), nessun servizio esterno a pagamento
 - **Hosting:** VPS singolo economico (es. Hetzner)
 - **Deploy:** Docker Compose (Django, PostgreSQL, Redis, worker Celery, Caddy) + Caddy come reverse proxy con HTTPS automatico
-- **Amministrazione:** Django Admin per gestione piani, credito, voucher (nessun checkout self-service nell'MVP)
+- **Amministrazione:** Django Admin per gestione piani e credito (nessun voucher implementato, nessun checkout self-service nell'MVP)
 
 ## Principi guida
 - Semplicità e manutenibilità prima di tutto: no over-engineering
@@ -30,9 +36,9 @@ Riferimenti: `01-specifiche-funzionali-v4.md`, `02-specifiche-tecniche-v3.md`
 ## Convenzioni di codice
 Proposte nello Sprint 01, in vigore da qui in avanti:
 
-- **Struttura repo:** codice Django in `backend/`, deploy (`docker-compose.yml`, `docker/`) alla radice insieme alle specifiche e a `/sprints`. Il frontend React (da Sprint 18) andrà in `frontend/` allo stesso livello di `backend/`.
+- **Struttura repo:** codice Django in `backend/`, PWA React in `frontend/`, deploy (`docker-compose*.yml`, `docker/`) alla radice, specifiche in `Docs/` (versioni superate in `Docs/archivio/`), schede sprint in `sprints/`.
 - **Progetto Django:** cartella di settings/config si chiama `config` (non il nome dell'app), con `config/settings.py` unico (niente split `base/dev/prod`: la differenza dev/prod passa da variabili d'ambiente e da `docker-compose.yml` vs `docker-compose.prod.yml`, non da moduli di settings diversi — coerente con "no over-engineering").
-- **App Django:** vivono in `backend/apps/<nome_app>/`, importate come `apps.<nome_app>` in `INSTALLED_APPS`. Un'app per dominio funzionale (es. `accounts`, `common`; seguiranno `profiles`, `searches`, `jobs`, `cv`, `notifications` nei prossimi sprint), non un'unica app monolitica né un'app per modello.
+- **App Django:** vivono in `backend/apps/<nome_app>/`, importate come `apps.<nome_app>` in `INSTALLED_APPS`. Un'app per dominio funzionale (`accounts`, `common`, `profiles`, `searches`, `jobs`, `cv`, `notifications`), non un'unica app monolitica né un'app per modello.
 - **Migrazioni:** sempre generate e **committate** nel repository (mai in `.gitignore`); `makemigrations --check` deve restituire nessuna differenza prima di chiudere uno sprint che tocca i modelli.
 - **Config/segreti:** solo variabili d'ambiente (mai hardcoded), lette in `settings.py` con `os.environ.get(...)`; `.env.example` alla radice documenta le chiavi attese, `.env` reale mai committato.
 - **Docker:** un'unica immagine (`backend/Dockerfile`) condivisa da `web`/`worker`/`beat`, differenziati solo dal comando lanciato in `docker-compose.yml`.
@@ -82,3 +88,26 @@ Il progetto è diviso in sprint, ognuno in un file sprint-NN.md nella
 cartella /sprints. Ogni sprint va completato e verificato prima di
 passare al successivo. A fine sprint, aggiornare il relativo file con
 esito, problemi riscontrati, requisiti soddisfatti.
+
+**Documentazione as-is obbligatoria a ogni sprint** (regola introdotta il
+2026-11-14 dopo che gli sprint 40–64 erano stati rilasciati senza
+documentazione e ricostruiti a posteriori):
+1. Prima di scegliere il numero, guardare sia `git log --oneline` sia
+   `ls sprints/`: il numero è il successivo al massimo dei due, e lo
+   stesso numero va usato nel commit, nei commenti del codice e nel file
+   (in passato le tre numerazioni sono divergite — vedi `sprints/sprint-44.md`).
+2. Creare/aggiornare `sprints/sprint-NN.md` (richiesta, decisioni prese col
+   committente, implementazione, verifica, cosa manca).
+3. Aggiornare **nello stesso commit** le specifiche in `Docs/` toccate dalla
+   modifica (01 funzionali, 02 tecniche — modello dati, flussi, tabella API
+   §12, test §13 —, 03 contenuto CV), così che descrivano sempre l'as-is;
+   aggiornare la riga corrispondente in `Docs/CHANGELOG.md`. Se cambiano
+   deploy, variabili d'ambiente o procedure operative: `DEPLOY.md` e
+   `.env.example`.
+4. Interventi operativi fatti a mano sul VPS (dati, `.env`, container) che
+   cambiano il comportamento dell'app vanno annotati nel runbook di
+   `DEPLOY.md` §7 in forma generica (mai email, nomi utente, token: il
+   repository GitHub è pubblico).
+5. Test backend nel container di produzione: sempre con
+   `-e DJANGO_DEBUG=true` (vedi `DEPLOY.md` §4.4), altrimenti ~60 test
+   falliscono per il redirect HTTPS senza che ci sia una regressione.

@@ -1,76 +1,170 @@
-# Deploy produzione
+# Deploy e operatività in produzione
 
-Riferimento: `02-specifiche-tecniche-v3.md` §8. Un unico VPS (es. Hetzner), Docker Compose, Caddy con HTTPS automatico.
+> Stato descritto: **as-is al 2026-11-14** (HEAD = Sprint 64).
+> Riferimenti: `Docs/02-specifiche-tecniche-v5.md` §8 (infrastruttura), `CLAUDE.md` (regola "un solo file compose").
+> Questo file è nel repository pubblico: **non** riportare qui dominio, IP, email, nomi di account o utenti, token.
 
-## 1. Provisioning una tantum del VPS
+---
 
-Da root, subito dopo il provisioning e prima del primo `docker compose up`:
+## 1. Architettura in produzione
+
+Un unico VPS Linux (1 vCPU, ~4 GB RAM) con Docker Engine + plugin Compose. Tutto lo stack parte da **`docker-compose.prod.yml`** (mai `docker-compose.yml`, che è solo per sviluppo — vedi §5).
+
+| Servizio | Immagine / build | Ruolo |
+|---|---|---|
+| `db` | `postgres:16-alpine` | Database (volume `postgres_data`) |
+| `redis` | `redis:7-alpine` | Broker/result backend Celery |
+| `web` | `./backend` | `migrate` + `collectstatic` all'avvio, poi `gunicorn --workers 4 --timeout 1800` |
+| `worker` | `./backend` (stessa immagine) | `celery worker` — concorrenza = n. CPU (oggi 1) |
+| `beat` | `./backend` (stessa immagine) | `celery beat` con `DatabaseScheduler` (task schedulati salvati nel DB) |
+| `frontend-build` | `./frontend` | One-shot: `npm run build` della PWA nel volume `frontend_dist`, poi termina |
+| `caddy` | `caddy:2-alpine` | HTTPS automatico (Let's Encrypt) su `$DOMAIN`, reverse proxy `/api/*`, `/admin/*`, `/accounts/*` → `web:8000`; serve direttamente `/static/*`, `/media/*` e la PWA con fallback su `index.html` |
+
+Perché `--timeout 1800` e 4 worker gunicorn: la **raccolta manuale** ("Collect now") esegue raccolta + scoring in sincrono dentro la richiesta HTTP (fino a ~100 job, scoring in parallelo con `SCORING_CONCURRENCY=5`); con il timeout di default i worker venivano uccisi a metà lasciando job senza punteggio (Sprint 45). Stesso rischio per generazione CV/cover letter (Sprint 44).
+
+Dipendenze di sistema nell'immagine backend (`backend/Dockerfile`): librerie Pango/Cairo per WeasyPrint, `postgresql-client` (`pg_dump`/`pg_restore` per backup/ripristino), **`fonts-crosextra-caladea`** (font compatibile Cambria usato dal template CV — senza, Pango ricade su DejaVu; Sprint 52).
+
+Servizi esterni:
+- **AWS Bedrock** (Claude) — scoring, generazione CV/cover letter/messaggi, chat degli editor, parsing CV in onboarding.
+- **Apify** — actor `cheap_scraper~linkedin-job-scraper` per la raccolta offerte (pay-per-result, minimo 150 risultati fatturati per chiamata).
+- **LinkedIn guest API** (`jobs-guest/jobs/api/jobPosting/{id}`, nessuna chiave) — import di un job da URL.
+- **Nominatim (OpenStreetMap)** — autocomplete città, nessuna chiave.
+- **Web Push** (VAPID) — notifiche, nessun servizio a pagamento.
+
+## 2. Provisioning una tantum del VPS
 
 ```
 ./docker/vps-setup.sh
 ```
 
-Installa e attiva `unattended-upgrades` (aggiornamenti di sicurezza automatici del sistema operativo, §8.5). Installare Docker Engine + plugin Compose separatamente (non coperto da questo script, dipende dalla distribuzione).
+Installa e attiva `unattended-upgrades`. Docker Engine + Compose vanno installati a parte.
 
-## 2. Configurazione
+**Attenzione alle porte 80/443:** sul VPS non devono girare altri stack che le pubblicano. Incidente reale (17/10/2026): dopo un riavvio del server, un vecchio stack di prototipo (n8n + Traefik, `restart: always`) ha preso le porte 80/443 prima di Caddy (`unless-stopped`) → sito in 404. Risolto con `docker compose down` su quello stack (volumi preservati, container rimossi). Dopo ogni riavvio del VPS verificare con `ss -tlnp | grep -E ':80 |:443 '` e `docker ps -a` che le porte siano di `app-apply-caddy-1`.
 
-Copiare `.env.example` in `.env` sul VPS e compilare tutti i valori, in particolare rispetto allo sviluppo:
+## 3. Configurazione (`.env`)
 
-- `DJANGO_DEBUG=false`
-- `DJANGO_SECRET_KEY` — valore reale generato (mai quello di sviluppo)
-- `DJANGO_ALLOWED_HOSTS` — il dominio reale (es. `app.example.com`)
-- `DJANGO_CSRF_TRUSTED_ORIGINS` — `https://<dominio>`
-- `DOMAIN` — dominio su cui Caddy richiede il certificato Let's Encrypt
-- `CADDY_EMAIL` — email per le notifiche ACME di Let's Encrypt
-- `BACKUP_S3_*` — credenziali dello storage a oggetti esterno per il backup giornaliero
-- Tutte le chiavi già previste in sviluppo (Apify, Anthropic, Google OAuth, VAPID) con i valori reali di produzione
+Copiare `.env.example` in `.env` alla radice del repo sul VPS e compilare. `.env` non è mai committato. Chiavi:
 
-Nessun segreto va mai committato: `.env` è in `.gitignore`, solo `.env.example` (senza valori reali) è versionato.
+| Gruppo | Chiavi | Note |
+|---|---|---|
+| Django | `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Host = dominio reale; origins = `https://<dominio>` |
+| Database | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST=db`, `POSTGRES_PORT=5432` | |
+| Celery | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Redis del compose |
+| AI (Bedrock) | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_SCORING_MODEL`, `BEDROCK_CV_GENERATION_MODEL`, `BEDROCK_CV_PARSING_MODEL` | Oggi: scoring su Haiku 4.5, generazione e parsing su Opus 5 (ID inference-profile `us.anthropic.*`). L'API Anthropic diretta non è più usata (dal 18/08/2026) |
+| Fonte offerte | `APIFY_API_TOKEN` | Unica variabile letta dal codice (altre varianti nel `.env` sono ignorate) |
+| Login Google | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | **Oggi vuote in produzione** → login Google non attivo, solo email/password |
+| Push | `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CLAIMS_EMAIL` | |
+| Prezzi extra (€) | `PRICE_MANUAL_CV_EXTRA` (1.50), `PRICE_IMPORT_EXTRA` (0.50), `PRICE_COVER_LETTER_EXTRA` (1.50), `PRICE_MANUAL_JOB_EXTRA` (0.50), `PRICE_REFERRAL_MESSAGE_EXTRA` (1.00), `PRICE_CV_DRAFT_CHAT_MESSAGE` (0.20), `PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE` (0.20) | Facoltative: tra parentesi il default in `config/settings.py` |
+| Deploy | `DOMAIN`, `CADDY_EMAIL` | Solo `docker-compose.prod.yml` |
+| Backup | `BACKUP_S3_ENDPOINT_URL`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY`, `BACKUP_S3_REGION` | **Oggi vuote in produzione** → vedi §6 |
 
-## 3. Avvio
+Dopo una modifica a `.env` un `restart` **non basta**: i container vanno ricreati (§4.2).
+
+## 4. Avvio e aggiornamento
+
+### 4.1 Primo avvio / rilascio di una nuova versione
 
 ```
+cd /root/App-apply
+git pull                                   # oppure si lavora direttamente su main sul VPS
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Avvia `db`, `redis`, `web` (esegue `migrate` + `collectstatic` poi serve con `gunicorn`), `worker`, `beat`, `frontend-build` (compila la PWA una tantum in un volume) e `caddy` (HTTPS automatico su `DOMAIN`, serve la PWA, i file statici/media e fa da reverse proxy per `/api`, `/admin`, `/accounts`).
+`web` applica le migrazioni e `collectstatic` a ogni avvio; `frontend-build` ricompila la PWA nel volume e Caddy la serve subito. `web`, `worker` e `beat` condividono la stessa immagine: dopo una modifica al backend vanno ricostruiti **tutti e tre** (altrimenti il worker esegue codice vecchio).
 
-Verifica: `curl -v https://<dominio>/` deve restituire un certificato valido emesso da Let's Encrypt.
-
-## 4. Backup
-
-Il backup gira automaticamente ogni notte alle 03:30 Europe/Rome (Celery Beat, task `apps.common.tasks.backup_database`): dump del database (`pg_dump -Fc`) + archivio dei file media, caricati sul bucket S3-compatibile configurato in `BACKUP_S3_*`.
-
-Per lanciarlo manualmente:
+### 4.2 Applicare una modifica a `.env`
 
 ```
-docker compose -f docker-compose.prod.yml exec worker python manage.py shell -c \
-  "from apps.common.tasks import backup_database; backup_database()"
+docker compose -f docker-compose.prod.yml up -d --force-recreate web worker beat
 ```
 
-## 5. Test di ripristino
-
-Da eseguire **su un ambiente separato** (mai contro il database di produzione), puntando `.env` di quell'ambiente allo stesso bucket di backup:
+### 4.3 Verifica di coerenza dello stack (prima e dopo ogni intervento)
 
 ```
-docker compose exec web python manage.py restore_backup 2026-07-27 --confirm
+for c in $(docker ps -q); do docker inspect $c --format '{{.Name}} {{index .Config.Labels "com.docker.compose.project.config_files"}}'; done
 ```
 
-Scarica `db-2026-07-27.dump` dal bucket e lo ripristina (`pg_restore --clean --if-exists`) nel database a cui l'ambiente è collegato. Verificare poi che i dati attesi siano presenti (es. conteggio utenti/job).
+Tutti i container `app-apply-*` devono riportare `.../docker-compose.prod.yml`. Vedi l'incidente del 17/08/2026 in `CLAUDE.md`.
 
-## Verificato in questo sprint (sandbox, senza VPS reale)
+### 4.4 Test
 
-- `docker compose -f docker-compose.prod.yml config` — sintassi e interpolazione delle variabili corrette.
-- `gunicorn config.wsgi:application` avviato con `DJANGO_DEBUG=false`: redirect HTTPS e cookie sicuri attivi, nessun loop di redirect dietro un proxy che imposta `X-Forwarded-Proto` (comportamento di Caddy).
-- `collectstatic` produce i file statici correttamente.
-- Round-trip reale `pg_dump -Fc` → `pg_restore --clean --if-exists` contro PostgreSQL 16 locale: i dati ripristinati in un database di prova corrispondono a quelli di partenza.
-- `npm run build` produce la build statica della PWA.
+```
+docker compose -f docker-compose.prod.yml exec -T -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (234 test, OK al 2026-11-14)
+docker compose -f docker-compose.prod.yml exec web python manage.py makemigrations --check
+cd frontend && npm run test:e2e                                                     # Playwright (e2e/*.spec.js)
+```
 
-## Non verificabile in questo ambiente
+`-e DJANGO_DEBUG=true` è necessario: con la configurazione di produzione (`DEBUG=false` → redirect HTTPS) il test client riceve 301 su tutte le chiamate API e circa 60 test falliscono senza che ci sia una regressione. Il database di test è separato (`test_<db>`), i dati di produzione non vengono toccati.
 
-- Emissione reale di un certificato Let's Encrypt (richiede un dominio pubblico e porte 80/443 raggiungibili da Internet).
-- Avvio effettivo di `docker compose -f docker-compose.prod.yml up -d` (il sandbox di sviluppo non ha un demone Docker funzionante — build/`up` non eseguibili qui, solo `config` per la validazione statica).
-- Backup reale su uno storage a oggetti esterno (nessuna credenziale S3 di test disponibile) e relativo test di ripristino end-to-end su un ambiente separato.
-- Comportamento reale di `unattended-upgrades` su un sistema operativo effettivamente installato sul VPS.
+I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova.
 
-Questi punti restano da eseguire e confermare direttamente sul VPS reale.
+## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
+
+Creati da migrazioni dati (modificabili da Django Admin → Periodic tasks):
+
+| Task | Quando | Migrazione |
+|---|---|---|
+| Ciclo notturno — `apps.jobs.tasks.run_nightly_cycle` (oggi solo raccolta + scoring: cap di intake e CV automatici rimossi; il nome del PeriodicTask è rimasto quello storico) | 02:00 Europe/Rome | `jobs/0003_schedule_nightly_cycle` |
+| Notifica mattutina (nuovi job) e promemoria di inattività (7 giorni) | ogni 15 minuti; la notifica mattutina parte solo nell'ora 10 locale dell'utente | `notifications/0002_schedule_notification_tasks` |
+| Backup giornaliero database | 03:30 Europe/Rome | `common/0001_schedule_backup` |
+
+## 6. Backup e ripristino
+
+Il task `apps.common.tasks.backup_database` esegue `pg_dump -Fc` + archivio dei file media e li carica sul bucket S3-compatibile configurato in `BACKUP_S3_*`. Se le variabili sono vuote il task registra solo un warning e **non salva nulla**.
+
+> ⚠️ **Stato attuale:** `BACKUP_S3_*` non è configurato in produzione, quindi **non esiste un backup automatico fuori dal VPS**. Esistono solo dump manuali locali in `backups/` (gitignored), fatti prima di interventi distruttivi (es. `pre_cv_wipe_20260828_*.dump`). Configurare un bucket è un'azione consigliata.
+
+Backup manuale locale (dump nella cartella `backups/` del repo, non versionata):
+
+```
+docker compose -f docker-compose.prod.yml exec -T db pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > backups/manual_$(date +%Y%m%d_%H%M%S).dump
+```
+
+Backup su S3 lanciato a mano: `docker compose -f docker-compose.prod.yml exec worker python manage.py shell -c "from apps.common.tasks import backup_database; backup_database()"`.
+
+Ripristino di prova (**mai contro la produzione**, ambiente separato puntato allo stesso bucket): `python manage.py restore_backup AAAA-MM-GG --confirm` (scarica `db-AAAA-MM-GG.dump` e fa `pg_restore --clean --if-exists`).
+
+## 7. Runbook operativo
+
+Comandi da lanciare in `/root/App-apply`. Abbreviazione usata sotto: `SHELL_DJANGO='docker compose -f docker-compose.prod.yml exec -T web python manage.py shell -c'`. Identificare sempre l'utente per id (`User.objects.get(pk=<id>)`), non scrivere email nei documenti.
+
+### 7.1 Raccolta offerte fallita con 403 da Apify / credito Apify esaurito
+Sintomo: raccolta notturna e "Collect now" falliscono per **tutti** gli utenti, `RunLog` di tipo `collection` in `failure` con 403 dall'endpoint `run-sync-get-dataset-items`. Causa tipica: credito mensile dell'account Apify esaurito (piano free = 5 $/mese), non token invalido.
+1. Verificare il consumo: `GET https://api.apify.com/v2/users/me/limits` con il token (dal container `web`).
+2. Ricaricare credito / cambiare piano sull'account, **oppure** passare a un token di un altro account con credito: aggiornare `APIFY_API_TOKEN` in `.env` (si può tenere il vecchio valore in una variabile di comodo con altro nome: il codice legge solo `APIFY_API_TOKEN`).
+3. Ricreare `web worker beat` (§4.2) e verificare `GET https://api.apify.com/v2/users/me` → 200.
+
+### 7.2 Credenziali/modello Bedrock
+Le chiamate AI passano tutte da `apps/common/ai.py`. Per ruotare le chiavi AWS o cambiare modello: aggiornare `AWS_*` / `BEDROCK_*` in `.env` e ricreare i container (§4.2). Errori di quota/credenziali compaiono nei `RunLog` (scoring, generazioni, chat).
+
+### 7.3 Utente bloccato dalla quota "Collect now" (409)
+Il limite è `COLLECTION_DAILY_LIMIT = 1` raccolta manuale al giorno per utente, uguale per Free e Pro (`apps/jobs/tasks.py`). Per concederne un'altra oggi:
+```
+$SHELL_DJANGO "
+from apps.accounts.models import User; from apps.jobs.models import DailyQuota; from apps.jobs.tasks import _today_europe_rome
+q = DailyQuota.objects.get(user=User.objects.get(pk=<id>), date=_today_europe_rome()); q.collection_count = 0; q.save(update_fields=['collection_count']); print('ok')"
+```
+Stesso schema per gli altri contatori di `DailyQuota` (`manual_cv_count`, `import_count`, `cover_letter_count`, `manual_job_count`, `referral_message_count`). Il 409 può anche indicare una raccolta già in corso (`User.collection_in_progress`): il lock scade da solo dopo 2 ore (`COLLECTION_STALE_AFTER`).
+
+### 7.4 Rilanciare la raccolta notturna per un solo utente
+Non esiste un task Celery per singolo utente: si chiama la funzione da shell.
+```
+$SHELL_DJANGO "
+from apps.accounts.models import User; from apps.jobs.tasks import run_nightly_cycle_for_user
+print(run_nightly_cycle_for_user(User.objects.get(pk=<id>)))"
+```
+Attenzione: nessuna guardia di quota/lock su questo percorso e **ogni gruppo ricerca×location è una chiamata Apify a pagamento** (≥150 risultati fatturati). I job già presenti non vengono duplicati (dedup su `external_id`).
+
+### 7.5 Cambiare piano o credito di un utente
+Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da shell (`u.plan = User.Plan.PRO; u.save(update_fields=['plan'])`). Il passaggio Pro→Free disattiva tutte le ricerche (regola di downgrade, specifiche funzionali §4.2).
+
+### 7.6 Diagnosi rapida
+- Log: `docker compose -f docker-compose.prod.yml logs --tail 200 web|worker|beat|caddy`.
+- Esiti di raccolta, scoring, generazioni e chat: modello `RunLog` (Django Admin), con `task_type`, `status`, `message`.
+- PDF generato ma "pagina bianca" al download: quasi sempre stack misto dev/prod (§4.3).
+
+## 8. Storico verifiche di deploy
+
+- Sprint 21 (sandbox, senza VPS): validati `docker compose -f docker-compose.prod.yml config`, gunicorn con `DJANGO_DEBUG=false` dietro proxy (redirect HTTPS/cookie sicuri, nessun loop), `collectstatic`, round-trip `pg_dump -Fc` → `pg_restore` su PostgreSQL 16, `npm run build`.
+- Produzione reale (da luglio 2026): certificato Let's Encrypt emesso da Caddy, stack completo in esecuzione da `docker-compose.prod.yml`.
+- Non ancora verificati in produzione: backup su storage esterno e test di ripristino end-to-end (bucket non configurato, §6).
