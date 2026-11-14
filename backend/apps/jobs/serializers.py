@@ -3,6 +3,8 @@ import re
 from rest_framework import serializers
 
 from apps.common.files import signed_document_url
+from apps.cv.cover_letter_draft import is_cover_letter_draft_outdated
+from apps.cv.draft import is_cv_draft_outdated
 
 from .list_service import APPLICANTS_RANGES, FILTERABLE_STATUSES
 from .models import Job, JobFilterPreset
@@ -44,6 +46,15 @@ MAX_GAP_LENGTH = 500
 
 
 class GenerateCvInputSerializer(serializers.Serializer):
+    # Sprint 69: numeri 1-based dei gap nell'elenco completo `score_gaps`
+    # (stessa numerazione del pannello). `gaps` (testi) resta accettato per
+    # le schede aperte prima dell'aggiornamento.
+    gap_numbers = serializers.ListField(
+        child=serializers.IntegerField(min_value=1, max_value=1_000),
+        max_length=MAX_GAPS,
+        required=False,
+        default=list,
+    )
     gaps = serializers.ListField(
         child=serializers.CharField(max_length=MAX_GAP_LENGTH, allow_blank=True),
         max_length=MAX_GAPS,
@@ -107,6 +118,15 @@ class JobSerializer(serializers.ModelSerializer):
     # indipendente, mai generato automaticamente, sempre legato al job.
     cover_letter_pdf_url = serializers.SerializerMethodField()
     cover_letter_download_filename = serializers.SerializerMethodField()
+    # Sprint 69: un flag acceso da oltre GENERATION_STALE_AFTER (processo
+    # morto a metà generazione) non viene più mostrato come "in corso".
+    cv_generation_in_progress = serializers.BooleanField(source="cv_generation_active", read_only=True)
+    cover_letter_generation_in_progress = serializers.BooleanField(
+        source="cover_letter_generation_active", read_only=True
+    )
+    referral_message_generation_in_progress = serializers.BooleanField(
+        source="referral_message_generation_active", read_only=True
+    )
 
     class Meta:
         model = Job
@@ -130,6 +150,7 @@ class JobSerializer(serializers.ModelSerializer):
             "status",
             "cv_generation_in_progress",
             "cover_letter_generation_in_progress",
+            "referral_message_generation_in_progress",
             "score",
             "score_match",
             "score_gaps",
@@ -162,6 +183,64 @@ class JobSerializer(serializers.ModelSerializer):
 
     def get_cover_letter_download_filename(self, job):
         return cover_letter_download_filename(job) if job.cover_letter_documents.exists() else None
+
+
+class JobDetailSerializer(JobSerializer):
+    """Dettaglio del job (Sprint 69): in più rispetto alla lista, lo stato
+    dei documenti per il dettaglio e gli editor — pagine dell'ultimo PDF
+    (avviso oltre 1 pagina), se l'ultimo documento è riapribile
+    nell'editor (`content_json` non vuoto: no per i CV pre-Sprint 51 e le
+    cover letter pre-Sprint 63) e se la bozza è superata da un documento
+    più recente. Non nella lista per non aggiungere query per ogni job."""
+
+    cv_page_count = serializers.SerializerMethodField()
+    cv_editable = serializers.SerializerMethodField()
+    cv_draft_outdated = serializers.SerializerMethodField()
+    cover_letter_page_count = serializers.SerializerMethodField()
+    cover_letter_editable = serializers.SerializerMethodField()
+    cover_letter_draft_outdated = serializers.SerializerMethodField()
+
+    class Meta(JobSerializer.Meta):
+        fields = JobSerializer.Meta.fields + [
+            "cv_page_count",
+            "cv_editable",
+            "cv_draft_outdated",
+            "cover_letter_page_count",
+            "cover_letter_editable",
+            "cover_letter_draft_outdated",
+        ]
+
+    def _latest(self, job, kind):
+        cache = self.context.setdefault("_latest_documents", {})
+        key = (job.pk, kind)
+        if key not in cache:
+            related = job.cv_documents if kind == "cv" else job.cover_letter_documents
+            cache[key] = related.order_by("-generated_at", "-id").first()
+        return cache[key]
+
+    def get_cv_page_count(self, job):
+        latest = self._latest(job, "cv")
+        return latest.page_count if latest else None
+
+    def get_cv_editable(self, job):
+        latest = self._latest(job, "cv")
+        return bool(latest and latest.content_json)
+
+    def get_cv_draft_outdated(self, job):
+        latest = self._latest(job, "cv")
+        return is_cv_draft_outdated(job, latest) if latest else False
+
+    def get_cover_letter_page_count(self, job):
+        latest = self._latest(job, "cover_letter")
+        return latest.page_count if latest else None
+
+    def get_cover_letter_editable(self, job):
+        latest = self._latest(job, "cover_letter")
+        return bool(latest and latest.content_json)
+
+    def get_cover_letter_draft_outdated(self, job):
+        latest = self._latest(job, "cover_letter")
+        return is_cover_letter_draft_outdated(job, latest) if latest else False
 
 
 class JobFilterPresetSerializer(serializers.ModelSerializer):

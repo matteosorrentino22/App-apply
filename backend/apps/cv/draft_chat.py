@@ -15,6 +15,8 @@ from django.utils import timezone
 from apps.common.ai import call_claude_structured
 from apps.jobs.models import RunLog
 
+from .draft import load_cv_draft
+from .draft_ids import cv_bullet_owners
 from .models import CVDraft
 
 # Un'azione per ogni singolo campo modificabile del draft (stessa forma di
@@ -48,7 +50,7 @@ CHAT_ACTION_SCHEMA = {
     "properties": {
         "type": {"type": "string", "enum": CHAT_ACTION_TYPES},
         "profile_experience_id": {"type": ["integer", "null"]},
-        "bullet_index": {"type": ["integer", "null"]},
+        "bullet_id": {"type": ["string", "null"]},
         "area_index": {"type": ["integer", "null"]},
         "education_index": {"type": ["integer", "null"]},
         "language_index": {"type": ["integer", "null"]},
@@ -59,7 +61,7 @@ CHAT_ACTION_SCHEMA = {
     "required": [
         "type",
         "profile_experience_id",
-        "bullet_index",
+        "bullet_id",
         "area_index",
         "education_index",
         "language_index",
@@ -104,11 +106,11 @@ CHAT_SYSTEM_PROMPT = (
     "tipo restano null):\n"
     "- update_summary/update_qualification: 'text' = nuovo contenuto.\n"
     "- update_role: 'profile_experience_id' + 'text' = nuovo ruolo.\n"
-    "- update_bullet: 'profile_experience_id' + 'bullet_index' (posizione "
-    "nell'elenco bullet di quell'esperienza, come fornito sotto) + 'text'.\n"
+    "- update_bullet: 'bullet_id' (il campo 'id' del bullet nella bozza "
+    "qui sotto) + 'profile_experience_id' della sua esperienza + 'text'.\n"
     "- add_bullet: 'profile_experience_id' + 'text' (nuovo bullet, aggiunto "
     "in coda, visibile).\n"
-    "- hide_bullet/show_bullet: 'profile_experience_id' + 'bullet_index' — "
+    "- hide_bullet/show_bullet: 'bullet_id' + 'profile_experience_id' — "
     "nascondono/mostrano un bullet esistente senza eliminarlo.\n"
     "- hide_experience/show_experience: 'profile_experience_id'.\n"
     "- update_area: 'area_index' + 'text'. add_area: 'text' (nuova voce, "
@@ -120,9 +122,16 @@ CHAT_SYSTEM_PROMPT = (
     "- update_education_notes: 'education_index' + 'text'.\n"
     "- update_language_level: 'language_index' + 'level' (uno tra "
     f"{LANGUAGE_LEVEL_CODES}).\n\n"
-    "Gli indici (bullet_index, area_index, education_index, "
-    "language_index) si riferiscono sempre alla posizione nell'elenco così "
-    "come te lo fornisco in questo messaggio, a partire da 0.\n\n"
+    "I bullet si indicano SEMPRE con il loro 'id' (stringa), mai con la "
+    "posizione: un id che non esiste nella bozza fa scartare l'azione. Gli "
+    "indici (area_index, education_index, language_index) si riferiscono "
+    "alla posizione nell'elenco così come te lo fornisco in questo "
+    "messaggio, a partire da 0.\n\n"
+    "CRONOLOGIA: per ogni tua risposta precedente trovi anche le azioni "
+    "proposte, in forma compatta, con la decisione dell'utente ('accepted' "
+    "= applicata, 'rejected' = rifiutata, 'pending' = non ancora decisa). "
+    "Non riproporre un'azione rifiutata se l'utente non lo chiede; lo stato "
+    "reale attuale è comunque quello della BOZZA CV ATTUALE.\n\n"
     "BULLET PUNTATI: se il messaggio include un blocco 'BULLET PUNTATI "
     "DALL'UTENTE', l'utente ha selezionato esplicitamente quei singoli "
     "bullet nell'interfaccia (un pulsante su ciascuna singola attività, "
@@ -139,31 +148,79 @@ CHAT_SYSTEM_PROMPT = (
 # cronologia completa resta salvata, ma il costo di ogni messaggio non
 # cresce senza limite con la lunghezza della conversazione.
 MAX_HISTORY_TURNS_IN_PROMPT = 20
+# Testo delle azioni passate nella cronologia del prompt (Sprint 69): basta
+# a riconoscerle, il testo completo applicato è già nella bozza.
+MAX_ACTION_TEXT_IN_HISTORY = 200
+
+_COMPACT_ACTION_KEYS = (
+    "profile_experience_id",
+    "bullet_id",
+    "area_index",
+    "education_index",
+    "language_index",
+    "name",
+    "level",
+)
+
+
+def compact_action(action, keys=_COMPACT_ACTION_KEYS):
+    """Forma compatta di un'azione già proposta, con la decisione
+    dell'utente, per la cronologia passata al modello (Sprint 69)."""
+    item = {"type": action.get("type")}
+    for key in keys:
+        if action.get(key) is not None:
+            item[key] = action[key]
+    text = action.get("text")
+    if text:
+        item["text"] = (
+            text if len(text) <= MAX_ACTION_TEXT_IN_HISTORY else text[:MAX_ACTION_TEXT_IN_HISTORY] + "…"
+        )
+    item["decision"] = action.get("decision") or "pending"
+    return item
+
+
+def history_for_prompt(chat_history, keys=_COMPACT_ACTION_KEYS):
+    lines = []
+    for turn in chat_history[-MAX_HISTORY_TURNS_IN_PROMPT:]:
+        line = {"role": turn["role"], "message": turn["message"]}
+        if turn.get("actions"):
+            line["actions"] = [compact_action(action, keys) for action in turn["actions"]]
+        lines.append(line)
+    return lines
+
+
+def _find_bullet(content, ref):
+    """Bullet puntato dall'utente: per `bullet_id` (Sprint 69) o, da una
+    scheda aperta prima dell'aggiornamento, per `bullet_index`."""
+    for exp in content.get("experiences", []):
+        if exp.get("profile_experience_id") != ref.get("profile_experience_id") and "bullet_id" not in ref:
+            continue
+        bullets = exp.get("bullets", [])
+        if isinstance(ref.get("bullet_id"), str):
+            for bullet in bullets:
+                if bullet.get("id") == ref["bullet_id"]:
+                    return exp, bullet
+        elif isinstance(ref.get("bullet_index"), int) and 0 <= ref["bullet_index"] < len(bullets):
+            return exp, bullets[ref["bullet_index"]]
+    return None, None
 
 
 def _build_user_content(draft, job, profile, chat_history, user_message, focus_bullets):
     profile_skill_names = [skill.name for skill in profile.skills.all()]
     profile_certification_names = [cert.name for cert in profile.certifications.all()]
-    history_lines = [
-        {"role": turn["role"], "message": turn["message"]}
-        for turn in chat_history[-MAX_HISTORY_TURNS_IN_PROMPT:]
-    ]
-    experiences_by_id = {
-        exp["profile_experience_id"]: exp for exp in draft.content_json.get("experiences", [])
-    }
+    history_lines = history_for_prompt(chat_history)
     focused_bullets_info = []
     for ref in focus_bullets or []:
-        exp = experiences_by_id.get(ref["profile_experience_id"])
-        bullets = exp["bullets"] if exp else []
-        if exp is None or ref["bullet_index"] >= len(bullets):
+        exp, bullet = _find_bullet(draft.content_json, ref)
+        if bullet is None:
             continue
         focused_bullets_info.append(
             {
                 "profile_experience_id": exp["profile_experience_id"],
                 "company": exp["company"],
                 "role": exp["role"],
-                "bullet_index": ref["bullet_index"],
-                "bullet_text": bullets[ref["bullet_index"]]["text"],
+                "bullet_id": bullet.get("id"),
+                "bullet_text": bullet["text"],
             }
         )
     focus_block = (
@@ -186,24 +243,70 @@ def _build_user_content(draft, job, profile, chat_history, user_message, focus_b
     )
 
 
-def _sanitize_actions(actions, profile):
-    """Filtro difensivo lato server (grounding, come già per skills/
-    certifications nella generazione automatica): un'azione toggle con un
-    nome non letteralmente presente nel profilo reale viene scartata anche
-    se il modello non ha rispettato l'istruzione del prompt."""
+_TEXT_ACTIONS = {
+    "update_summary",
+    "update_qualification",
+    "update_role",
+    "update_bullet",
+    "add_bullet",
+    "update_area",
+    "add_area",
+    "update_education_notes",
+}
+_EXPERIENCE_ACTIONS = {"update_role", "add_bullet", "hide_experience", "show_experience"}
+_BULLET_ACTIONS = {"update_bullet", "hide_bullet", "show_bullet"}
+_AREA_INDEX_ACTIONS = {"update_area", "remove_area"}
+
+
+def _in_range(index, items):
+    return isinstance(index, int) and not isinstance(index, bool) and 0 <= index < len(items)
+
+
+def _sanitize_actions(actions, profile, content):
+    """Filtro difensivo lato server sulle azioni proposte dal modello.
+    Grounding (come nella generazione automatica): un toggle con un nome non
+    presente nel profilo reale è scartato. Riferimenti (Sprint 69): sono
+    scartate le azioni su esperienze o bullet inesistenti nella bozza
+    salvata, con indici fuori range o senza il testo richiesto. Per le aree
+    (ancora per indice) si allega `area_text`, il testo dell'area al momento
+    della proposta, con cui la PWA ritrova l'area giusta anche se nel
+    frattempo l'elenco è cambiato."""
     profile_skill_names = {skill.name for skill in profile.skills.all()}
     profile_certification_names = {cert.name for cert in profile.certifications.all()}
+    experience_ids = {exp.get("profile_experience_id") for exp in content.get("experiences", [])}
+    bullet_owners = cv_bullet_owners(content)
+    areas = content.get("areas_of_expertise", [])
     sanitized = []
     for action in actions:
-        if action["type"] == "toggle_skill" and action.get("name") not in profile_skill_names:
+        action_type = action["type"]
+        if action_type in _TEXT_ACTIONS and not isinstance(action.get("text"), str):
+            continue
+        if action_type == "toggle_skill" and action.get("name") not in profile_skill_names:
             continue
         if (
-            action["type"] == "toggle_certification"
+            action_type == "toggle_certification"
             and action.get("name") not in profile_certification_names
         ):
             continue
-        if action["type"] == "update_language_level" and action.get("level") not in LANGUAGE_LEVEL_CODES:
+        if action_type == "update_language_level" and (
+            action.get("level") not in LANGUAGE_LEVEL_CODES
+            or not _in_range(action.get("language_index"), content.get("languages", []))
+        ):
             continue
+        if action_type == "update_education_notes" and not _in_range(
+            action.get("education_index"), content.get("educations", [])
+        ):
+            continue
+        if action_type in _EXPERIENCE_ACTIONS and action.get("profile_experience_id") not in experience_ids:
+            continue
+        if action_type in _BULLET_ACTIONS:
+            if action.get("bullet_id") not in bullet_owners:
+                continue
+            action = {**action, "profile_experience_id": bullet_owners[action["bullet_id"]]}
+        if action_type in _AREA_INDEX_ACTIONS:
+            if not _in_range(action.get("area_index"), areas):
+                continue
+            action = {**action, "area_text": areas[action["area_index"]]}
         sanitized.append(action)
     return sanitized
 
@@ -217,6 +320,7 @@ class ChatMessageFailed(Exception):
 
 
 def _reserve_credit(user):
+    """Ritorna il saldo dopo l'addebito."""
     with transaction.atomic():
         locked_user = type(user).objects.select_for_update().get(pk=user.pk)
         price = settings.PRICE_CV_DRAFT_CHAT_MESSAGE
@@ -224,6 +328,7 @@ def _reserve_credit(user):
             raise ChatMessageRejected("Saldo credito insufficiente per questo messaggio.")
         locked_user.extra_credit -= price
         locked_user.save(update_fields=["extra_credit"])
+        return locked_user.extra_credit
 
 
 def _refund_credit(user):
@@ -242,15 +347,17 @@ def send_chat_message(job, user_message, focus_bullets=None):
     persistita nel draft. Nessuna modifica al `content_json` del draft:
     resta compito del frontend applicare le azioni che l'utente accetta,
     con un PATCH separato (`CvDraftView`) — stessa autosave già esistente
-    di Fase 1."""
+    di Fase 1.
+    Ritorna `(reply, actions, saldo dopo l'addebito)` (saldo: Sprint 69).
+    """
     try:
-        draft = job.cv_draft
+        draft = load_cv_draft(job)
     except CVDraft.DoesNotExist as exc:
         raise ChatMessageFailed("Apri prima l'editor per questo CV.") from exc
 
     user = job.user
     profile = user.profile
-    _reserve_credit(user)
+    balance = _reserve_credit(user)
     started_at = timezone.now()
 
     try:
@@ -277,13 +384,13 @@ def send_chat_message(job, user_message, focus_bullets=None):
         )
         raise ChatMessageFailed("L'assistente non è riuscito a rispondere.") from exc
 
-    actions = _sanitize_actions(result["actions"], profile)
+    actions = _sanitize_actions(result["actions"], profile, draft.content_json)
     draft.chat_history = draft.chat_history + [
         {"role": "user", "message": user_message},
         {"role": "assistant", "message": result["reply"], "actions": actions},
     ]
     draft.save(update_fields=["chat_history", "updated_at"])
-    return result["reply"], actions
+    return result["reply"], actions, balance
 
 
 class InvalidChatDecision(Exception):

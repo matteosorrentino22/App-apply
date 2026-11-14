@@ -52,15 +52,24 @@ export function fetchHomeStats() {
   return apiFetch('/api/jobs/stats/')
 }
 
-export function generateCv(id, gaps = [], gapInstructions = '') {
+// `gapNumbers` (Sprint 69): posizioni 1-based dei gap nell'elenco completo
+// del job, la stessa numerazione mostrata nel pannello "Colma i gap".
+export function generateCv(id, gapNumbers = [], gapInstructions = '') {
   return apiFetch(`/api/jobs/${id}/generate-cv/`, {
     method: 'POST',
-    body: { gaps, gap_instructions: gapInstructions },
+    body: { gap_numbers: gapNumbers, gap_instructions: gapInstructions },
   })
 }
 
+// Crea la bozza o la risemina dall'ultimo CV (contenuto e chat sovrascritti).
 export function openCvDraft(id) {
   return apiFetch(`/api/jobs/${id}/cv-draft/`, { method: 'POST', body: {} })
+}
+
+// "Continua la bozza" (Sprint 69): la bozza resta com'è, l'ultimo CV
+// diventa il suo riferimento e l'editor non lo chiede più.
+export function keepCvDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/`, { method: 'POST', body: { mode: 'keep' } })
 }
 
 export function fetchCvDraft(id) {
@@ -71,8 +80,10 @@ export function updateCvDraft(id, content) {
   return apiFetch(`/api/jobs/${id}/cv-draft/`, { method: 'PATCH', body: content })
 }
 
-export function finalizeCvDraft(id) {
-  return apiFetch(`/api/jobs/${id}/cv-draft/finalize/`, { method: 'POST', body: {} })
+// `content` (Sprint 69): contenuto corrente dell'editor, salvato dal server
+// prima del rendering — nessuna modifica resta fuori dal PDF finale.
+export function finalizeCvDraft(id, content) {
+  return apiFetch(`/api/jobs/${id}/cv-draft/finalize/`, { method: 'POST', body: { content } })
 }
 
 export function fetchCvDraftChat(id) {
@@ -84,9 +95,9 @@ export function sendCvDraftChatMessage(id, message, focusedBullets = []) {
     method: 'POST',
     body: {
       message,
-      focus_bullets: focusedBullets.map(({ profileExperienceId, bulletIndex }) => ({
+      focus_bullets: focusedBullets.map(({ profileExperienceId, bulletId }) => ({
         profile_experience_id: profileExperienceId,
-        bullet_index: bulletIndex,
+        bullet_id: bulletId,
       })),
     },
   })
@@ -136,6 +147,10 @@ export function openCoverLetterDraft(id) {
   return apiFetch(`/api/jobs/${id}/cover-letter-draft/`, { method: 'POST', body: {} })
 }
 
+export function keepCoverLetterDraft(id) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/`, { method: 'POST', body: { mode: 'keep' } })
+}
+
 export function fetchCoverLetterDraft(id) {
   return apiFetch(`/api/jobs/${id}/cover-letter-draft/`)
 }
@@ -144,8 +159,8 @@ export function updateCoverLetterDraft(id, content) {
   return apiFetch(`/api/jobs/${id}/cover-letter-draft/`, { method: 'PATCH', body: content })
 }
 
-export function finalizeCoverLetterDraft(id) {
-  return apiFetch(`/api/jobs/${id}/cover-letter-draft/finalize/`, { method: 'POST', body: {} })
+export function finalizeCoverLetterDraft(id, content) {
+  return apiFetch(`/api/jobs/${id}/cover-letter-draft/finalize/`, { method: 'POST', body: { content } })
 }
 
 // Stesso motivo di `previewCvDraft`: risposta PDF binaria con il
@@ -216,6 +231,10 @@ export function unfavoriteJob(id) {
 
 export function markApplicationDone(id) {
   return apiFetch(`/api/jobs/${id}/mark-application-done/`, { method: 'POST', body: {} })
+}
+
+export function undoApplicationDone(id) {
+  return apiFetch(`/api/jobs/${id}/undo-application-done/`, { method: 'POST', body: {} })
 }
 
 export function importJob(url) {

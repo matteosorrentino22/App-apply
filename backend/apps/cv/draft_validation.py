@@ -5,7 +5,10 @@
 # mancanti o tipi errati producevano un 500. La forma è quella prodotta da
 # apps.cv.generation.build_draft_content_json e da
 # apps.cv.cover_letter_generation (chiavi sconosciute rifiutate).
+import copy
 import json
+
+from .draft_ids import ensure_cover_letter_paragraph_ids, ensure_cv_bullet_ids
 
 MAX_DRAFT_JSON_CHARS = 200_000
 
@@ -46,7 +49,9 @@ _CV_SPEC = _obj(
                     "dates": _str(100),
                     "technologies": _list(_str(200), 50),
                     "shown": _BOOL,
-                    "bullets": _list(_obj({"text": _str(2_000), "shown": _BOOL}), 30),
+                    "bullets": _list(
+                        _obj({"id": _str(40), "text": _str(2_000), "shown": _BOOL}), 30
+                    ),
                 }
             ),
             30,
@@ -73,7 +78,7 @@ _COVER_LETTER_SPEC = _obj(
     {
         "content_language": _str(10),
         "translated_city": _str(200),
-        "paragraphs": _list(_str(3_000), 15),
+        "paragraphs": _list(_obj({"id": _str(40), "text": _str(3_000)}), 15),
     }
 )
 
@@ -124,3 +129,20 @@ def validate_cv_draft_content(content):
 
 def validate_cover_letter_draft_content(content):
     _validate(content, _COVER_LETTER_SPEC)
+
+
+# Sprint 69: prima della validazione si assegnano gli id stabili mancanti
+# (bullet aggiunti da una scheda aperta prima dell'aggiornamento, paragrafi
+# ancora come stringhe), su una copia del dato ricevuto.
+def clean_cv_draft_content(data):
+    content = copy.deepcopy(data)
+    ensure_cv_bullet_ids(content)
+    validate_cv_draft_content(content)
+    return content
+
+
+def clean_cover_letter_draft_content(data):
+    content = copy.deepcopy(data)
+    ensure_cover_letter_paragraph_ids(content)
+    validate_cover_letter_draft_content(content)
+    return content

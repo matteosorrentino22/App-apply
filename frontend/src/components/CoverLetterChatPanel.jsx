@@ -11,18 +11,22 @@ import { Button } from '@/components/ui/button'
 import AiNotice from '@/components/AiNotice'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { formatEuro, withRetry } from '../utils/retry'
 
 // Mirror semplificato di CvDraftChatPanel.jsx (Sprint 63): solo 3 tipi di
 // azione (nessuna skill/certification/esperienza da gestire), nessun
 // pulsante di "puntamento" di un singolo paragrafo come contesto — con
 // 3-5 paragrafi in tutto il solo riferimento testuale nel messaggio è
-// già sufficientemente chiaro, a differenza dei bullet del CV.
+// già sufficientemente chiaro, a differenza dei bullet del CV. Dallo
+// Sprint 69 i paragrafi sono `{id, text}` e le azioni usano `paragraph_id`;
+// i testi del pannello sono quelli della cover letter, non del CV.
 function describeAction(action, content, t) {
+  const paragraph = content.paragraphs.find((p) => p.id === action.paragraph_id)
   switch (action.type) {
     case 'update_paragraph':
       return {
         label: t('coverLetterEditor.chatActionUpdate'),
-        before: content.paragraphs[action.paragraph_index],
+        before: paragraph?.text,
         after: action.text,
       }
     case 'add_paragraph':
@@ -30,7 +34,7 @@ function describeAction(action, content, t) {
     case 'remove_paragraph':
       return {
         label: t('coverLetterEditor.chatActionRemove'),
-        before: content.paragraphs[action.paragraph_index],
+        before: paragraph?.text,
         after: null,
       }
     default:
@@ -70,8 +74,9 @@ function ActionCard({ action, content, t, decision, onDecide }) {
   )
 }
 
-export default function CoverLetterChatPanel({ open, jobId, content, onApplyAction, onClose }) {
-  const { t } = useLanguage()
+export default function CoverLetterChatPanel({ open, jobId, content, onApplyAction, onBeforeSend, onClose }) {
+  const { t, lang } = useLanguage()
+  const [pricing, setPricing] = useState(null)
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -82,6 +87,7 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
   useEffect(() => {
     fetchCoverLetterDraftChat(jobId)
       .then((data) => {
+        if (data.price != null) setPricing({ price: data.price, balance: data.balance })
         const loadedHistory = data.history || []
         setHistory(loadedHistory)
         const loadedDecisions = {}
@@ -108,12 +114,14 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
     setSending(true)
     setError('')
     try {
-      const { reply, actions } = await sendCoverLetterDraftChatMessage(jobId, message)
+      if (onBeforeSend) await onBeforeSend()
+      const { reply, actions, balance } = await sendCoverLetterDraftChatMessage(jobId, message)
       setHistory((current) => [
         ...current,
         { role: 'user', message },
         { role: 'assistant', message: reply, actions },
       ])
+      if (balance != null) setPricing((current) => (current ? { ...current, balance } : current))
       setInput('')
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
@@ -126,10 +134,16 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
     }
   }
 
-  function handleDecide(messageIndex, actionIndex, action, decision) {
+  function handleDecide(messageIndex, actionIndex, action, choice) {
+    let decision = choice
+    if (decision === 'accepted' && onApplyAction(action) === false) {
+      setError(t('cvEditor.chatTargetMissing'))
+      decision = 'rejected'
+    }
     setDecisions((current) => ({ ...current, [`${messageIndex}-${actionIndex}`]: decision }))
-    if (decision === 'accepted') onApplyAction(action)
-    recordCoverLetterChatDecision(jobId, messageIndex, actionIndex, decision).catch(() => {})
+    withRetry(() => recordCoverLetterChatDecision(jobId, messageIndex, actionIndex, decision)).catch(() =>
+      setError(t('cvEditor.chatDecisionSaveFailed')),
+    )
   }
 
   return (
@@ -139,7 +153,7 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Sparkles className="h-4 w-4" />
           </span>
-          <h2 className="text-sm font-semibold text-foreground">{t('cvEditor.chatTitle')}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t('coverLetterEditor.chatTitle')}</h2>
         </div>
         <button
           type="button"
@@ -153,7 +167,7 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
         {history.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('cvEditor.chatEmpty')}</p>
+          <p className="text-xs text-muted-foreground">{t('coverLetterEditor.chatEmpty')}</p>
         ) : (
           <div className="flex flex-col gap-3">
             {history.map((turn, messageIndex) => (
@@ -192,6 +206,13 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
       {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-3">
+        {pricing && (
+          <p className="text-[11px] text-muted-foreground">
+            {t('cvEditor.chatPriceInfo')
+              .replace('{price}', formatEuro(pricing.price, lang))
+              .replace('{balance}', formatEuro(pricing.balance, lang))}
+          </p>
+        )}
         <div className="flex items-end gap-2">
           <Textarea
             value={input}
@@ -202,7 +223,7 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
                 handleSend()
               }
             }}
-            placeholder={t('cvEditor.chatPlaceholder')}
+            placeholder={t('coverLetterEditor.chatPlaceholder')}
             className="min-h-10 flex-1 resize-none"
           />
           <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>

@@ -7,6 +7,7 @@ from apps.profiles.language_options import LANGUAGE_LEVEL_LABELS, LANGUAGE_NAME_
 
 from .ai_content import generate_cv_content
 from .cv_parameters import FALLBACK_CV_LANGUAGE, MAX_OVERFLOW_ITERATIONS, SUPPORTED_CV_LANGUAGES
+from .draft_ids import new_item_id
 from .models import CVDocument
 from .rendering import render_cv
 from .selection import (
@@ -306,6 +307,7 @@ def build_draft_content_json(
         shown_bullet_texts = set(final["bullets"]) if final else None
         bullets_json = [
             {
+                "id": new_item_id(),
                 "text": bullet["text"],
                 "shown": True if shown_bullet_texts is None else bullet["text"] in shown_bullet_texts,
             }
@@ -356,12 +358,13 @@ def build_draft_content_json(
 
 def _render_with_overflow_retry(job, context):
     """Controllo "1 pagina" e loop di ripiego (Docs/03 §6, §11 punto 6):
-    `render_cv` applica già i 3 livelli di compattamento; se il risultato
-    resta multi-pagina, si rimuove un bullet alla volta (il globalmente
-    meno rilevante, sugli stessi dati già selezionati/tagliati al budget)
-    e si rirenderizza, fino a `MAX_OVERFLOW_ITERATIONS`. Esaurito il tetto,
-    si accetta il caso residuale: si salva comunque il PDF multi-pagina,
-    senza errore mostrato, con l'evento tracciato in `RunLog` per diagnosi."""
+    `render_cv` impagina a dimensione fissa (un solo livello dallo Sprint
+    52); se il risultato resta multi-pagina, si rimuove un bullet alla volta
+    (il globalmente meno rilevante, sugli stessi dati già selezionati/
+    tagliati al budget) e si rirenderizza, fino a `MAX_OVERFLOW_ITERATIONS`.
+    Esaurito il tetto, si accetta il caso residuale: si salva comunque il
+    PDF multi-pagina, tracciato in `RunLog` e nel `page_count` del
+    documento, che la PWA mostra all'utente (Sprint 69)."""
     raw_experiences = context["experiences"]
     context["experiences"] = flatten_bullets_to_text(raw_experiences)
     html, pdf_bytes, page_count = render_cv(context)
@@ -384,7 +387,7 @@ def _render_with_overflow_retry(job, context):
             started_at=timezone.now(),
             finished_at=timezone.now(),
         )
-    return html, pdf_bytes
+    return html, pdf_bytes, page_count
 
 
 def generate_cv(job, generation_type, extra_instructions=""):
@@ -417,7 +420,7 @@ def generate_cv(job, generation_type, extra_instructions=""):
     context, full_pool_experiences, html_lang, ongoing_label = _build_render_context(
         user, profile, content
     )
-    html, pdf_bytes = _render_with_overflow_retry(job, context)
+    html, pdf_bytes, page_count = _render_with_overflow_retry(job, context)
 
     content_json = build_draft_content_json(
         content, full_pool_experiences, context["experiences"], profile, html_lang, ongoing_label
@@ -430,6 +433,7 @@ def generate_cv(job, generation_type, extra_instructions=""):
         generation_type=generation_type,
         extra_instructions_used=extra_instructions,
         content_json=content_json,
+        page_count=page_count,
         areas_of_expertise_grounding=[
             {"label": area["label"], "grounding_reference": area["grounding_reference"]}
             for area in content["areas_of_expertise"]

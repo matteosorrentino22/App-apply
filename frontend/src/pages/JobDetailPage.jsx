@@ -7,6 +7,7 @@ import {
   fetchJob,
   generateCv,
   markApplicationDone,
+  undoApplicationDone,
   generateCoverLetter,
   fetchCoverLetterInstructions,
   generateReferralMessage,
@@ -51,6 +52,7 @@ export default function JobDetailPage() {
   const [error, setError] = useState('')
   const [generating, setGenerating] = useState(false)
   const [marking, setMarking] = useState(false)
+  const [showUndoApplicationDialog, setShowUndoApplicationDialog] = useState(false)
   const [showGapPanel, setShowGapPanel] = useState(false)
   const [selectedGaps, setSelectedGaps] = useState([])
   const [gapInstructions, setGapInstructions] = useState('')
@@ -114,18 +116,25 @@ export default function JobDetailPage() {
     }
   }, [id])
 
-  function toggleGap(text) {
+  // Sprint 69: i gap selezionati sono i loro numeri nell'elenco (1-based),
+  // gli stessi mostrati qui e usati dal server nel prompt.
+  function toggleGap(number) {
     setSelectedGaps((current) =>
-      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
+      current.includes(number) ? current.filter((item) => item !== number) : [...current, number],
     )
+  }
+
+  function multiPageToast(key, pageCount) {
+    if (pageCount > 1) showToast(t(key).replace('{count}', pageCount))
   }
 
   async function handleGenerate() {
     setGenerating(true)
     try {
-      await generateCv(id, selectedGaps, gapInstructions)
+      const result = await generateCv(id, selectedGaps, gapInstructions)
       const updated = await fetchJob(id)
       setJob(updated)
+      multiPageToast('jobs.cvMultiPageWarning', result?.page_count)
       setSelectedGaps([])
       setGapInstructions('')
       setShowGapPanel(false)
@@ -165,10 +174,11 @@ export default function JobDetailPage() {
       const instructions = [...selectedPastInstructions, coverLetterText.trim()]
         .filter(Boolean)
         .join('\n\n')
-      await generateCoverLetter(id, instructions)
+      const result = await generateCoverLetter(id, instructions)
       const updated = await fetchJob(id)
       setJob(updated)
       setShowCoverLetterDialog(false)
+      multiPageToast('jobs.coverLetterMultiPageWarning', result?.page_count)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         showToast(err.data?.detail || t('jobs.generationConflict'))
@@ -258,6 +268,19 @@ export default function JobDetailPage() {
     }
   }
 
+  async function handleUndoApplicationDone() {
+    setMarking(true)
+    try {
+      const updated = await undoApplicationDone(id)
+      setJob(updated)
+      setShowUndoApplicationDialog(false)
+    } catch {
+      showToast(t('jobs.undoApplicationFailed'))
+    } finally {
+      setMarking(false)
+    }
+  }
+
   if (loading) {
     return <p className="mt-16 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
   }
@@ -281,6 +304,25 @@ export default function JobDetailPage() {
   )
   const applicantsText = applicantsLabel(job, t)
   const lowApplicants = isLowApplicants(job)
+  // Avvisi sui documenti (Sprint 69): PDF oltre 1 pagina e documenti
+  // generati prima degli editor (content_json vuoto, non modificabili).
+  const documentNotices = [
+    job.cv_page_count > 1 && {
+      key: 'cv-pages',
+      warning: true,
+      text: t('jobs.cvMultiPageWarning').replace('{count}', job.cv_page_count),
+    },
+    job.cover_letter_page_count > 1 && {
+      key: 'cl-pages',
+      warning: true,
+      text: t('jobs.coverLetterMultiPageWarning').replace('{count}', job.cover_letter_page_count),
+    },
+    job.cv_pdf_url && job.cv_editable === false && { key: 'cv-edit', text: t('jobs.cvNotEditable') },
+    job.cover_letter_pdf_url && job.cover_letter_editable === false && {
+      key: 'cl-edit',
+      text: t('jobs.coverLetterNotEditable'),
+    },
+  ].filter(Boolean)
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
@@ -453,18 +495,20 @@ export default function JobDetailPage() {
                 {job.score_gaps.map((item, index) => {
                   const label = scoreItemLabel(item)
                   const reason = scoreItemReason(item)
-                  // Il testo inviato al backend include il motivo, quando
-                  // c'è: più contesto per il modello su perché è un gap,
-                  // non solo la sua etichetta breve mostrata in lista.
-                  const gapText = reason ? `${label} (${reason})` : label
+                  const number = index + 1
+                  // Numero, etichetta e motivo qui mostrati sono esattamente
+                  // quelli che il server mette nel prompt (Sprint 69).
                   return (
                     <label key={index} className="flex items-start gap-2.5 text-sm">
                       <Checkbox
-                        checked={selectedGaps.includes(gapText)}
-                        onCheckedChange={() => toggleGap(gapText)}
+                        checked={selectedGaps.includes(number)}
+                        onCheckedChange={() => toggleGap(number)}
                       />
-                      <span className="text-foreground">
-                        {index + 1}. {label}
+                      <span className="flex flex-col text-foreground">
+                        <span>
+                          {number}. {label}
+                        </span>
+                        {reason && <span className="text-xs text-muted-foreground">{reason}</span>}
                       </span>
                     </label>
                   )
@@ -508,7 +552,7 @@ export default function JobDetailPage() {
           </Button>
         )}
 
-        {job.cv_pdf_url && (
+        {job.cv_pdf_url && job.cv_editable && (
           <Button variant="secondary" asChild>
             <Link to={`/jobs/${id}/cv-editor`}>{t('cvEditor.editCvButton')}</Link>
           </Button>
@@ -538,7 +582,7 @@ export default function JobDetailPage() {
           </Button>
         )}
 
-        {job.cover_letter_pdf_url && (
+        {job.cover_letter_pdf_url && job.cover_letter_editable && (
           <Button variant="secondary" asChild>
             <Link to={`/jobs/${id}/cover-letter-editor`}>{t('coverLetterEditor.editButton')}</Link>
           </Button>
@@ -565,12 +609,49 @@ export default function JobDetailPage() {
           <span className="text-sm text-muted-foreground">{t('jobs.applyLinkHint')}</span>
         )}
 
-        {job.status !== 'application_done' && (
+        {job.status !== 'application_done' ? (
           <Button variant="secondary" disabled={marking} onClick={handleMarkApplicationDone}>
             {t('jobs.markApplicationDone')}
           </Button>
+        ) : (
+          <Button variant="ghost" disabled={marking} onClick={() => setShowUndoApplicationDialog(true)}>
+            {t('jobs.undoApplication')}
+          </Button>
         )}
       </div>
+
+      {documentNotices.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {documentNotices.map((notice) => (
+            <p
+              key={notice.key}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm',
+                notice.warning ? 'bg-destructive-soft text-destructive' : 'bg-secondary text-muted-foreground',
+              )}
+            >
+              {notice.text}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={showUndoApplicationDialog} onOpenChange={setShowUndoApplicationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('jobs.undoApplicationTitle')}</DialogTitle>
+            <DialogDescription>{t('jobs.undoApplicationHint')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setShowUndoApplicationDialog(false)}>
+              {t('jobs.undoApplicationKeep')}
+            </Button>
+            <Button type="button" disabled={marking} onClick={handleUndoApplicationDone}>
+              {t('jobs.undoApplicationConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {referralMessages.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -596,6 +677,20 @@ export default function JobDetailPage() {
                     {t('jobs.referralCopy')}
                   </Button>
                 </div>
+                {document.recipient_linkedin_url && (
+                  <a
+                    href={
+                      /^https?:\/\//i.test(document.recipient_linkedin_url)
+                        ? document.recipient_linkedin_url
+                        : `https://${document.recipient_linkedin_url}`
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-xs text-primary hover:underline"
+                  >
+                    {t('jobs.referralRecipientLinkedinShort')}
+                  </a>
+                )}
                 {document.subject && (
                   <p className="mt-2 text-sm font-semibold text-foreground">{document.subject}</p>
                 )}
@@ -664,6 +759,7 @@ export default function JobDetailPage() {
                 onChange={(event) => setReferralRecipientLinkedinUrl(event.target.value)}
                 placeholder={t('jobs.referralRecipientLinkedinPlaceholder')}
               />
+              <p className="text-xs text-muted-foreground">{t('jobs.referralRecipientLinkedinHint')}</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

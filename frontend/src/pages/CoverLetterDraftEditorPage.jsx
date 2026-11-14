@@ -6,6 +6,7 @@ import {
   fetchCoverLetterDraft,
   fetchJob,
   finalizeCoverLetterDraft,
+  keepCoverLetterDraft,
   openCoverLetterDraft,
   previewCoverLetterDraft,
   updateCoverLetterDraft,
@@ -16,12 +17,23 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import CoverLetterChatPanel from '@/components/CoverLetterChatPanel'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { newItemId } from '../utils/itemId'
 
 // Mirror semplificato di CvDraftEditorPage.jsx (Sprint 63): niente
 // esperienze/bullet/skill/istruzione/lingue da gestire, solo un elenco di
 // paragrafi — aggiungi/modifica/rimuovi/riordina, nessun "mostra/nascondi"
 // (qui non esiste una selezione automatica da riflettere, a differenza
-// del CV).
+// del CV). Sprint 69: paragrafi `{id, text}` con id stabile, usato anche
+// dalle azioni della chat; avviso "bozza superata" e salvataggio prima della
+// finalizzazione come nell'editor del CV.
 function moveItem(list, index, delta) {
   const target = index + delta
   if (target < 0 || target >= list.length) return list
@@ -46,10 +58,13 @@ export default function CoverLetterDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [outdatedPrompt, setOutdatedPrompt] = useState(false)
+  const [resolvingOutdated, setResolvingOutdated] = useState(false)
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
   const previewUrlRef = useRef(null)
+  const unsavedRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +76,10 @@ export default function CoverLetterDraftEditorPage() {
         if (cancelled) return
         setJob(jobData)
 
+        if (jobData.cover_letter_draft_outdated) {
+          setOutdatedPrompt(true)
+          return
+        }
         let draftContent
         try {
           draftContent = await fetchCoverLetterDraft(id)
@@ -115,22 +134,61 @@ export default function CoverLetterDraftEditorPage() {
       return
     }
     setSaveStatus('saving')
+    unsavedRef.current = content
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      unsavedRef.current = null
       updateCoverLetterDraft(id, content)
         .then(() => setSaveStatus('saved'))
-        .catch(() => setSaveStatus('idle'))
+        .catch(() => {
+          unsavedRef.current = unsavedRef.current || content
+          setSaveStatus('idle')
+        })
       runPreview(content)
     }, 1200)
     return () => clearTimeout(debounceRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content])
 
+  async function flushPendingSave() {
+    if (!unsavedRef.current) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const pending = unsavedRef.current
+    unsavedRef.current = null
+    try {
+      await updateCoverLetterDraft(id, pending)
+      setSaveStatus('saved')
+    } catch {
+      unsavedRef.current = pending
+    }
+  }
+
+  async function resolveOutdated(restart) {
+    setResolvingOutdated(true)
+    try {
+      const draftContent = restart ? await openCoverLetterDraft(id) : await keepCoverLetterDraft(id)
+      firstLoadRef.current = true
+      setContent(draftContent)
+      setOutdatedPrompt(false)
+    } catch {
+      setError(t('coverLetterEditor.openError'))
+      setOutdatedPrompt(false)
+    } finally {
+      setResolvingOutdated(false)
+    }
+  }
+
   async function handleFinalize() {
     setFinalizing(true)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     try {
-      await finalizeCoverLetterDraft(id)
-      showToast(t('coverLetterEditor.finalizeSuccess'))
+      const result = await finalizeCoverLetterDraft(id, content)
+      unsavedRef.current = null
+      showToast(
+        result?.page_count > 1
+          ? t('cvEditor.finalizeSuccessMultiPage').replace('{count}', result.page_count)
+          : t('coverLetterEditor.finalizeSuccess'),
+      )
       navigate(`/jobs/${id}`)
     } catch {
       showToast(t('coverLetterEditor.finalizeError'))
@@ -141,6 +199,27 @@ export default function CoverLetterDraftEditorPage() {
 
   if (loading) {
     return <p className="mt-16 text-center text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
+  }
+
+  if (outdatedPrompt) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && navigate(`/jobs/${id}`)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('coverLetterEditor.outdatedTitle')}</DialogTitle>
+            <DialogDescription>{t('coverLetterEditor.outdatedHint')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="secondary" disabled={resolvingOutdated} onClick={() => resolveOutdated(false)}>
+              {t('cvEditor.outdatedContinue')}
+            </Button>
+            <Button type="button" disabled={resolvingOutdated} onClick={() => resolveOutdated(true)}>
+              {t('coverLetterEditor.outdatedRestart')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   if (error || !content) {
@@ -156,33 +235,40 @@ export default function CoverLetterDraftEditorPage() {
     )
   }
 
-  function updateParagraph(index, text) {
-    const next = content.paragraphs.map((p, i) => (i === index ? text : p))
-    setContent((current) => ({ ...current, paragraphs: next }))
+  function updateParagraph(paragraphId, text) {
+    setContent((current) => ({
+      ...current,
+      paragraphs: current.paragraphs.map((p) => (p.id === paragraphId ? { ...p, text } : p)),
+    }))
   }
-  function removeParagraph(index) {
-    setContent((current) => ({ ...current, paragraphs: current.paragraphs.filter((_, i) => i !== index) }))
+  function removeParagraph(paragraphId) {
+    setContent((current) => ({ ...current, paragraphs: current.paragraphs.filter((p) => p.id !== paragraphId) }))
   }
   function addParagraph(text = '') {
-    setContent((current) => ({ ...current, paragraphs: [...current.paragraphs, text] }))
+    setContent((current) => ({ ...current, paragraphs: [...current.paragraphs, { id: newItemId(), text }] }))
   }
   function moveParagraph(index, delta) {
     setContent((current) => ({ ...current, paragraphs: moveItem(current.paragraphs, index, delta) }))
   }
 
+  // Le azioni della chat puntano al paragrafo per id (Sprint 69): accettare
+  // più modifiche/rimozioni dello stesso turno colpisce sempre quello giusto.
   function applyChatAction(action) {
+    const exists = content.paragraphs.some((p) => p.id === action.paragraph_id)
     switch (action.type) {
       case 'update_paragraph':
-        updateParagraph(action.paragraph_index, action.text)
-        break
+        if (!exists) return false
+        updateParagraph(action.paragraph_id, action.text)
+        return true
       case 'add_paragraph':
         addParagraph(action.text)
-        break
+        return true
       case 'remove_paragraph':
-        removeParagraph(action.paragraph_index)
-        break
+        if (!exists) return false
+        removeParagraph(action.paragraph_id)
+        return true
       default:
-        break
+        return false
     }
   }
 
@@ -224,6 +310,7 @@ export default function CoverLetterDraftEditorPage() {
         jobId={id}
         content={content}
         onApplyAction={applyChatAction}
+        onBeforeSend={flushPendingSave}
         onClose={() => setChatOpen(false)}
       />
 
@@ -233,7 +320,7 @@ export default function CoverLetterDraftEditorPage() {
             {t('coverLetterEditor.paragraphsLabel')}
           </Label>
           {content.paragraphs.map((paragraph, index) => (
-            <div key={index} className="flex items-start gap-2 rounded-lg border border-border p-3">
+            <div key={paragraph.id || index} className="flex items-start gap-2 rounded-lg border border-border p-3">
               <div className="flex flex-col">
                 <button
                   type="button"
@@ -255,13 +342,13 @@ export default function CoverLetterDraftEditorPage() {
                 </button>
               </div>
               <Textarea
-                value={paragraph}
-                onChange={(event) => updateParagraph(index, event.target.value)}
+                value={paragraph.text}
+                onChange={(event) => updateParagraph(paragraph.id, event.target.value)}
                 className="min-h-24 flex-1"
               />
               <button
                 type="button"
-                onClick={() => removeParagraph(index)}
+                onClick={() => removeParagraph(paragraph.id)}
                 className="mt-2.5 text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />

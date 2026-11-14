@@ -12,6 +12,8 @@ from apps.common.ai import call_claude_structured
 from apps.jobs.models import RunLog
 
 from .ai_content import _build_profile_context
+from .cover_letter_draft import load_cover_letter_draft
+from .draft_chat import history_for_prompt
 from .models import CoverLetterDraft
 
 CHAT_ACTION_TYPES = ["update_paragraph", "add_paragraph", "remove_paragraph"]
@@ -20,10 +22,10 @@ CHAT_ACTION_SCHEMA = {
     "type": "object",
     "properties": {
         "type": {"type": "string", "enum": CHAT_ACTION_TYPES},
-        "paragraph_index": {"type": ["integer", "null"]},
+        "paragraph_id": {"type": ["string", "null"]},
         "text": {"type": ["string", "null"]},
     },
-    "required": ["type", "paragraph_index", "text"],
+    "required": ["type", "paragraph_id", "text"],
     "additionalProperties": False,
 }
 
@@ -56,28 +58,31 @@ CHAT_SYSTEM_PROMPT = (
     "un'azienda, un ruolo o un risultato che il candidato non ha mai "
     "avuto.\n\n"
     "AZIONI (campo 'type', gli altri campi non pertinenti restano null):\n"
-    "- update_paragraph: 'paragraph_index' (posizione nell'elenco "
-    "paragrafi, come fornito sotto, a partire da 0) + 'text' = nuovo "
+    "- update_paragraph: 'paragraph_id' (il campo 'id' del paragrafo "
+    "nella bozza qui sotto, mai la sua posizione) + 'text' = nuovo "
     "contenuto del paragrafo.\n"
     "- add_paragraph: 'text' = nuovo paragrafo, aggiunto in coda "
     "all'elenco (l'utente può poi riordinarlo manualmente nell'editor).\n"
-    "- remove_paragraph: 'paragraph_index'.\n\n"
+    "- remove_paragraph: 'paragraph_id'.\n"
+    "Un 'paragraph_id' che non esiste nella bozza fa scartare l'azione.\n\n"
+    "CRONOLOGIA: per ogni tua risposta precedente trovi anche le azioni "
+    "proposte, in forma compatta, con la decisione dell'utente ('accepted' "
+    "= applicata, 'rejected' = rifiutata, 'pending' = non ancora decisa). "
+    "Non riproporre un'azione rifiutata se l'utente non lo chiede; lo stato "
+    "reale attuale è comunque quello della BOZZA.\n\n"
     "Non scrivere mai oggetto, saluto iniziale o formula di chiusura: non "
     "fanno parte dei paragrafi editabili, sono gestiti fuori da questa "
     "chat."
 )
 
 
-# Stesso tetto della chat del CV (apps.cv.draft_chat).
-MAX_HISTORY_TURNS_IN_PROMPT = 20
+# Cronologia nel prompt: stesso tetto e stessa forma compatta delle azioni
+# della chat del CV (apps.cv.draft_chat.history_for_prompt).
 
 
 def _build_user_content(draft, job, profile, chat_history, user_message):
     profile_context = _build_profile_context(profile)
-    history_lines = [
-        {"role": turn["role"], "message": turn["message"]}
-        for turn in chat_history[-MAX_HISTORY_TURNS_IN_PROMPT:]
-    ]
+    history_lines = history_for_prompt(chat_history, keys=("paragraph_id",))
     return (
         f"BOZZA COVER LETTER ATTUALE (JSON, solo paragrafi editabili):\n"
         f"{json.dumps(draft.content_json, ensure_ascii=False)}\n\n"
@@ -91,17 +96,20 @@ def _build_user_content(draft, job, profile, chat_history, user_message):
     )
 
 
-def _sanitize_actions(actions, paragraph_count):
-    """Scarta azioni con indice fuori dall'elenco paragrafi corrente —
-    difesa minima contro un indice inventato dal modello, qui non serve
-    altro filtro di grounding (nessun elenco 'disponibile' da proteggere,
-    a differenza di skills/certifications nel CV)."""
+def _sanitize_actions(actions, paragraph_ids):
+    """Scarta le azioni su paragrafi inesistenti nella bozza salvata (Sprint
+    69: per id, prima per indice) e quelle senza il testo richiesto. Qui non
+    serve altro filtro di grounding (nessun elenco 'disponibile' da
+    proteggere, a differenza di skills/certifications nel CV)."""
     sanitized = []
     for action in actions:
         if action["type"] in ("update_paragraph", "remove_paragraph"):
-            index = action.get("paragraph_index")
-            if not isinstance(index, int) or index < 0 or index >= paragraph_count:
+            if action.get("paragraph_id") not in paragraph_ids:
                 continue
+        if action["type"] in ("update_paragraph", "add_paragraph") and not isinstance(
+            action.get("text"), str
+        ):
+            continue
         sanitized.append(action)
     return sanitized
 
@@ -122,6 +130,7 @@ def _reserve_credit(user):
             raise ChatMessageRejected("Saldo credito insufficiente per questo messaggio.")
         locked_user.extra_credit -= price
         locked_user.save(update_fields=["extra_credit"])
+        return locked_user.extra_credit
 
 
 def _refund_credit(user):
@@ -138,15 +147,17 @@ def send_chat_message(job, user_message):
     dell'utente sia la risposta alla cronologia persistita nel draft.
     Nessuna modifica al `content_json` del draft: resta compito del
     frontend applicare le azioni che l'utente accetta, con un PATCH
-    separato (`CoverLetterDraftView`)."""
+    separato (`CoverLetterDraftView`).
+    Ritorna `(reply, actions, saldo dopo l'addebito)` (saldo: Sprint 69).
+    """
     try:
-        draft = job.cover_letter_draft
+        draft = load_cover_letter_draft(job)
     except CoverLetterDraft.DoesNotExist as exc:
         raise ChatMessageFailed("Apri prima l'editor per questa cover letter.") from exc
 
     user = job.user
     profile = user.profile
-    _reserve_credit(user)
+    balance = _reserve_credit(user)
     started_at = timezone.now()
 
     try:
@@ -171,13 +182,14 @@ def send_chat_message(job, user_message):
         )
         raise ChatMessageFailed("L'assistente non è riuscito a rispondere.") from exc
 
-    actions = _sanitize_actions(result["actions"], len(draft.content_json.get("paragraphs", [])))
+    paragraph_ids = {p.get("id") for p in draft.content_json.get("paragraphs", [])}
+    actions = _sanitize_actions(result["actions"], paragraph_ids)
     draft.chat_history = draft.chat_history + [
         {"role": "user", "message": user_message},
         {"role": "assistant", "message": result["reply"], "actions": actions},
     ]
     draft.save(update_fields=["chat_history", "updated_at"])
-    return result["reply"], actions
+    return result["reply"], actions, balance
 
 
 class InvalidChatDecision(Exception):

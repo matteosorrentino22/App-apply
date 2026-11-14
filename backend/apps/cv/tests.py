@@ -480,7 +480,8 @@ class ManualCvGenerationTests(TestCase):
         user = self._make_user(plan=User.Plan.FREE)
         job = self._make_job(user)
         job.cv_generation_in_progress = True
-        job.save(update_fields=["cv_generation_in_progress"])
+        job.cv_generation_started_at = timezone.now()
+        job.save(update_fields=["cv_generation_in_progress", "cv_generation_started_at"])
 
         with patch("apps.cv.manual_generation.generate_cv") as mock_generate_cv:
             with self.assertRaises(ManualGenerationRejected):
@@ -489,7 +490,7 @@ class ManualCvGenerationTests(TestCase):
 
         self.assertFalse(DailyQuota.objects.filter(user=user).exists())
 
-    def test_failed_generation_refunds_quota_and_resets_job_to_new(self):
+    def test_failed_generation_refunds_quota_and_leaves_status_unchanged(self):
         user = self._make_user(plan=User.Plan.FREE)
         job = self._make_job(user)
 
@@ -625,7 +626,10 @@ class ManualReferralMessageGenerationTests(TestCase):
         user = self._make_user(plan=User.Plan.FREE)
         job = self._make_job(user)
         job.referral_message_generation_in_progress = True
-        job.save(update_fields=["referral_message_generation_in_progress"])
+        job.referral_message_generation_started_at = timezone.now()
+        job.save(
+            update_fields=["referral_message_generation_in_progress", "referral_message_generation_started_at"]
+        )
 
         with patch(
             "apps.cv.referral_message_manual_generation.generate_referral_message"

@@ -33,6 +33,10 @@ class CVDocument(models.Model):
     # `CVDraft` per modificarlo. Vuoto (`{}`) per i CVDocument creati prima
     # di questo campo. Vedi `apps.cv.draft` per la forma esatta.
     content_json = models.JSONField(default=dict, blank=True)
+    # Pagine del PDF prodotto (Sprint 69): l'obiettivo è 1 pagina, ma il caso
+    # residuale multi-pagina è accettato (Docs/03 §6) e va segnalato
+    # all'utente. Nullo per i documenti precedenti.
+    page_count = models.PositiveSmallIntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"CV — {self.job} ({self.generated_at})"
@@ -40,14 +44,13 @@ class CVDocument(models.Model):
 
 class CVDraft(models.Model):
     """Copia di lavoro, modificabile, del contenuto strutturato di un CV
-    (Sprint 51): a differenza di `CVDocument`, non ha mai un PDF proprio —
-    serve solo come stato intermedio tra "generato dall'AI" e "PDF finale".
-    Un solo draft "corrente" per job (non uno storico): aprire di nuovo
-    l'editor o generare un nuovo CV sovrascrive il draft esistente, non lo
-    duplica. Il PDF finale nasce da `apps.cv.draft.finalize_cv_draft`, che
-    riusa la stessa pipeline di rendering di `generate_cv` ma senza
-    richiamare Claude né il taglio automatico al budget — qui le scelte sono
-    già quelle dell'utente."""
+    (Sprint 51): non ha mai un PDF proprio. Una sola bozza per job, seminata
+    dall'ultimo `CVDocument`. Generare un nuovo CV non la tocca: quando
+    l'ultimo documento è diverso da `source_document`, l'editor chiede se
+    ripartire dal nuovo documento (bozza e chat riseminate) o continuare la
+    bozza (Sprint 69). Il PDF finale nasce da
+    `apps.cv.draft.finalize_cv_draft`, con lo stesso template ma senza
+    Claude né taglio automatico."""
 
     job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cv_draft")
     user = models.ForeignKey(
@@ -61,6 +64,13 @@ class CVDraft(models.Model):
     # conversazione non si perde ricaricando la pagina, a differenza della
     # preview che è sempre ricalcolata al volo.
     chat_history = models.JSONField(default=list, blank=True)
+    # Documento di riferimento della bozza (Sprint 69): quello da cui è stata
+    # seminata, poi quello prodotto dalla sua finalizzazione o quello che
+    # l'utente ha scelto di ignorare ("continua la bozza"). Se l'ultimo
+    # CVDocument del job è un altro, la bozza è "superata".
+    source_document = models.ForeignKey(
+        CVDocument, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -91,6 +101,7 @@ class CoverLetterDocument(models.Model):
     # modificarla. Vuoto (`{}`) per le lettere generate prima di questo
     # campo. Vedi `apps.cv.cover_letter_draft` per la forma esatta.
     content_json = models.JSONField(default=dict, blank=True)
+    page_count = models.PositiveSmallIntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"Cover letter — {self.job} ({self.generated_at})"
@@ -98,10 +109,10 @@ class CoverLetterDocument(models.Model):
 
 class CoverLetterDraft(models.Model):
     """Mirror di CVDraft (Sprint 63): copia di lavoro modificabile dei
-    paragrafi di una cover letter, mai generata da zero — parte sempre
-    dall'ultimo `CoverLetterDocument` generato. Niente logica di
-    selezione/taglio da riflettere (a differenza del CV): qui l'utente
-    aggiunge/modifica/rimuove/riordina direttamente i paragrafi."""
+    paragrafi di una cover letter, seminata dall'ultima
+    `CoverLetterDocument`. Una nuova generazione non la tocca: come per il
+    CV, l'editor chiede se riseminarla quando l'ultimo documento è diverso
+    da `source_document` (Sprint 69)."""
 
     job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name="cover_letter_draft")
     user = models.ForeignKey(
@@ -109,6 +120,9 @@ class CoverLetterDraft(models.Model):
     )
     content_json = models.JSONField(default=dict, blank=True)
     chat_history = models.JSONField(default=list, blank=True)
+    source_document = models.ForeignKey(
+        CoverLetterDocument, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -136,11 +150,10 @@ class ReferralMessageDocument(models.Model):
     )
     channel = models.CharField(max_length=10, choices=Channel.choices)
     recipient_name = models.CharField(max_length=255, blank=True, default="")
-    # Salvato ma non ancora usato per personalizzare il messaggio: leggere
-    # il contenuto di un profilo LinkedIn richiederebbe un nuovo scraping
-    # dedicato (nessun meccanismo del genere esiste oggi, a differenza delle
-    # offerte di lavoro via Apify) — previsto per un prossimo rilascio, per
-    # ora solo un riferimento comodo per l'utente.
+    # Salvato ma non usato per scrivere il messaggio (né passato al prompt):
+    # leggere un profilo LinkedIn richiederebbe uno scraping dedicato, previsto
+    # per un rilascio futuro. Oggi è solo un riferimento per l'utente, mostrato
+    # nello storico dei messaggi (Sprint 69).
     recipient_linkedin_url = models.URLField(max_length=500, blank=True, default="")
     # Stesso principio di CoverLetterDocument.instructions_used: testo
     # libero fornito dall'utente, alimenta anche il menu "indicazioni

@@ -82,7 +82,7 @@ export const translations = {
       activities: 'Attività / competenze in questo ruolo',
       activitiesPlaceholder: 'Scrivi e premi Invio…',
       experiencesLimitWarning:
-        'Hai inserito più di 5 esperienze: il CV generato ne mostrerà al massimo 5, le più pertinenti per ciascuna offerta.',
+        "Hai inserito più di 5 esperienze: il CV generato mostrerà le 5 più recenti, e al massimo una di queste può essere sostituita da un'esperienza meno recente ma molto pertinente per l'offerta. Nell'editor del CV puoi comunque scegliere quali mostrare.",
       educations: 'Istruzione',
       addEducation: 'Aggiungi titolo di studio',
       educationEndDateRequired: 'La data di fine è obbligatoria per ogni titolo di studio.',
@@ -147,7 +147,7 @@ export const translations = {
       experiencesHint:
         'Raggruppate per azienda: se hai avuto più ruoli nella stessa azienda, aggiungili sotto la stessa scheda invece di ripeterla.',
       experiencesLimitWarning:
-        'Hai inserito più di 5 esperienze: il CV generato ne mostrerà al massimo 5, le più pertinenti per ciascuna offerta.',
+        "Hai inserito più di 5 esperienze: il CV generato mostrerà le 5 più recenti, e al massimo una di queste può essere sostituita da un'esperienza meno recente ma molto pertinente per l'offerta. Nell'editor del CV puoi comunque scegliere quali mostrare.",
       educations: 'Istruzione',
       addEducation: 'Aggiungi titolo di studio',
       skills: 'Competenze',
@@ -264,7 +264,10 @@ export const translations = {
       referralChannelEmail: 'Email',
       referralRecipientNameLabel: 'Nome del destinatario (facoltativo)',
       referralRecipientNamePlaceholder: 'Es. Mario Rossi',
-      referralRecipientLinkedinLabel: 'Link profilo LinkedIn del destinatario (facoltativo)',
+      referralRecipientLinkedinLabel: 'Link profilo LinkedIn del destinatario (facoltativo, solo per tuo riferimento)',
+      referralRecipientLinkedinHint:
+        'Viene salvato con il messaggio come promemoria: il profilo non viene aperto né letto e non influisce sul testo generato.',
+      referralRecipientLinkedinShort: 'Profilo LinkedIn',
       referralRecipientLinkedinPlaceholder: 'https://www.linkedin.com/in/...',
       referralInstructionsLabel: 'Indicazioni per questo messaggio (facoltativo)',
       referralInstructionsPlaceholder:
@@ -278,6 +281,20 @@ export const translations = {
       openApplyLink: "Vai all'annuncio",
       applyLinkHint: 'Nessun link di candidatura per questo job.',
       markApplicationDone: 'Segna candidatura fatta',
+      undoApplication: 'Annulla candidatura',
+      undoApplicationTitle: 'Annullare "candidatura fatta"?',
+      undoApplicationHint:
+        'Il job tornerà allo stato "CV generato" (o "Nuovo" se non hai ancora generato un CV) e uscirà dal conteggio delle candidature fatte.',
+      undoApplicationConfirm: 'Sì, annulla',
+      undoApplicationKeep: 'No, lascia com’è',
+      undoApplicationFailed: 'Non siamo riusciti ad annullare la candidatura. Riprova.',
+      cvMultiPageWarning: 'Il CV occupa {count} pagine invece di 1: puoi accorciarlo con "Modifica CV".',
+      coverLetterMultiPageWarning:
+        'La cover letter occupa {count} pagine invece di 1: puoi accorciarla con "Modifica Cover Letter".',
+      cvNotEditable:
+        'Questo CV è stato generato prima dell’editor e non si può modificare: rigeneralo per poterlo modificare.',
+      coverLetterNotEditable:
+        'Questa cover letter è stata generata prima dell’editor e non si può modificare: rigenerala per poterla modificare.',
       applicationRejected: 'Questo job è già stato marcato come candidatura fatta.',
       gapPanelToggle: 'Colma i gap trovati per questa offerta prima di generare',
       gapPanelHint:
@@ -399,6 +416,16 @@ export const translations = {
       chatActionLanguageLevel: 'Livello lingua — {language}',
       chatFocusToggle: 'Usa come contesto per la chat AI',
       chatFocusLabel: 'Contesto:',
+      chatPriceInfo: 'Ogni messaggio costa {price} € di credito · saldo: {balance} €',
+      chatDecisionSaveFailed:
+        'La scelta non è stata salvata sul server: se ricarichi la pagina la proposta tornerà in attesa.',
+      chatTargetMissing: 'L’elemento a cui si riferisce la proposta non è più nella bozza: proposta non applicata.',
+      outdatedTitle: 'C’è un CV più recente della bozza',
+      outdatedHint:
+        'Hai generato un nuovo CV dopo aver modificato questa bozza. Vuoi ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?',
+      outdatedRestart: 'Riparti dal nuovo CV',
+      outdatedContinue: 'Continua la bozza',
+      finalizeSuccessMultiPage: 'PDF finale generato, ma occupa {count} pagine.',
     },
     coverLetterEditor: {
       editButton: 'Modifica Cover Letter',
@@ -412,6 +439,14 @@ export const translations = {
       chatActionUpdate: 'Modifica paragrafo',
       chatActionAdd: 'Nuovo paragrafo',
       chatActionRemove: 'Rimuovi paragrafo',
+      chatTitle: 'Assistente cover letter',
+      chatEmpty:
+        'Scrivi cosa vorresti cambiare nella cover letter: l’assistente propone modifiche ai paragrafi, tu scegli quali accettare.',
+      chatPlaceholder: 'Es. "Rendi più incisivo il paragrafo di apertura"',
+      outdatedTitle: 'C’è una cover letter più recente della bozza',
+      outdatedHint:
+        'Hai generato una nuova cover letter dopo aver modificato questa bozza. Vuoi ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?',
+      outdatedRestart: 'Riparti dalla nuova cover letter',
     },
     account: {
       navLink: 'Impostazioni',
@@ -613,7 +648,7 @@ export const translations = {
       activities: 'Activities / skills in this role',
       activitiesPlaceholder: 'Type and press Enter…',
       experiencesLimitWarning:
-        "You've added more than 5 experiences: the generated CV will show at most 5, the most relevant for each job.",
+        "You've added more than 5 experiences: the generated CV will show the 5 most recent ones, and at most one of them can be swapped for an older experience that is highly relevant to the job. In the CV editor you can still choose which ones to show.",
       educations: 'Education',
       addEducation: 'Add education',
       educationEndDateRequired: 'End date is required for every education entry.',
@@ -673,7 +708,7 @@ export const translations = {
       experiencesHint:
         'Grouped by company: if you held several roles at the same company, add them under the same card instead of repeating it.',
       experiencesLimitWarning:
-        "You've added more than 5 experiences: the generated CV will show at most 5, the most relevant for each job.",
+        "You've added more than 5 experiences: the generated CV will show the 5 most recent ones, and at most one of them can be swapped for an older experience that is highly relevant to the job. In the CV editor you can still choose which ones to show.",
       educations: 'Education',
       addEducation: 'Add education',
       skills: 'Skills',
@@ -790,7 +825,10 @@ export const translations = {
       referralChannelEmail: 'Email',
       referralRecipientNameLabel: "Recipient's name (optional)",
       referralRecipientNamePlaceholder: 'E.g. Mario Rossi',
-      referralRecipientLinkedinLabel: "Recipient's LinkedIn profile link (optional)",
+      referralRecipientLinkedinLabel: "Recipient's LinkedIn profile link (optional, for your reference only)",
+      referralRecipientLinkedinHint:
+        "It's saved with the message as a reminder: the profile is not opened or read and does not affect the generated text.",
+      referralRecipientLinkedinShort: 'LinkedIn profile',
       referralRecipientLinkedinPlaceholder: 'https://www.linkedin.com/in/...',
       referralInstructionsLabel: 'Instructions for this message (optional)',
       referralInstructionsPlaceholder:
@@ -804,6 +842,19 @@ export const translations = {
       openApplyLink: 'Go to listing',
       applyLinkHint: 'No apply link for this job.',
       markApplicationDone: 'Mark application done',
+      undoApplication: 'Undo application',
+      undoApplicationTitle: 'Undo "application done"?',
+      undoApplicationHint:
+        'The job will go back to "CV generated" (or "New" if you have not generated a CV yet) and will no longer count as an application.',
+      undoApplicationConfirm: 'Yes, undo',
+      undoApplicationKeep: 'No, keep it',
+      undoApplicationFailed: "We couldn't undo the application. Please try again.",
+      cvMultiPageWarning: 'The CV is {count} pages long instead of 1: you can shorten it with "Edit CV".',
+      coverLetterMultiPageWarning:
+        'The cover letter is {count} pages long instead of 1: you can shorten it with "Edit Cover Letter".',
+      cvNotEditable: 'This CV was generated before the editor existed and cannot be edited: regenerate it to edit it.',
+      coverLetterNotEditable:
+        'This cover letter was generated before the editor existed and cannot be edited: regenerate it to edit it.',
       applicationRejected: 'This job has already been marked as application done.',
       gapPanelToggle: 'Address the gaps found for this job before generating',
       gapPanelHint:
@@ -925,6 +976,16 @@ export const translations = {
       chatActionLanguageLevel: 'Language level — {language}',
       chatFocusToggle: 'Use as context for the AI chat',
       chatFocusLabel: 'Context:',
+      chatPriceInfo: 'Each message costs €{price} of credit · balance: €{balance}',
+      chatDecisionSaveFailed:
+        "Your choice wasn't saved on the server: if you reload the page the proposal will be pending again.",
+      chatTargetMissing: 'The item this proposal refers to is no longer in the draft: proposal not applied.',
+      outdatedTitle: 'There is a newer CV than this draft',
+      outdatedHint:
+        'You generated a new CV after editing this draft. Do you want to start over from the new document (previous edits and the chat are lost) or continue the draft?',
+      outdatedRestart: 'Start from the new CV',
+      outdatedContinue: 'Continue the draft',
+      finalizeSuccessMultiPage: 'Final PDF generated, but it is {count} pages long.',
     },
     coverLetterEditor: {
       editButton: 'Edit Cover Letter',
@@ -938,6 +999,14 @@ export const translations = {
       chatActionUpdate: 'Edit paragraph',
       chatActionAdd: 'New paragraph',
       chatActionRemove: 'Remove paragraph',
+      chatTitle: 'Cover letter assistant',
+      chatEmpty:
+        'Write what you’d like to change in the cover letter: the assistant proposes edits to the paragraphs, you choose which to accept.',
+      chatPlaceholder: 'E.g. "Make the opening paragraph punchier"',
+      outdatedTitle: 'There is a newer cover letter than this draft',
+      outdatedHint:
+        'You generated a new cover letter after editing this draft. Do you want to start over from the new document (previous edits and the chat are lost) or continue the draft?',
+      outdatedRestart: 'Start from the new cover letter',
     },
     account: {
       navLink: 'Settings',
