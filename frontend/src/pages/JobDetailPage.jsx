@@ -1,83 +1,161 @@
 import { useEffect, useState } from 'react'
-import AiNotice from '../components/AiNotice'
-import { ActionCostHint } from '@/components/ActionCost'
-import { confirmCreditCharge, useUsage } from '@/lib/usage'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Heart, UserRound } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowUpRight,
+  Check,
+  ChevronLeft,
+  FileText,
+  Heart,
+  MessageSquare,
+  MoreHorizontal,
+  Send,
+  Sparkles,
+  X,
+} from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
-  fetchJob,
-  generateCv,
-  markApplicationDone,
-  undoApplicationDone,
-  generateCoverLetter,
-  fetchCoverLetterInstructions,
-  generateReferralMessage,
-  fetchReferralMessages,
-  fetchReferralMessageInstructions,
+  archiveJob,
   favoriteJob,
+  fetchCoverLetterInstructions,
+  fetchJob,
+  fetchReferralMessageInstructions,
+  fetchReferralMessages,
+  generateCoverLetter,
+  generateCv,
+  generateReferralMessage,
+  markApplicationDone,
+  unarchiveJob,
+  undoApplicationDone,
   unfavoriteJob,
 } from '../api/jobs'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useCostConfirm } from '@/components/CostConfirmDialog'
+import RecruiterIcon from '@/components/RecruiterIcon'
+import CoverLetterSheet from '@/components/job-detail/CoverLetterSheet'
+import DocumentsSection from '@/components/job-detail/DocumentsSection'
+import GapSheet from '@/components/job-detail/GapSheet'
+import ReferralSheet from '@/components/job-detail/ReferralSheet'
+import { DescriptionSection, ScoreSection } from '@/components/job-detail/ScoreSection'
+import { ActionBar } from '@/components/ui/action-bar'
 import { Badge } from '@/components/ui/badge'
+import { Banner } from '@/components/ui/banner'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Menu } from '@/components/ui/menu'
+import { Modal, ModalActions, ModalContent, ModalDescription, ModalTitle } from '@/components/ui/modal'
+import { ScoreChip } from '@/components/ui/score-chip'
+import { Spinner } from '@/components/ui/spinner'
+import { SplitButton } from '@/components/ui/split-button'
+import { useUsage } from '@/lib/usage'
 import { cn } from '@/lib/utils'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { scoreItemLabel, scoreItemReason } from '../utils/scoreItems'
-import { scoreStyle } from '../utils/scoreStyle'
-import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
+import { formatShortDate } from '../utils/date'
+import { joinInstructions } from '../utils/generationLimits'
 import { jobListHref } from '../utils/jobListUrl'
 
+// Dettaglio job (Sprint 75, redesign: Docs/design/SCREENS.md §2, mockup
+// `detail-*`, `generazione-in-corso`, `undo-application`, `confirm-cost`,
+// `desk-detail`). Stesso comportamento di prima, nuova presentazione:
+// testata con stato solo indicativo, punteggio e motivazione troncata,
+// contatori espandibili, descrizione a fisarmonica, sezione Documenti,
+// barra azione in basso al posto della barra di tab (Genera CV ▾ →
+// Segna candidatura fatta → Annulla candidatura), menu ⋯ (archivio).
+// Le generazioni restano sincrone: durante l'attesa una finestra non
+// chiudibile con indicatore, nessun cambio a flussi né guardia di
+// concorrenza (§5.2 tecniche).
+
 const SIGNED_URL_REFRESH_MS = 20 * 60 * 1000
+
+const EMPTY_REFERRAL_FORM = { channel: 'linkedin', recipientName: '', recipientLinkedinUrl: '', instructions: '' }
+
+const GENERATION_TEXT = {
+  cv: ['jobs.generateCv', 'jobs.generatingCvTitle', 'jobs.generatingCvText'],
+  cover_letter: ['jobs.coverLetterDialogTitle', 'jobs.generatingCoverLetterTitle', 'jobs.generatingCoverLetterText'],
+  referral_message: ['jobs.referralDialogTitle', 'jobs.generatingMessageTitle', 'jobs.generatingMessageText'],
+}
+
+// Attesa della generazione sincrona (mockup `generazione-in-corso`): non si
+// chiude con Esc né toccando fuori, sparisce a risposta arrivata.
+function GenerationModal({ kind }) {
+  const { t } = useLanguage()
+  const [titleKey, headingKey, textKey] = GENERATION_TEXT[kind || 'cv']
+  const prevent = (event) => event.preventDefault()
+  return (
+    <Modal open={kind !== null}>
+      <ModalContent onEscapeKeyDown={prevent} onPointerDownOutside={prevent} onInteractOutside={prevent} className="gap-5 pb-8">
+        <ModalTitle>{t(titleKey)}</ModalTitle>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Spinner framed />
+          <p className="text-lg font-bold text-foreground">{t(headingKey)}</p>
+          <ModalDescription className="text-[15px]">{t(textKey)}</ModalDescription>
+        </div>
+      </ModalContent>
+    </Modal>
+  )
+}
+
+function StatusChip({ job, cvBusy }) {
+  const { t } = useLanguage()
+  // Chip solo indicativo (non selezionabile, nessuna freccia): lo stato
+  // cambia con le azioni della pagina. "CV in generazione" è lo stato
+  // transitorio (§4.10), mostrato mentre il CV si sta generando (da questa
+  // pagina o secondo il server).
+  if (cvBusy) {
+    return (
+      <span data-testid="job-status-badge" className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-full bg-primary-soft px-3 text-sm font-semibold text-primary">
+        <Spinner size={14} label={t('jobs.statusCvGenerating')} />
+        {t('jobs.statusCvGenerating')}
+      </span>
+    )
+  }
+  const done = job.status !== 'new'
+  return (
+    <span
+      data-testid="job-status-badge"
+      className={cn(
+        'inline-flex min-h-8 w-fit items-center gap-1.5 rounded-full px-3 text-sm font-semibold',
+        done ? 'bg-primary-soft text-primary' : 'bg-chip text-chip-foreground',
+      )}
+    >
+      {done ? <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" /> : null}
+      {t(`jobs.status_${job.status}`)}
+    </span>
+  )
+}
 
 export default function JobDetailPage() {
   const { id } = useParams()
   const { t, lang } = useLanguage()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { confirmCost, costDialog } = useCostConfirm()
+  // Costo della prossima richiesta (Sprint 70): pannelli e conferma.
+  const { usage, refresh: refreshUsage } = useUsage()
 
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [generating, setGenerating] = useState(false)
+  // Generazione in attesa di risposta: 'cv' | 'cover_letter' | 'referral_message'.
+  const [generating, setGenerating] = useState(null)
   const [marking, setMarking] = useState(false)
-  const [showUndoApplicationDialog, setShowUndoApplicationDialog] = useState(false)
-  const [showGapPanel, setShowGapPanel] = useState(false)
+  const [undoOpen, setUndoOpen] = useState(false)
+
+  const [gapSheetOpen, setGapSheetOpen] = useState(false)
   const [selectedGaps, setSelectedGaps] = useState([])
   const [gapInstructions, setGapInstructions] = useState('')
-  const [showReasons, setShowReasons] = useState(false)
 
-  const [showCoverLetterDialog, setShowCoverLetterDialog] = useState(false)
+  const [coverLetterOpen, setCoverLetterOpen] = useState(false)
   const [coverLetterText, setCoverLetterText] = useState('')
   const [pastInstructions, setPastInstructions] = useState([])
   const [selectedPastInstructions, setSelectedPastInstructions] = useState([])
-  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false)
 
-  const [showReferralDialog, setShowReferralDialog] = useState(false)
-  const [referralChannel, setReferralChannel] = useState('linkedin')
-  const [referralRecipientName, setReferralRecipientName] = useState('')
-  const [referralRecipientLinkedinUrl, setReferralRecipientLinkedinUrl] = useState('')
-  const [referralText, setReferralText] = useState('')
+  const [referralOpen, setReferralOpen] = useState(false)
+  const [referralForm, setReferralForm] = useState(EMPTY_REFERRAL_FORM)
   const [referralPastInstructions, setReferralPastInstructions] = useState([])
   const [selectedReferralPastInstructions, setSelectedReferralPastInstructions] = useState([])
-  const [generatingReferralMessage, setGeneratingReferralMessage] = useState(false)
   const [referralMessages, setReferralMessages] = useState([])
-  // Costo della prossima richiesta e conferma prima di un addebito a credito
-  // (Sprint 70, integrato nella pagina del job al merge con lo Sprint 69).
-  const { usage, refresh: refreshUsage } = useUsage()
 
   useEffect(() => {
     let cancelled = false
@@ -121,133 +199,112 @@ export default function JobDetailPage() {
     }
   }, [id])
 
-  // Sprint 69: i gap selezionati sono i loro numeri nell'elenco (1-based),
-  // gli stessi mostrati qui e usati dal server nel prompt.
+  // Archivia / preferito rispondono con il serializer della lista, senza i
+  // campi del dettaglio (pagine, modificabilità): si aggiorna solo il campo
+  // cambiato. Prima dello Sprint 75 il preferito sostituiva l'intero job e
+  // "Modifica CV" e gli avvisi sparivano fino al ricaricamento.
+  function mergeJob(fields) {
+    setJob((current) => ({ ...current, ...fields }))
+  }
+
   function toggleGap(number) {
     setSelectedGaps((current) =>
       current.includes(number) ? current.filter((item) => item !== number) : [...current, number],
     )
   }
 
+  function toggleIn(setter) {
+    return (text) => setter((current) => (current.includes(text) ? current.filter((item) => item !== text) : [...current, text]))
+  }
+
   function multiPageToast(key, pageCount) {
     if (pageCount > 1) showToast(t(key).replace('{count}', pageCount))
   }
 
-  async function handleGenerate() {
-    if (!confirmCreditCharge(t, lang, usage, 'cv')) return
-    setGenerating(true)
+  // Il backend distingue più cause dietro lo stesso 409 (concorrenza,
+  // profilo incompleto, massimale/credito esaurito): il messaggio esatto
+  // arriva in `detail`, non va sostituito con un testo fisso.
+  function generationError(err, fallbackKey) {
+    if (err instanceof ApiError && err.status === 409) showToast(err.data?.detail || t('jobs.generationConflict'))
+    else showToast(t(fallbackKey))
+  }
+
+  async function handleGenerateCv() {
+    if (!(await confirmCost(usage, 'cv'))) return
+    setGapSheetOpen(false)
+    setGenerating('cv')
     try {
       const result = await generateCv(id, selectedGaps, gapInstructions)
-      const updated = await fetchJob(id)
-      setJob(updated)
+      setJob(await fetchJob(id))
       multiPageToast('jobs.cvMultiPageWarning', result?.page_count)
       setSelectedGaps([])
       setGapInstructions('')
-      setShowGapPanel(false)
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        // Il backend distingue più cause dietro lo stesso 409 (concorrenza,
-        // profilo incompleto, massimale/credito esaurito): il messaggio
-        // esatto arriva in `detail`, non va sostituito con un testo fisso
-        // che nasconderebbe all'utente la vera causa del blocco.
-        showToast(err.data?.detail || t('jobs.generationConflict'))
-      } else {
-        showToast(t('jobs.generationFailed'))
-      }
+      generationError(err, 'jobs.generationFailed')
     } finally {
       refreshUsage()
-      setGenerating(false)
+      setGenerating(null)
     }
   }
 
-  function openCoverLetterDialog() {
+  function openCoverLetter() {
     setCoverLetterText('')
     setSelectedPastInstructions([])
-    setShowCoverLetterDialog(true)
+    setCoverLetterOpen(true)
     fetchCoverLetterInstructions()
       .then((data) => setPastInstructions(data.instructions || []))
       .catch(() => setPastInstructions([]))
   }
 
-  function togglePastInstruction(text) {
-    setSelectedPastInstructions((current) =>
-      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
-    )
-  }
-
   async function handleGenerateCoverLetter() {
-    if (!confirmCreditCharge(t, lang, usage, 'cover_letter')) return
-    setGeneratingCoverLetter(true)
+    if (!(await confirmCost(usage, 'cover_letter'))) return
+    setCoverLetterOpen(false)
+    setGenerating('cover_letter')
     try {
-      const instructions = [...selectedPastInstructions, coverLetterText.trim()]
-        .filter(Boolean)
-        .join('\n\n')
-      const result = await generateCoverLetter(id, instructions)
-      const updated = await fetchJob(id)
-      setJob(updated)
-      setShowCoverLetterDialog(false)
+      const result = await generateCoverLetter(id, joinInstructions(selectedPastInstructions, coverLetterText))
+      setJob(await fetchJob(id))
       multiPageToast('jobs.coverLetterMultiPageWarning', result?.page_count)
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        showToast(err.data?.detail || t('jobs.generationConflict'))
-      } else {
-        showToast(t('jobs.coverLetterGenerationFailed'))
-      }
+      generationError(err, 'jobs.coverLetterGenerationFailed')
     } finally {
       refreshUsage()
-      setGeneratingCoverLetter(false)
+      setGenerating(null)
     }
   }
 
-  function openReferralDialog() {
-    setReferralChannel('linkedin')
-    setReferralRecipientName('')
-    setReferralRecipientLinkedinUrl('')
-    setReferralText('')
+  function openReferral() {
+    setReferralForm(EMPTY_REFERRAL_FORM)
     setSelectedReferralPastInstructions([])
-    setShowReferralDialog(true)
+    setReferralOpen(true)
     fetchReferralMessageInstructions()
       .then((data) => setReferralPastInstructions(data.instructions || []))
       .catch(() => setReferralPastInstructions([]))
   }
 
-  function toggleReferralPastInstruction(text) {
-    setSelectedReferralPastInstructions((current) =>
-      current.includes(text) ? current.filter((item) => item !== text) : [...current, text],
-    )
-  }
-
-  async function handleGenerateReferralMessage() {
-    if (!confirmCreditCharge(t, lang, usage, 'referral_message')) return
-    setGeneratingReferralMessage(true)
+  async function handleGenerateReferral() {
+    if (!(await confirmCost(usage, 'referral_message'))) return
+    setReferralOpen(false)
+    setGenerating('referral_message')
     try {
-      const instructions = [...selectedReferralPastInstructions, referralText.trim()]
-        .filter(Boolean)
-        .join('\n\n')
-      const document = await generateReferralMessage(id, {
-        channel: referralChannel,
-        recipient_name: referralRecipientName.trim(),
-        recipient_linkedin_url: referralRecipientLinkedinUrl.trim(),
-        instructions,
+      const message = await generateReferralMessage(id, {
+        channel: referralForm.channel,
+        recipient_name: referralForm.recipientName.trim(),
+        recipient_linkedin_url: referralForm.recipientLinkedinUrl.trim(),
+        instructions: joinInstructions(selectedReferralPastInstructions, referralForm.instructions),
       })
-      setReferralMessages((current) => [document, ...current])
-      setShowReferralDialog(false)
+      setReferralMessages((current) => [message, ...current])
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        showToast(err.data?.detail || t('jobs.generationConflict'))
-      } else {
-        showToast(t('jobs.referralGenerationFailed'))
-      }
+      generationError(err, 'jobs.referralGenerationFailed')
     } finally {
       refreshUsage()
-      setGeneratingReferralMessage(false)
+      setGenerating(null)
     }
   }
 
-  async function handleCopyReferralMessage(document) {
-    const text = document.subject
-      ? `${t('jobs.referralSubjectPrefix')} ${document.subject}\n\n${document.content}`
-      : document.content
+  async function handleCopyMessage(message) {
+    const text = message.subject
+      ? `${t('jobs.referralSubjectPrefix')} ${message.subject}\n\n${message.content}`
+      : message.content
     try {
       await navigator.clipboard.writeText(text)
       showToast(t('jobs.referralCopied'))
@@ -258,22 +315,52 @@ export default function JobDetailPage() {
 
   async function handleToggleFavorite() {
     const nextFavorite = !job.is_favorite
-    setJob((current) => ({ ...current, is_favorite: nextFavorite }))
-    const updated = nextFavorite ? await favoriteJob(id) : await unfavoriteJob(id)
-    setJob(updated)
+    mergeJob({ is_favorite: nextFavorite })
+    try {
+      const updated = nextFavorite ? await favoriteJob(id) : await unfavoriteJob(id)
+      mergeJob({ is_favorite: updated.is_favorite })
+    } catch {
+      mergeJob({ is_favorite: !nextFavorite })
+      showToast(t('common.genericError'))
+    }
+  }
+
+  // Archivio dal menu ⋯ (SPEC-DELTA A7): stesso effetto dello swipe della
+  // lista, raggiungibile anche da tastiera; si resta sul dettaglio.
+  async function handleArchive() {
+    try {
+      const updated = await archiveJob(id)
+      mergeJob({ is_archived: updated.is_archived })
+      showToast(t('jobs.archivedToast'), {
+        action: {
+          label: t('jobs.undo'),
+          onClick: async () => {
+            const restored = await unarchiveJob(id)
+            mergeJob({ is_archived: restored.is_archived })
+          },
+        },
+      })
+    } catch {
+      showToast(t('common.genericError'))
+    }
+  }
+
+  async function handleUnarchive() {
+    try {
+      const updated = await unarchiveJob(id)
+      mergeJob({ is_archived: updated.is_archived })
+      showToast(t('jobs.unarchivedToast'))
+    } catch {
+      showToast(t('common.genericError'))
+    }
   }
 
   async function handleMarkApplicationDone() {
     setMarking(true)
     try {
-      const updated = await markApplicationDone(id)
-      setJob(updated)
+      setJob(await markApplicationDone(id))
     } catch (err) {
-      showToast(
-        err instanceof ApiError && err.status === 409
-          ? t('jobs.applicationRejected')
-          : t('common.genericError'),
-      )
+      showToast(err instanceof ApiError && err.status === 409 ? t('jobs.applicationRejected') : t('common.genericError'))
     } finally {
       setMarking(false)
     }
@@ -282,9 +369,8 @@ export default function JobDetailPage() {
   async function handleUndoApplicationDone() {
     setMarking(true)
     try {
-      const updated = await undoApplicationDone(id)
-      setJob(updated)
-      setShowUndoApplicationDialog(false)
+      setJob(await undoApplicationDone(id))
+      setUndoOpen(false)
     } catch {
       showToast(t('jobs.undoApplicationFailed'))
     } finally {
@@ -293,16 +379,20 @@ export default function JobDetailPage() {
   }
 
   if (loading) {
-    return <p className="mt-16 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
+    return (
+      <div className="flex justify-center pt-16">
+        <Spinner size={28} />
+      </div>
+    )
   }
 
   if (error || !job) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
-        <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-sm text-destructive">
+      <div className="mx-auto flex max-w-2xl flex-col items-start gap-4 px-4 py-8">
+        <Banner variant="error" className="w-full">
           {error || t('jobs.notFound')}
-        </p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate(jobListHref())}>
+        </Banner>
+        <Button variant="secondary" onClick={() => navigate(jobListHref())}>
           {t('jobs.backToList')}
         </Button>
       </div>
@@ -310,563 +400,209 @@ export default function JobDetailPage() {
   }
 
   const hasCv = Boolean(job.cv_pdf_url)
-  const hasExpandableReasons = [...(job.score_match || []), ...(job.score_gaps || [])].some(
-    (item) => scoreItemReason(item),
-  )
+  const applied = job.status === 'application_done'
+  const cvBusy = generating === 'cv' || Boolean(job.cv_generation_in_progress)
+  const coverLetterBusy = generating === 'cover_letter' || Boolean(job.cover_letter_generation_in_progress)
+  const referralBusy = generating === 'referral_message' || Boolean(job.referral_message_generation_in_progress)
   const applicantsText = applicantsLabel(job, t)
-  const lowApplicants = isLowApplicants(job)
-  // Avvisi sui documenti (Sprint 69): PDF oltre 1 pagina e documenti
-  // generati prima degli editor (content_json vuoto, non modificabili).
-  const documentNotices = [
-    job.cv_page_count > 1 && {
-      key: 'cv-pages',
-      warning: true,
-      text: t('jobs.cvMultiPageWarning').replace('{count}', job.cv_page_count),
-    },
-    job.cover_letter_page_count > 1 && {
-      key: 'cl-pages',
-      warning: true,
-      text: t('jobs.coverLetterMultiPageWarning').replace('{count}', job.cover_letter_page_count),
-    },
-    job.cv_pdf_url && job.cv_editable === false && { key: 'cv-edit', text: t('jobs.cvNotEditable') },
-    job.cover_letter_pdf_url && job.cover_letter_editable === false && {
-      key: 'cl-edit',
-      text: t('jobs.coverLetterNotEditable'),
-    },
+  const showDocuments =
+    hasCv || Boolean(job.cover_letter_pdf_url) || referralMessages.length > 0 || cvBusy || coverLetterBusy || applied
+
+  const headerMenuItems = [
+    job.is_archived
+      ? { key: 'unarchive', label: t('jobs.restoreFromArchive'), icon: ArchiveRestore, onSelect: handleUnarchive }
+      : { key: 'archive', label: t('jobs.archive'), icon: Archive, onSelect: handleArchive },
+    // Senza CV la barra mostra "Genera CV": "Segna candidatura fatta"
+    // (consentito anche senza CV, §4.10) resta raggiungibile da qui.
+    !hasCv && !applied
+      ? { key: 'mark', label: t('jobs.markApplicationDone'), icon: Send, onSelect: handleMarkApplicationDone, disabled: marking }
+      : null,
   ].filter(Boolean)
 
+  const generateMenuItems = [
+    { key: 'cover-letter', label: t('jobs.generateCoverLetter'), icon: FileText, onSelect: openCoverLetter, disabled: coverLetterBusy },
+    { key: 'message', label: t('jobs.generateReferralMessage'), icon: MessageSquare, onSelect: openReferral, disabled: referralBusy },
+  ]
+
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <Link to={jobListHref()} className="text-sm font-medium text-primary hover:underline">
-        ← {t('jobs.backToList')}
-      </Link>
-
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge data-testid="job-status-badge" variant={job.status === 'new' ? 'neutral' : 'primary'}>
-                {t(`jobs.status_${job.status}`)}
-              </Badge>
-              {job.matched_search && <Badge variant="neutral">{job.matched_search}</Badge>}
-              {applicantsText && (
-                <span
-                  className={
-                    'rounded-full px-2 py-0.5 text-xs font-medium ' +
-                    (lowApplicants
-                      ? 'bg-success-soft text-success font-semibold'
-                      : 'bg-secondary text-muted-foreground')
-                  }
-                >
-                  {applicantsText}
-                </span>
-              )}
-            </div>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-balance">{job.title}</h1>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <span>
-                {job.company}
-                {job.location && <> · {job.location}</>}
-                {job.salary && <> · {job.salary}</>}
-              </span>
-              {job.recruiter_name && (
-                job.recruiter_profile_url ? (
-                  <a
-                    href={job.recruiter_profile_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
-                    className="text-muted-foreground/70 hover:text-foreground"
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </a>
-                ) : (
-                  <span
-                    title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
-                    className="text-muted-foreground/70"
-                  >
-                    <UserRound className="h-4 w-4" />
-                  </span>
-                )
-              )}
-            </p>
-            {job.date_collected && (
-              <p className="mt-0.5 text-xs text-muted-foreground/70">
-                {t('jobs.importedOnPrefix')} {formatShortDate(job.date_collected, lang)}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={handleToggleFavorite}
-              aria-label={job.is_favorite ? t('jobs.unfavorite') : t('jobs.favorite')}
-              aria-pressed={job.is_favorite}
-              className="text-muted-foreground hover:text-rose-500"
-            >
-              <Heart className={`h-6 w-6 ${job.is_favorite ? 'fill-rose-500 text-rose-500' : ''}`} />
-            </button>
-            {job.score != null && (
-              <div
-                className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${scoreStyle(job.score)}`}
-              >
-                <span className="text-2xl font-bold tabular-nums leading-none">{job.score}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {job.score_reasoning && (
-          <div className="mt-5">
-            <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t('jobs.whyThisScore')}
-            </h2>
-            <p className="text-sm text-foreground">{job.score_reasoning}</p>
-          </div>
-        )}
-
-        {(job.score_match?.length > 0 || job.score_gaps?.length > 0) && (
-          <div className="mt-5">
-            {hasExpandableReasons && (
+    <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-3 lg:pt-6">
+      <div className="flex items-center justify-between gap-2">
+        <Link
+          to={jobListHref()}
+          className="-ml-2 flex min-h-11 items-center gap-1 rounded-field px-2 text-base font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+          {t('jobs.navLink')}
+        </Link>
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={handleToggleFavorite}
+            aria-label={job.is_favorite ? t('jobs.unfavorite') : t('jobs.favorite')}
+            aria-pressed={job.is_favorite}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-field text-foreground outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/30"
+          >
+            <Heart className={cn('h-6 w-6', job.is_favorite && 'fill-rose-500 text-rose-500')} aria-hidden="true" />
+          </button>
+          <Menu
+            label={t('jobs.moreActions')}
+            items={headerMenuItems}
+            trigger={(props) => (
               <button
-                type="button"
-                onClick={() => setShowReasons((current) => !current)}
-                className="mb-2 text-xs font-medium text-primary hover:underline"
+                {...props}
+                aria-label={t('jobs.moreActions')}
+                className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-field text-foreground outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/30"
               >
-                {showReasons ? t('jobs.hideReasons') : t('jobs.expandReasons')}
+                <MoreHorizontal className="h-6 w-6" aria-hidden="true" />
               </button>
             )}
-            <div className="grid gap-5 sm:grid-cols-2">
-              {job.score_match?.length > 0 && (
-                <div>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t('jobs.matches')}
-                  </h2>
-                  <ul className="flex flex-col gap-1.5 text-sm">
-                    {job.score_match.map((item, index) => (
-                      <li key={index} className="flex flex-col gap-0.5">
-                        <div className="flex gap-2">
-                          <span className="shrink-0 text-success">✓</span>
-                          {scoreItemLabel(item)}
-                        </div>
-                        {showReasons && scoreItemReason(item) && (
-                          <p className="pl-5 text-xs text-muted-foreground">{scoreItemReason(item)}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {job.score_gaps?.length > 0 && (
-                <div>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t('jobs.gaps')}
-                  </h2>
-                  <ul className="flex flex-col gap-1.5 text-sm">
-                    {job.score_gaps.map((item, index) => (
-                      <li key={index} className="flex flex-col gap-0.5">
-                        <div className="flex gap-2">
-                          <span className="shrink-0 text-destructive">−</span>
-                          {scoreItemLabel(item)}
-                        </div>
-                        {showReasons && scoreItemReason(item) && (
-                          <p className="pl-5 text-xs text-muted-foreground">{scoreItemReason(item)}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="mt-5">
-          <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t('jobs.description')}
-          </h2>
-          <p className="whitespace-pre-line text-sm text-foreground">{job.description}</p>
+          />
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <button
-          type="button"
-          onClick={() => setShowGapPanel((open) => !open)}
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          {showGapPanel ? '▾ ' : '▸ '}
-          {t('jobs.gapPanelToggle')}
-        </button>
-        {showGapPanel && (
-          <div className="mt-4 flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">{t('jobs.gapPanelHint')}</p>
-            {job.score_gaps?.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                {job.score_gaps.map((item, index) => {
-                  const label = scoreItemLabel(item)
-                  const reason = scoreItemReason(item)
-                  const number = index + 1
-                  // Numero, etichetta e motivo qui mostrati sono esattamente
-                  // quelli che il server mette nel prompt (Sprint 69).
-                  return (
-                    <label key={index} className="flex items-start gap-2.5 text-sm">
-                      <Checkbox
-                        checked={selectedGaps.includes(number)}
-                        onCheckedChange={() => toggleGap(number)}
-                      />
-                      <span className="flex flex-col text-foreground">
-                        <span>
-                          {number}. {label}
-                        </span>
-                        {reason && <span className="text-xs text-muted-foreground">{reason}</span>}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('jobs.gapPanelNoGaps')}</p>
-            )}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="gap-instructions">{t('jobs.gapInstructionsLabel')}</Label>
-              <Textarea
-                id="gap-instructions"
-                value={gapInstructions}
-                onChange={(event) => setGapInstructions(event.target.value)}
-                placeholder={t('jobs.gapInstructionsPlaceholder')}
-              />
-              {selectedGaps.length > 0 && !gapInstructions.trim() && (
-                <p className="text-xs text-muted-foreground">{t('jobs.gapInstructionsDefaultHint')}</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <AiNotice />
-      <ActionCostHint usage={usage} action="cv" />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" disabled={generating || job.cv_generation_in_progress} onClick={handleGenerate}>
-          {generating || job.cv_generation_in_progress
-            ? t('jobs.generating')
-            : hasCv
-              ? t('jobs.regenerateCv')
-              : t('jobs.generateCv')}
-        </Button>
-
-        {job.cv_pdf_url && (
-          <Button variant="secondary" asChild>
-            <a href={job.cv_pdf_url} download={job.cv_download_filename} target="_blank" rel="noreferrer">
-              {t('jobs.downloadCv')}
-            </a>
-          </Button>
-        )}
-
-        {job.cv_pdf_url && job.cv_editable && (
-          <Button variant="secondary" asChild>
-            <Link to={`/jobs/${id}/cv-editor`}>{t('cvEditor.editCvButton')}</Link>
-          </Button>
-        )}
-
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={generatingCoverLetter || job.cover_letter_generation_in_progress}
-          onClick={openCoverLetterDialog}
-        >
-          {generatingCoverLetter || job.cover_letter_generation_in_progress
-            ? t('jobs.generatingCoverLetter')
-            : t('jobs.generateCoverLetter')}
-        </Button>
-
-        {job.cover_letter_pdf_url && (
-          <Button variant="secondary" asChild>
+      <header className="flex flex-col gap-3">
+        <StatusChip job={job} cvBusy={cvBusy} />
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="min-w-0 break-words text-[26px] font-bold leading-[1.15] tracking-[-0.01em] text-foreground lg:text-[28px]">
+            {job.title}
+          </h1>
+          {job.score != null ? <ScoreChip score={job.score} size="lg" /> : null}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="min-w-0 text-base text-muted-foreground">
+            {job.company}
+            {job.location ? <> · {job.location}</> : null}
+            {job.salary ? <> · {job.salary}</> : null}
+            <RecruiterIcon job={job} />
+          </p>
+          {job.apply_url ? (
             <a
-              href={job.cover_letter_pdf_url}
-              download={job.cover_letter_download_filename}
+              href={job.apply_url}
               target="_blank"
               rel="noreferrer"
+              aria-label={t('jobs.openApplyLink')}
+              className={cn(buttonVariants({ variant: 'secondary' }), 'ml-auto rounded-full')}
             >
-              {t('jobs.downloadCoverLetter')}
+              {t('jobs.listingButton')}
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
             </a>
+          ) : null}
+        </div>
+        {applicantsText || job.matched_search || job.is_archived || job.date_collected ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {applicantsText ? <Badge variant={isLowApplicants(job) ? 'success' : 'neutral'}>{applicantsText}</Badge> : null}
+            {job.matched_search ? (
+              <Badge variant="neutral" className="whitespace-normal break-words">
+                {t('jobs.foundWith').replace('{search}', job.matched_search)}
+              </Badge>
+            ) : null}
+            {job.is_archived ? <Badge variant="neutral">{t('jobs.archivedBadge')}</Badge> : null}
+            {job.date_collected ? (
+              <span className="text-xs text-muted-foreground">
+                {t('jobs.importedOnPrefix')} {formatShortDate(job.date_collected, lang)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+
+      {showDocuments ? (
+        <DocumentsSection
+          job={job}
+          messages={referralMessages}
+          cvBusy={cvBusy}
+          coverLetterBusy={coverLetterBusy}
+          referralBusy={referralBusy}
+          onGenerateCv={() => setGapSheetOpen(true)}
+          onGenerateCoverLetter={openCoverLetter}
+          onGenerateReferral={openReferral}
+          onCopyMessage={handleCopyMessage}
+        />
+      ) : null}
+
+      <ScoreSection job={job} />
+      <DescriptionSection description={job.description} />
+
+      <ActionBar>
+        {applied ? (
+          <Button variant="secondary" size="lg" className="border-primary" disabled={marking} onClick={() => setUndoOpen(true)}>
+            <X className="h-5 w-5" aria-hidden="true" />
+            {t('jobs.undoApplication')}
           </Button>
-        )}
-
-        {job.cover_letter_pdf_url && job.cover_letter_editable && (
-          <Button variant="secondary" asChild>
-            <Link to={`/jobs/${id}/cover-letter-editor`}>{t('coverLetterEditor.editButton')}</Link>
-          </Button>
-        )}
-
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={generatingReferralMessage || job.referral_message_generation_in_progress}
-          onClick={openReferralDialog}
-        >
-          {generatingReferralMessage || job.referral_message_generation_in_progress
-            ? t('jobs.generatingReferralMessage')
-            : t('jobs.generateReferralMessage')}
-        </Button>
-
-        {job.apply_url ? (
-          <Button variant="secondary" asChild>
-            <a href={job.apply_url} target="_blank" rel="noreferrer">
-              {t('jobs.openApplyLink')}
-            </a>
-          </Button>
-        ) : (
-          <span className="text-sm text-muted-foreground">{t('jobs.applyLinkHint')}</span>
-        )}
-
-        {job.status !== 'application_done' ? (
-          <Button variant="secondary" disabled={marking} onClick={handleMarkApplicationDone}>
+        ) : hasCv ? (
+          <Button size="lg" disabled={marking} onClick={handleMarkApplicationDone}>
+            <Check className="h-5 w-5" aria-hidden="true" />
             {t('jobs.markApplicationDone')}
           </Button>
         ) : (
-          <Button variant="ghost" disabled={marking} onClick={() => setShowUndoApplicationDialog(true)}>
-            {t('jobs.undoApplication')}
-          </Button>
+          <SplitButton
+            icon={Sparkles}
+            onClick={() => setGapSheetOpen(true)}
+            disabled={cvBusy}
+            menuLabel={t('jobs.generateMenuLabel')}
+            items={generateMenuItems}
+          >
+            {cvBusy ? t('jobs.generating') : t('jobs.generateCv')}
+          </SplitButton>
         )}
-      </div>
+      </ActionBar>
 
-      {documentNotices.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {documentNotices.map((notice) => (
-            <p
-              key={notice.key}
-              className={cn(
-                'rounded-md px-3 py-2 text-sm',
-                notice.warning ? 'bg-destructive-soft text-destructive' : 'bg-secondary text-muted-foreground',
-              )}
-            >
-              {notice.text}
-            </p>
-          ))}
-        </div>
-      )}
+      <GapSheet
+        open={gapSheetOpen}
+        onOpenChange={setGapSheetOpen}
+        gaps={job.score_gaps || []}
+        selectedGaps={selectedGaps}
+        onToggleGap={toggleGap}
+        instructions={gapInstructions}
+        onInstructionsChange={setGapInstructions}
+        usage={usage}
+        regenerate={hasCv}
+        onSubmit={handleGenerateCv}
+        busy={cvBusy}
+      />
+      <CoverLetterSheet
+        open={coverLetterOpen}
+        onOpenChange={setCoverLetterOpen}
+        text={coverLetterText}
+        onTextChange={setCoverLetterText}
+        pastInstructions={pastInstructions}
+        selectedPast={selectedPastInstructions}
+        onTogglePast={toggleIn(setSelectedPastInstructions)}
+        usage={usage}
+        regenerate={Boolean(job.cover_letter_pdf_url)}
+        onSubmit={handleGenerateCoverLetter}
+        busy={coverLetterBusy}
+      />
+      <ReferralSheet
+        open={referralOpen}
+        onOpenChange={setReferralOpen}
+        form={referralForm}
+        onFormChange={setReferralForm}
+        pastInstructions={referralPastInstructions}
+        selectedPast={selectedReferralPastInstructions}
+        onTogglePast={toggleIn(setSelectedReferralPastInstructions)}
+        usage={usage}
+        onSubmit={handleGenerateReferral}
+        busy={referralBusy}
+      />
 
-      <Dialog open={showUndoApplicationDialog} onOpenChange={setShowUndoApplicationDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('jobs.undoApplicationTitle')}</DialogTitle>
-            <DialogDescription>{t('jobs.undoApplicationHint')}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setShowUndoApplicationDialog(false)}>
-              {t('jobs.undoApplicationKeep')}
-            </Button>
-            <Button type="button" disabled={marking} onClick={handleUndoApplicationDone}>
+      <Modal open={undoOpen} onOpenChange={setUndoOpen}>
+        <ModalContent>
+          <ModalTitle>{t('jobs.undoApplicationTitle')}</ModalTitle>
+          <ModalDescription className="text-[15px]">{t('jobs.undoApplicationHint')}</ModalDescription>
+          <ModalActions>
+            <Button size="lg" disabled={marking} onClick={handleUndoApplicationDone}>
               {t('jobs.undoApplicationConfirm')}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {referralMessages.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t('jobs.referralMessagesTitle')}
-          </h2>
-          <div className="flex flex-col gap-3">
-            {referralMessages.map((document) => (
-              <div key={document.id} className="rounded-lg border border-border p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="neutral">
-                      {document.channel === 'email' ? t('jobs.referralChannelEmail') : t('jobs.referralChannelLinkedin')}
-                    </Badge>
-                    {document.recipient_name && (
-                      <span className="text-sm font-medium text-foreground">{document.recipient_name}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {formatShortDate(document.generated_at, lang)}
-                    </span>
-                  </div>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => handleCopyReferralMessage(document)}>
-                    {t('jobs.referralCopy')}
-                  </Button>
-                </div>
-                {document.recipient_linkedin_url && (
-                  <a
-                    href={
-                      /^https?:\/\//i.test(document.recipient_linkedin_url)
-                        ? document.recipient_linkedin_url
-                        : `https://${document.recipient_linkedin_url}`
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-block text-xs text-primary hover:underline"
-                  >
-                    {t('jobs.referralRecipientLinkedinShort')}
-                  </a>
-                )}
-                {document.subject && (
-                  <p className="mt-2 text-sm font-semibold text-foreground">{document.subject}</p>
-                )}
-                <p className="mt-1 whitespace-pre-line text-sm text-foreground">{document.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Dialog open={showReferralDialog} onOpenChange={setShowReferralDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('jobs.referralDialogTitle')}</DialogTitle>
-            <DialogDescription>{t('jobs.referralDialogHint')}</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>{t('jobs.referralChannelLabel')}</Label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReferralChannel('linkedin')}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
-                    referralChannel === 'linkedin'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t('jobs.referralChannelLinkedin')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReferralChannel('email')}
-                  className={cn(
-                    'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
-                    referralChannel === 'email'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t('jobs.referralChannelEmail')}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="referral-recipient-name">{t('jobs.referralRecipientNameLabel')}</Label>
-              <Input
-                id="referral-recipient-name"
-                value={referralRecipientName}
-                onChange={(event) => setReferralRecipientName(event.target.value)}
-                placeholder={t('jobs.referralRecipientNamePlaceholder')}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="referral-recipient-linkedin">
-                {t('jobs.referralRecipientLinkedinLabel')}
-              </Label>
-              <Input
-                id="referral-recipient-linkedin"
-                value={referralRecipientLinkedinUrl}
-                onChange={(event) => setReferralRecipientLinkedinUrl(event.target.value)}
-                placeholder={t('jobs.referralRecipientLinkedinPlaceholder')}
-              />
-              <p className="text-xs text-muted-foreground">{t('jobs.referralRecipientLinkedinHint')}</p>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="referral-instructions">{t('jobs.referralInstructionsLabel')}</Label>
-              <Textarea
-                id="referral-instructions"
-                value={referralText}
-                onChange={(event) => setReferralText(event.target.value)}
-                placeholder={t('jobs.referralInstructionsPlaceholder')}
-              />
-            </div>
-
-            {referralPastInstructions.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <Label>{t('jobs.coverLetterPastInstructionsLabel')}</Label>
-                <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
-                  {referralPastInstructions.map((text, index) => (
-                    <label key={index} className="flex items-start gap-2.5 text-sm">
-                      <Checkbox
-                        checked={selectedReferralPastInstructions.includes(text)}
-                        onCheckedChange={() => toggleReferralPastInstruction(text)}
-                      />
-                      <span className="text-foreground">{text}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <AiNotice />
-          <ActionCostHint usage={usage} action="cover_letter" />
-
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setShowReferralDialog(false)}>
-              {t('jobs.cancel')}
+            <Button variant="text" onClick={() => setUndoOpen(false)}>
+              {t('jobs.undoApplicationKeep')}
             </Button>
-            <Button type="button" disabled={generatingReferralMessage} onClick={handleGenerateReferralMessage}>
-              {generatingReferralMessage ? t('jobs.generatingReferralMessage') : t('jobs.generateReferralMessage')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalActions>
+        </ModalContent>
+      </Modal>
 
-      <Dialog open={showCoverLetterDialog} onOpenChange={setShowCoverLetterDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('jobs.coverLetterDialogTitle')}</DialogTitle>
-            <DialogDescription>{t('jobs.coverLetterDialogHint')}</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cover-letter-instructions">
-                {t('jobs.coverLetterInstructionsLabel')}
-              </Label>
-              <Textarea
-                id="cover-letter-instructions"
-                value={coverLetterText}
-                onChange={(event) => setCoverLetterText(event.target.value)}
-                placeholder={t('jobs.coverLetterInstructionsPlaceholder')}
-              />
-            </div>
-
-            {pastInstructions.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <Label>{t('jobs.coverLetterPastInstructionsLabel')}</Label>
-                <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
-                  {pastInstructions.map((text, index) => (
-                    <label key={index} className="flex items-start gap-2.5 text-sm">
-                      <Checkbox
-                        checked={selectedPastInstructions.includes(text)}
-                        onCheckedChange={() => togglePastInstruction(text)}
-                      />
-                      <span className="text-foreground">{text}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <AiNotice />
-          <ActionCostHint usage={usage} action="referral_message" />
-
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setShowCoverLetterDialog(false)}>
-              {t('jobs.cancel')}
-            </Button>
-            <Button type="button" disabled={generatingCoverLetter} onClick={handleGenerateCoverLetter}>
-              {generatingCoverLetter ? t('jobs.generatingCoverLetter') : t('jobs.generateCoverLetter')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GenerationModal kind={generating} />
+      {costDialog}
     </div>
   )
 }

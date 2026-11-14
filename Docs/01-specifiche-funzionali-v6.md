@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci e Sprint 74 lista Jobs del redesign UI)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs e Sprint 75 dettaglio job del redesign UI)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -364,27 +364,22 @@ In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la
 
 **Stato vuoto:** icona, il messaggio della sezione e, in Raccolti, "Raccogli ora"; con filtri attivi "Nessun job con questi filtri." e "Azzera filtri".
 
-**Dettaglio job.**
+**Dettaglio job** (ridisegnato nello Sprint 75, mockup `detail-*` e `desk-detail`; stesso comportamento di prima).
+- **Riga in alto:** "‹ Jobs" (torna alla lista con i filtri dell'ultima visita), il **cuoricino** del preferito e il menu **⋯ "Altre azioni"**: **"Archivia"** oppure, per un job archiviato, **"Riporta dall'archivio"** (SPEC-DELTA A7; si usa anche da tastiera: Invio o ↓ apre, frecce, Esc chiude) e, per un job senza CV non ancora marcato, **"Segna candidatura fatta"** (§4.10). Archiviando dal dettaglio si resta nella pagina; un avviso offre "Annulla" e un'etichetta "Archiviato" lo ricorda.
 - **Intestazione:**
-  - link "← Torna alla lista";
-  - badge di stato, provenienza e candidati;
-  - titolo; azienda · località · retribuzione (se presente);
-  - recruiter, data di raccolta, cuoricino, punteggio.
-- **Valutazione:**
-  - **"Perché questo punteggio"**: la motivazione breve;
-  - **Corrispondenze** (✓) e **Da colmare** (−), con un unico pulsante "Espandi motivazioni" / "Nascondi motivazioni" che mostra la motivazione di ogni voce.
-- **Descrizione completa** dell'offerta.
-- **Pannello "Colma i gap"**, collassabile (§4.8).
-- **Azioni:**
-  - Genera/Rigenera CV, Scarica CV, Modifica CV (§4.7, §4.16);
-  - Genera, Scarica e Modifica Cover Letter (§4.18–§4.19);
-  - Genera messaggio (§4.20);
-  - **"Vai all'annuncio"**, oppure "Nessun link di candidatura" se il link manca;
-  - **"Segna candidatura fatta"** (§4.10).
-- **Messaggi di networking** già generati per quel job (§4.20).
+  - **chip dello stato**, solo indicativo (non selezionabile): "Nuovo", "✓ CV generato", "✓ Candidatura fatta" o, durante la generazione del CV, "CV in generazione" con indicatore (§4.6);
+  - titolo e **punteggio** a fasce di colore (§4.4);
+  - azienda · località · retribuzione (se presente) con l'**icona del recruiter** (link al profilo se disponibile);
+  - pulsante **"Annuncio ↗"** ("Vai all'annuncio"), solo se il job ha un link di candidatura;
+  - etichette dei **candidati**, della **ricerca di provenienza** ("Trovato con: …") e la data di raccolta.
+- **Documenti** (se esiste almeno un documento, se una generazione è in corso o se la candidatura è fatta): una riga per **CV**, **Cover letter** e **Messaggio**, con stato ("Pronto · N pagine", "Non ancora generato", "CV in generazione") e azioni: matita **Modifica** (solo documenti modificabili, §4.16, §4.19), **Scarica** (link firmato, §4.18), menu ⋯ con **Rigenera**; senza documento, **"Genera"**. Sotto la riga del documento gli avvisi "occupa N pagine invece di 1" e "generato prima dell'editor, rigeneralo per modificarlo" (Sprint 69). Sotto "Messaggio" i messaggi già generati (§4.20), con il testo lungo troncato e "Leggi tutto".
+- **"Perché questo punteggio":** la motivazione troncata a 3 righe con **"Leggi tutto"**; sotto, i contatori **"N corrispondenze"** e **"N gap"**: toccandone uno si apre l'elenco delle voci con la motivazione di ognuna (uno aperto per volta).
+- **"Descrizione annuncio"** a fisarmonica, chiusa all'apertura (Mostra / Nascondi).
+- **Barra azione in basso** (al posto della barra di tab, a ogni larghezza): **"Genera CV ▾"** se il job non ha un CV (▾ apre "Genera cover letter" e "Genera messaggio"); **"Segna candidatura fatta"** se il CV c'è; **"Annulla candidatura"** se la candidatura è fatta (§4.10).
+- **Generazioni:** "Genera CV" apre il pannello **"Colma i gap"** (§4.8), cover letter e messaggio i loro pannelli (§4.18, §4.20). Ogni pannello mostra l'avviso AI e, in fondo, il costo della prossima richiesta ("Incluso nel piano: ne restano N su M oggi", a credito con prezzo e saldo, oppure bloccata: in questo caso il pulsante è disattivato); oltre il massimale chiede conferma del costo (§4.11). Durante l'attesa (sincrona, anche qualche minuto) una finestra non chiudibile mostra "Generazione del CV…" (o della cover letter / del messaggio).
 
 **Archiviazione e swipe.**
-- Fuori dalla sezione Archiviati, lo **swipe a sinistra** (dito o trascinamento del mouse) archivia il job. Un avviso scuro in basso offre **"Annulla"**. Dallo Sprint 74 non c'è più il pulsante "Archivia" sulla scheda; l'archiviazione dal menu del dettaglio arriva con lo Sprint 75 (SPEC-DELTA A7): fino ad allora non è possibile archiviare **da tastiera**.
+- Fuori dalla sezione Archiviati, lo **swipe a sinistra** (dito o trascinamento del mouse) archivia il job. Un avviso scuro in basso offre **"Annulla"**. Dallo Sprint 74 non c'è più il pulsante "Archivia" sulla scheda; dallo Sprint 75 si archivia (anche **da tastiera**) dal menu ⋯ del dettaglio (SPEC-DELTA A7), che per un job archiviato offre "Riporta dall'archivio".
 - Nella sezione Archiviati lo swipe diventa **"Rimuovi da archivio"**: il job torna nella sua sezione d'origine con lo stato che aveva.
 - **Uscita automatica dall'archivio:** se si **genera o rigenera un CV** per un job archiviato, il job esce dall'archivio. Cover letter, messaggi e modifiche dall'editor invece **non** lo fanno uscire.
 
@@ -398,7 +393,7 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 - **candidatura fatta**: impostato a mano dall'utente **in qualunque momento**, anche senza CV (Sprint 46). Non è ripetibile; una rigenerazione del CV non lo toglie. Si può **annullare** (Sprint 69, §4.10).
 
 **Stato transitorio:**
-- **CV in generazione**: mentre il CV viene prodotto, il pulsante "Genera" del job mostra "Generazione…" ed è disabilitato. Una seconda richiesta sullo stesso job viene rifiutata.
+- **CV in generazione**: mentre il CV viene prodotto, il chip dello stato del dettaglio mostra "CV in generazione" e "Genera CV" mostra "Generazione…" ed è disabilitato (Sprint 75). Una seconda richiesta sullo stesso job viene rifiutata.
 - Cover letter e messaggi di networking hanno **blocchi di concorrenza propri**, indipendenti da quello del CV, visibili anche da altri dispositivi e dopo un ricaricamento (Sprint 69). **Non** sono stati del job.
 - Se una generazione si interrompe senza chiudersi (es. server riavviato), il blocco decade da solo dopo **35 minuti** (Sprint 69).
 
@@ -410,9 +405,7 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 
 **Solo su richiesta.**
 - La **generazione automatica non esiste più** (Sprint 45): nessun punteggio fa partire un CV da solo.
-- La generazione è disponibile su **qualunque job** (raccolto, importato o creato a mano; con punteggio alto, basso o assente) da due punti:
-  - dalla **scheda in lista**: "Genera CV" / "Rigenera CV", senza "colma i gap";
-  - dal **dettaglio**: con l'eventuale selezione dei gap (§4.8).
+- La generazione è disponibile su **qualunque job** (raccolto, importato o creato a mano; con punteggio alto, basso o assente) **dal dettaglio** (dallo Sprint 74 la scheda in lista non ha più "Genera CV"): "Genera CV" nella barra in basso, oppure "Genera" / "Rigenera CV" nella riga del CV, aprono sempre il pannello "Colma i gap" (§4.8), dove la selezione dei gap è facoltativa.
 - **Rigenerare** significa semplicemente generare un nuovo CV per un job che ne ha già uno. Non ci sono limiti per singolo job oltre al massimale giornaliero e al credito.
 
 **Massimale e credito.**
@@ -474,17 +467,17 @@ Tradurre i contenuti reali dell'utente è permesso; aggiungerne no.
 
 **Download: solo PDF**, con nome file `CV {Nome Cognome} - {Titolo del job}.pdf` (Sprint 42). Il Word non è previsto (§5.19).
 
-**Avviso AI** (Sprint 67). Nel dettaglio del job, sotto il pannello "colma i gap" e sopra i pulsanti di generazione, compare l'avviso "Contenuto generato con l'AI: verificalo prima di usarlo.". Lo stesso avviso è nelle chat degli editor (§4.17, §4.19) e nei popup di cover letter e messaggi di networking (§4.18, §4.20).
+**Avviso AI** (Sprint 67). Nel pannello "Colma i gap" (dallo Sprint 75; prima sotto il pannello nel dettaglio) compare l'avviso "Contenuto generato con l'AI: verificalo prima di usarlo.". Lo stesso avviso è nelle chat degli editor (§4.17, §4.19) e nei pannelli di cover letter e messaggi di networking (§4.18, §4.20).
 
 ### 4.8 "Colma i gap" (sostituisce l'arricchimento mirato del profilo)
 
 Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito da "colma i gap".
 
-**Dove si trova.** Nel dettaglio del job c'è il pannello collassabile **"Colma i gap trovati per questa offerta prima di generare"**. Non è un popup: chi non lo apre genera con un clic diretto.
+**Dove si trova.** Dallo Sprint 75 (SPEC-DELTA A3, mockup `detail-gap`) è un **passo facoltativo prima di ogni generazione del CV**: "Genera CV" (o "Rigenera CV") apre un pannello dal basso (finestra centrale da 1024 px) intitolato "Genera CV" / "Rigenera CV", con i gap, le indicazioni, l'avviso AI, il costo della prossima richiesta e il pulsante di generazione. Chi non seleziona nulla genera come prima senza gap. Fino allo Sprint 74 era un pannello collassabile nel dettaglio ("Colma i gap trovati per questa offerta prima di generare") e il CV si generava con un clic diretto.
 
 **Cosa fa l'utente.**
 - Seleziona con le checkbox **uno o più gap**, presi dall'elenco numerato dei gap dello scoring; sotto ogni gap compare la sua motivazione. Al modello arrivano **gli stessi numeri e lo stesso testo** (etichetta e motivazione) che l'utente vede, nell'ordine dell'elenco (Sprint 69): "per il gap 2" indica sempre il gap n. 2 del pannello.
-- Se vuole, scrive **indicazioni** su come inserirli (es. "per il gap 2, collegalo alla mia esperienza in …"). Senza indicazioni, il modello sceglie l'esperienza reale più plausibile.
+- Se vuole, scrive **indicazioni** su come inserirli (es. "per il gap 2, collegalo alla mia esperienza in …"), al massimo 2.000 caratteri con contatore (Sprint 75). Senza indicazioni, il modello sceglie l'esperienza reale più plausibile.
 - Preme **"Genera CV"**.
 - Se il job non ha gap, il pannello lo segnala.
 
@@ -523,11 +516,11 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 
 ### 4.10 Candidatura
 
-- **"Vai all'annuncio"** apre il link di candidatura originale. Per i job creati a mano senza link compare "Nessun link di candidatura".
+- **"Vai all'annuncio"** (dallo Sprint 75 il pulsante "Annuncio ↗" nell'intestazione del dettaglio) apre il link di candidatura originale. Per i job senza link il pulsante non compare (fino allo Sprint 74 compariva il testo "Nessun link di candidatura").
 - **"Segna candidatura fatta"**:
-  - è disponibile su **qualunque job** non ancora marcato, **anche senza CV** (Sprint 46);
+  - è disponibile su **qualunque job** non ancora marcato, **anche senza CV** (Sprint 46): dallo Sprint 75 nella barra in basso del dettaglio quando il CV c'è, altrimenti nel menu ⋯;
   - registra la data e azzera il timer della notifica di inattività (§4.12).
-- **"Annulla candidatura"** (Sprint 69), al posto del pulsante precedente sui job già marcati, chiede conferma e riporta il job a "CV generato" se ha un CV, altrimenti a "nuovo"; la data della candidatura si azzera e il job esce dal conteggio "Candidature fatte" della Home. Il timer di inattività **non** torna indietro: resta quello della candidatura annullata.
+- **"Annulla candidatura"** (Sprint 69), al posto del pulsante precedente sui job già marcati (dallo Sprint 75 nella barra in basso), chiede conferma in una finestra ("Annullare "candidatura fatta"?", Sì, annulla / No, lascia com'è, mockup `undo-application`) e riporta il job a "CV generato" se ha un CV, altrimenti a "nuovo"; la data della candidatura si azzera e il job esce dal conteggio "Candidature fatte" della Home. Il timer di inattività **non** torna indietro: resta quello della candidatura annullata.
 - La candidatura vera e propria si fa sul portale di origine.
 
 ### 4.11 Monetizzazione
@@ -565,7 +558,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 - Il credito è un **saldo unico in euro** sull'account. Copre tutte le azioni della tabella, sia sul Free sia sul Pro, tranne l'import, che resta precluso al Free.
 - Un'azione **fallita** non consuma nulla: l'unità di massimale o l'importo scalato vengono restituiti.
 - **Contatori e prezzi visibili** (Sprint 70): in Impostazioni il riquadro **"I tuoi limiti di oggi"** mostra per ogni azione a massimale usate oggi / massimale del piano e prezzo oltre il massimale ("Solo piano Pro" per l'import sul Free, "Non disponibile" per raccolta manuale e import CV), più il prezzo a messaggio delle due chat e l'ora in cui i contatori ripartono. Sotto i pulsanti di import da link, "Aggiungi manualmente" (anche nel popup) e "Raccogli ora" un'indicazione dice cosa succede alla prossima richiesta: "Incluso nel piano: ne restano N su M oggi", "Massimale di oggi raggiunto: questa azione costa X € (saldo Y €)" oppure, se il saldo non basta, che l'azione è bloccata.
-- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e generazione del CV dalla lista chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"). Nella pagina del job (CV, cover letter, messaggi) e nelle chat degli editor il costo non è ancora mostrato né confermato: i dati sono disponibili, l'integrazione è rinviata (§8.A punto 29). I prezzi sono valori di default configurati dall'amministratore, non "da definire". Dallo Sprint 74 nella lista la conferma è una **finestra dell'app** ("Costo dell'azione", Procedi / Annulla, mockup `confirm-cost`, SPEC-DELTA A11) per import e job manuale; la generazione del CV non parte più dalla lista. Nel dettaglio e negli editor resta la finestra di sistema del browser fino agli sprint 75–76.
+- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e le generazioni di CV, cover letter e messaggi del dettaglio chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"); nei pannelli di generazione del dettaglio compare anche l'indicazione del costo della prossima richiesta. I prezzi sono valori di default configurati dall'amministratore, non "da definire". La conferma è una **finestra dell'app** ("Costo dell'azione", Procedi / Annulla, mockup `confirm-cost`, SPEC-DELTA A11): nella lista dallo Sprint 74 (import, job manuale), nel dettaglio dallo Sprint 75 (CV, cover letter, messaggi); prima era la finestra di sistema del browser, che resta negli editor fino allo Sprint 76. Con il massimale raggiunto e il saldo insufficiente il pulsante del pannello è disattivato e il motivo è scritto sopra.
 - Le **chat** degli editor sono utilizzabili **solo con credito disponibile**.
 - I massimali si **azzerano a mezzanotte (Europe/Rome)**, per tutti gli utenti.
 
@@ -648,7 +641,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 ### 4.16 Editor del CV (Sprint 51; ritocchi grafici 52–58)
 
 **Accesso.**
-- Dal dettaglio di un job con CV, pulsante **"Modifica CV"**.
+- Dal dettaglio di un job con CV, pulsante **"Modifica CV"** (dallo Sprint 75 la matita nella riga del CV, sezione Documenti).
 - L'editor si apre sulla **bozza** del CV, creata la prima volta a partire dall'ultimo CV generato.
 - **Bozza superata** (Sprint 69): se dopo l'apertura della bozza è stato generato un CV più recente, l'editor chiede *"Vuoi ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?"*. "Riparti dal nuovo CV" ricrea la bozza dal documento nuovo e svuota la chat; "Continua la bozza" la riapre com'è e la domanda non si ripete per quel CV. Il PDF prodotto da "Genera PDF finale" non conta come documento più recente.
 - I CV generati **prima dello Sprint 51** non sono modificabili: il pulsante "Modifica CV" non compare e il dettaglio spiega di rigenerare il CV (Sprint 69).
@@ -719,14 +712,14 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 ### 4.18 Cover letter (Sprint 42)
 
 **Generazione.**
-- Dal dettaglio del job, **"Genera Cover Letter"** è disponibile su **qualunque job**, anche senza CV, e solo su richiesta.
-- Il popup contiene:
+- Dal dettaglio del job, **"Genera cover letter"** è disponibile su **qualunque job**, anche senza CV, e solo su richiesta: dal ▾ di "Genera CV" nella barra in basso oppure da "Genera" / "Rigenera cover letter" nella riga della cover letter (Sprint 75).
+- Il pannello (dallo Sprint 75 dal basso, mockup `detail-cover-letter`; prima un popup) contiene:
   - un campo libero "Indicazioni per questa cover letter (facoltativo)";
-  - un elenco a checkbox **"Oppure riusa indicazioni date in precedenza"**: fino a 20 indicazioni distinte, prese da tutte le cover letter dell'utente, dalla più recente.
+  - **"Oppure riusa indicazioni date in precedenza"**: fino a 20 indicazioni distinte, prese da tutte le cover letter dell'utente, dalla più recente, da selezionare con un tocco (pillole; prima checkbox).
 
-  Le indicazioni selezionate si sommano al testo nuovo. Dallo Sprint 69 una combinazione di indicazioni riusate non compare nello storico come voce nuova (compare solo l'eventuale testo nuovo), e due indicazioni che differiscono solo per spazi o maiuscole sono una voce sola.
+  Le indicazioni selezionate si sommano al testo nuovo; il totale non può superare 2.000 caratteri: il campo ha un contatore e, se le indicazioni scelte e il testo insieme superano il limite, il pulsante è disattivato con il motivo (Sprint 75). Dallo Sprint 69 una combinazione di indicazioni riusate non compare nello storico come voce nuova (compare solo l'eventuale testo nuovo), e due indicazioni che differiscono solo per spazi o maiuscole sono una voce sola.
 - Le indicazioni possono orientare tono ed enfasi oppure introdurre **fatti reali non presenti nel profilo**, sotto la responsabilità dell'utente.
-- In fondo al popup compare l'avviso AI (Sprint 67, §4.7).
+- In fondo al pannello compare l'avviso AI (Sprint 67, §4.7) e il costo della prossima cover letter (fino allo Sprint 74, per errore, il pannello mostrava quello dei messaggi).
 
 **Struttura.**
 - Nome e cognome.
@@ -743,7 +736,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 
 **Impaginazione.** **1 pagina** come obiettivo: se serve, il testo si compatta fino a 3 livelli (carattere, interlinea, margini). Altrimenti la lettera esce su più pagine, e dallo Sprint 69 l'app lo segnala (dopo la generazione e nel dettaglio del job). Lo stile grafico è proprio e **diverso da quello del CV** (scelta confermata nello Sprint 69).
 
-**Download.** **"Scarica Cover Letter"** scarica l'ultima generata, con nome `Cover letter {Nome Cognome} - {Titolo del job}.pdf`.
+**Download.** **"Scarica cover letter"** (icona nella riga della cover letter) scarica l'ultima generata, con nome `Cover letter {Nome Cognome} - {Titolo del job}.pdf`.
 
 **Effetti.**
 - La cover letter **non cambia lo stato** del job e non lo toglie dall'archivio.
@@ -757,7 +750,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 ### 4.19 Editor e chat della cover letter (Sprint 63)
 
 **Editor.**
-- Si apre con **"Modifica Cover Letter"** dal dettaglio, quando esiste una lettera. Funziona come l'editor del CV, ridotto ai soli **paragrafi**:
+- Si apre con **"Modifica Cover Letter"** dal dettaglio (dallo Sprint 75 la matita nella riga della cover letter), quando esiste una lettera. Funziona come l'editor del CV, ridotto ai soli **paragrafi**:
   - modificare il testo;
   - spostare su e giù;
   - eliminare;
@@ -780,14 +773,14 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 ### 4.20 Messaggi di networking (Sprint 50)
 
 **Generazione.**
-- Dal dettaglio del job, **"Genera messaggio"** è disponibile su qualunque job.
-- Il popup contiene:
-  - **canale**: LinkedIn (default) o Email;
-  - nome del destinatario (facoltativo);
-  - link al profilo LinkedIn del destinatario (facoltativo, **solo per riferimento**: l'interfaccia spiega che non viene aperto né letto e non influisce sul testo, Sprint 69);
-  - indicazioni libere (relazione con il destinatario, dettagli, tono);
-  - un elenco a checkbox per riusare fino a 20 indicazioni date in passato (stesse regole di deduplica della cover letter, §4.18);
-  - in fondo, l'avviso AI (Sprint 67, §4.7).
+- Dal dettaglio del job, **"Genera messaggio"** è disponibile su qualunque job: dal ▾ di "Genera CV" nella barra in basso oppure da "Genera" nella riga "Messaggio" (Sprint 75).
+- Il pannello (dallo Sprint 75 dal basso, mockup `detail-message`; prima un popup) contiene:
+  - **canale**: LinkedIn (default) o Email, controllo a segmenti;
+  - nome del destinatario (facoltativo, al massimo 255 caratteri);
+  - link al profilo LinkedIn del destinatario (facoltativo, al massimo 500 caratteri, **solo per riferimento**: l'interfaccia spiega che non viene aperto né letto e non influisce sul testo, Sprint 69);
+  - indicazioni libere (relazione con il destinatario, dettagli, tono), al massimo 2.000 caratteri con contatore, insieme alle indicazioni riusate (stessa regola della cover letter, §4.18);
+  - pillole per riusare fino a 20 indicazioni date in passato (stesse regole di deduplica della cover letter, §4.18);
+  - in fondo, l'avviso AI (Sprint 67, §4.7) e il costo del prossimo messaggio (fino allo Sprint 74, per errore, quello della cover letter).
 
 **Contenuto.**
 - **LinkedIn:** un messaggio breve, circa 80–100 parole al massimo, senza oggetto.
@@ -1008,7 +1001,10 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Il filtro Ricerca non compare nella sezione Importati.
 - ☐ La ricerca testuale trova job per titolo, azienda o località nella sola sezione corrente e, quando è attiva, ignora tutti gli altri filtri.
 - ☐ La scheda mostra stato, candidati, titolo, azienda, località, icona del recruiter, data di raccolta, preferito, punteggio e i primi 2 gap con "+N altri"; tutta la scheda apre il dettaglio e non ha pulsanti di dettaglio, archiviazione o generazione (Sprint 74).
-- ☐ Il dettaglio mostra la motivazione del punteggio, match e gap con "Espandi motivazioni" e la descrizione completa.
+- ☐ Il dettaglio mostra stato (solo indicativo), punteggio, motivazione troncata con "Leggi tutto", contatori di corrispondenze e gap che aprono le voci con la motivazione, descrizione a fisarmonica; la barra in basso sostituisce la barra di tab con "Genera CV ▾", "Segna candidatura fatta" o "Annulla candidatura" secondo lo stato (Sprint 75).
+- ☐ Dal menu ⋯ del dettaglio si archivia e si riporta un job dall'archivio, anche da tastiera (Sprint 75).
+- ☐ La sezione Documenti mostra CV, cover letter e messaggi con stato, modifica, scarica, rigenera / genera e gli avvisi su più pagine e documenti non modificabili (Sprint 75).
+- ☐ Le generazioni del dettaglio oltre il massimale chiedono conferma del costo in una finestra dell'app; con saldo insufficiente il pulsante del pannello è disattivato; durante l'attesa una finestra non chiudibile mostra l'indicatore (Sprint 75).
 - ☐ Lo swipe archivia, con possibilità di annullare; uno swipe non apre il dettaglio. In Archiviati lo swipe riporta il job alla sezione d'origine con il suo stato.
 - ☐ Generare o rigenerare un CV per un job archiviato lo fa uscire dall'archivio.
 
@@ -1051,7 +1047,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Ogni messaggio di chat scala 0,20 € di credito, mostrato con il saldo prima dell'invio. Con saldo insufficiente il messaggio è rifiutato; se la risposta fallisce, il credito viene restituito.
 
 ### Cover letter
-- ☐ "Genera Cover Letter" è disponibile su qualunque job, anche senza CV, con indicazioni libere e riuso di indicazioni passate (fino a 20).
+- ☐ "Genera cover letter" è disponibile su qualunque job, anche senza CV, con indicazioni libere e riuso di indicazioni passate (fino a 20).
 - ☐ La lettera ha nome, contatti senza LinkedIn, oggetto, saluto e chiusura fissi nella lingua della lettera, e 3–5 paragrafi generati.
 - ☐ Massimale Free 1, Pro 10 al giorno, indipendente dal CV. Oltre, 1,50 € a credito.
 - ☐ La cover letter non cambia lo stato del job e non lo toglie dall'archivio.
@@ -1091,7 +1087,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Se una raccolta fallisce, l'utente non vede errori tecnici.
 - ☐ L'interfaccia è in italiano se il dispositivo è in italiano, altrimenti in inglese, ed è modificabile.
 - ☐ Con l'interfaccia in inglese i messaggi d'errore del server, le notifiche push e il prefisso del limite per lingua sono in inglese; in italiano restano quelli di prima (Sprint 71).
-- ☐ Le chat degli editor, il pannello di generazione del CV e i popup di cover letter e messaggi mostrano l'avviso sul contenuto generato con l'AI (Sprint 67).
+- ☐ Le chat degli editor, i pannelli di generazione di CV, cover letter e messaggi mostrano l'avviso sul contenuto generato con l'AI (Sprint 67).
 - ☐ L'app non usa cookie di profilazione né strumenti di analisi; i backup più vecchi di 7 giorni vengono cancellati automaticamente (Sprint 67).
 - ☐ Dopo il rilascio di una nuova versione una scheda aperta mostra "Nuova versione disponibile — Aggiorna" e si ricarica solo premendo il pulsante (Sprint 70).
 

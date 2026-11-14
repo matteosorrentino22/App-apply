@@ -61,13 +61,15 @@ function DesktopTopBar() {
 
 // Sotto i 1024 px: barra di tab in basso (mockup `jobs-lista`), icona +
 // etichetta, voce attiva in colore primario, area sicura dell'iPhone.
+// Nascosta dove c'è la barra azione (dettaglio job, Sprint 75: classe
+// `has-actionbar` su <html>, index.css).
 function BottomTabBar() {
   const { t } = useLanguage()
   const active = useActiveItem()
   return (
     <nav
       aria-label={t('nav.main')}
-      className="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-border bg-card px-[max(16px,env(safe-area-inset-left))] pt-2 pb-[max(8px,env(safe-area-inset-bottom))] lg:hidden"
+      className="app-tabbar fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-border bg-card px-[max(16px,env(safe-area-inset-left))] pt-2 pb-[max(8px,env(safe-area-inset-bottom))] lg:hidden"
     >
       {NAV_ITEMS.map((item) => {
         const isActive = active === item

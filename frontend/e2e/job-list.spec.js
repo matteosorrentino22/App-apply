@@ -74,6 +74,16 @@ async function openCard(page, title) {
   await page.waitForURL(/jobs\//)
 }
 
+// Dettaglio (Sprint 75): azioni nella barra in basso e nel menu ⋯ della testata.
+function actionBar(page) {
+  return page.getByTestId('action-bar')
+}
+
+async function fromMoreMenu(page, item) {
+  await page.getByRole('button', { name: 'Altre azioni', exact: true }).click()
+  await page.getByRole('menuitem', { name: item }).click()
+}
+
 async function swipeCard(page, title) {
   const card = cardFor(page, title)
   // La card può essere sotto la piega del viewport (720 px): il mouse fuori
@@ -187,12 +197,18 @@ test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ p
   })
   expect(education.ok()).toBe(true)
 
-  // Dallo Sprint 74 si genera solo dal dettaglio (SPEC-DELTA A2).
+  // Dallo Sprint 74 si genera solo dal dettaglio (SPEC-DELTA A2); dallo
+  // Sprint 75 "Genera CV" della barra apre "Colma i gap" (facoltativo).
   await openCard(page, 'Project Manager')
-  await page.getByRole('button', { name: 'Genera CV', exact: true }).click()
+  await actionBar(page).getByRole('button', { name: 'Genera CV', exact: true }).click()
+  const sheet = page.getByRole('dialog', { name: 'Genera CV' })
+  await sheet.getByText('1. Nessuna esperienza fintech').click()
+  await sheet.getByRole('button', { name: 'Genera CV', exact: true }).click()
 
-  // Durante l'attesa il pulsante è disabilitato e mostra l'indicatore.
-  await expect(page.getByRole('button', { name: 'Generazione…' }).first()).toBeDisabled()
+  // Durante l'attesa una finestra non chiudibile mostra l'indicatore.
+  await expect(page.getByText('Generazione del CV…')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('Generazione del CV…')).toBeVisible()
 
   // Senza ANTHROPIC_API_KEY in questo ambiente la generazione fallisce lato
   // server (gestito, 502): verifichiamo che l'errore sia mostrato e che il
@@ -202,7 +218,8 @@ test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ p
   await expect(page.getByText('Non siamo riusciti a generare il CV. Riprova.')).toBeVisible({
     timeout: 20000,
   })
-  await expect(page.getByRole('button', { name: 'Genera CV', exact: true })).toBeEnabled()
+  await expect(page.getByText('Generazione del CV…')).not.toBeVisible()
+  await expect(actionBar(page).getByRole('button', { name: 'Genera CV', exact: true })).toBeEnabled()
 })
 
 test('apply link e "segna candidatura fatta" sono disponibili anche senza CV generato', async ({
@@ -215,16 +232,20 @@ test('apply link e "segna candidatura fatta" sono disponibili anche senza CV gen
   // "Project Manager" è seedato con stato "new" (nessun CV generato): sia il
   // link diretto all'annuncio sia "segna candidatura fatta" devono comunque
   // essere disponibili.
+  // essere disponibili. Dallo Sprint 75, senza CV la barra mostra "Genera CV"
+  // e "Segna candidatura fatta" è nel menu ⋯.
   await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
   await expect(page.getByRole('link', { name: "Vai all'annuncio" })).toBeVisible()
 
   const statusBadge = page.getByTestId('job-status-badge')
   await expect(statusBadge).toHaveText('Nuovo')
-  await page.getByRole('button', { name: 'Segna candidatura fatta' }).click()
+  await fromMoreMenu(page, 'Segna candidatura fatta')
 
   await expect(statusBadge).toHaveText('Candidatura fatta')
-  await expect(page.getByRole('button', { name: 'Segna candidatura fatta' })).not.toBeVisible()
+  await expect(actionBar(page).getByRole('button', { name: 'Annulla candidatura' })).toBeVisible()
+  await page.getByRole('button', { name: 'Altre azioni', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Segna candidatura fatta' })).toHaveCount(0)
 })
 
 test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async ({ page, request, baseURL }) => {
@@ -233,15 +254,24 @@ test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async (
   await openCard(page, 'Head of Operations')
   await page.waitForURL(/jobs\//)
 
+  // Il seed non crea il PDF del CV: l'azione è nel menu ⋯ (Sprint 75).
   const statusBadge = page.getByTestId('job-status-badge')
   await expect(statusBadge).toHaveText('CV generato', { timeout: 15000 })
-  await page.getByRole('button', { name: 'Segna candidatura fatta' }).click()
-
+  await fromMoreMenu(page, 'Segna candidatura fatta')
   await expect(statusBadge).toHaveText('Candidatura fatta')
-  await expect(page.getByRole('button', { name: 'Segna candidatura fatta' })).not.toBeVisible()
+
+  // Annullamento con la finestra di conferma (mockup `undo-application`).
+  await actionBar(page).getByRole('button', { name: 'Annulla candidatura' }).click()
+  const modal = page.getByRole('dialog', { name: 'Annullare "candidatura fatta"?' })
+  await modal.getByRole('button', { name: 'No, lascia com’è' }).click()
+  await expect(statusBadge).toHaveText('Candidatura fatta')
+  await actionBar(page).getByRole('button', { name: 'Annulla candidatura' }).click()
+  await modal.getByRole('button', { name: 'Sì, annulla' }).click()
+  // Senza un CV generato il server riporta il job a "Nuovo" (§4.10).
+  await expect(statusBadge).toHaveText('Nuovo')
 })
 
-test('il pulsante "espandi motivazioni" rivela la motivazione di match/gap', async ({
+test('i contatori corrispondenze/gap rivelano voci e motivazioni', async ({
   page,
   request,
   baseURL,
@@ -251,16 +281,78 @@ test('il pulsante "espandi motivazioni" rivela la motivazione di match/gap', asy
   await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
 
+  // Sprint 75: contatori espandibili (mockup `detail-nuovo`), uno aperto per
+  // volta; aperti mostrano etichetta e motivo (prima "Espandi motivazioni").
+  const matches = page.getByRole('button', { name: '1 corrispondenza' })
+  const gaps = page.getByRole('button', { name: '1 gap' })
+  await expect(matches).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('5+ anni PM')).not.toBeVisible()
+
+  await matches.click()
   await expect(page.getByText('5+ anni PM')).toBeVisible()
   await expect(
     page.getByText("L'offerta richiede almeno 5 anni di esperienza in project management"),
-  ).not.toBeVisible()
-
-  await page.getByRole('button', { name: 'Espandi motivazioni' }).click()
-
-  await expect(
-    page.getByText("L'offerta richiede almeno 5 anni di esperienza in project management"),
   ).toBeVisible()
+
+  await gaps.click()
+  await expect(matches).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('5+ anni PM')).not.toBeVisible()
+  await expect(page.getByText('Nessuna esperienza fintech')).toBeVisible()
+})
+
+test('dettaglio: menu ⋯ da tastiera archivia e riporta dall’archivio', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+  await openCard(page, 'Project Manager')
+
+  // SPEC-DELTA A7: l'archivio è raggiungibile anche da tastiera (Sprint 75).
+  const more = page.getByRole('button', { name: 'Altre azioni', exact: true })
+  await more.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('menuitem', { name: 'Archivia' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(more).toBeFocused()
+
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menuitem', { name: 'Archivia' })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Job archiviato.')).toBeVisible()
+  await expect(page.getByText('Archiviato', { exact: true })).toBeVisible()
+
+  await more.click()
+  await page.getByRole('menuitem', { name: 'Riporta dall’archivio' }).click()
+  await expect(page.getByText('Job ripristinato.')).toBeVisible()
+  await expect(page.getByText('Archiviato', { exact: true })).toHaveCount(0)
+})
+
+test('dettaglio: ▾ di Genera CV apre cover letter e messaggio con il loro costo', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+  await openCard(page, 'Project Manager')
+
+  const toggle = actionBar(page).getByRole('button', { name: 'Altri documenti da generare' })
+  await toggle.click()
+  await expect(page.getByRole('menuitem')).toHaveText(['Genera cover letter', 'Genera messaggio'])
+  await page.keyboard.press('Escape')
+  await expect(toggle).toBeFocused()
+
+  // Il costo mostrato è quello dell'azione del pannello (prima dello Sprint
+  // 75 cover letter e messaggio avevano i due testi scambiati).
+  await toggle.click()
+  await page.getByRole('menuitem', { name: 'Genera cover letter' }).click()
+  const coverLetter = page.getByRole('dialog', { name: 'Genera cover letter' })
+  await expect(coverLetter.getByTestId('action-cost-cover_letter')).toBeVisible()
+  await expect(coverLetter.getByTestId('action-cost-referral_message')).toHaveCount(0)
+  await expect(coverLetter.getByLabel('Indicazioni per questa cover letter (facoltativo)')).toHaveAttribute('maxlength', '2000')
+  await coverLetter.getByRole('button', { name: 'Annulla' }).click()
+
+  await toggle.click()
+  await page.getByRole('menuitem', { name: 'Genera messaggio' }).click()
+  const message = page.getByRole('dialog', { name: 'Genera messaggio di networking' })
+  await expect(message.getByTestId('action-cost-referral_message')).toBeVisible()
+  await expect(message.getByTestId('action-cost-cover_letter')).toHaveCount(0)
+  await expect(message.getByRole('radio', { name: 'LinkedIn' })).toBeChecked()
+  await message.getByRole('button', { name: 'Annulla' }).click()
+  await expect(message).not.toBeVisible()
 })
 
 test('il filtro location mostra solo i job la cui località contiene il testo cercato', async ({
@@ -513,5 +605,21 @@ test.describe('navigazione su mobile', () => {
       await page.goto(path)
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     }
+  })
+
+  // Sprint 75: nel dettaglio la barra azione sostituisce la barra di tab.
+  test('nel dettaglio la barra azione sostituisce la barra di tab', async ({ page, request, baseURL }) => {
+    await loginAsSeededUser(page, request, baseURL)
+    await openCard(page, 'Project Manager')
+    await expect(page.getByRole('navigation', { name: 'Navigazione principale' })).not.toBeVisible()
+    const bar = actionBar(page)
+    await expect(bar.getByRole('button', { name: 'Genera CV', exact: true })).toBeVisible()
+    const box = await bar.boundingBox()
+    expect(box.y + box.height).toBeGreaterThan(840)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+
+    await page.getByRole('link', { name: 'Jobs', exact: true }).click()
+    await expect(page).toHaveURL(/\/list/)
+    await expect(page.getByRole('navigation', { name: 'Navigazione principale' })).toBeVisible()
   })
 })
