@@ -1,7 +1,7 @@
 from datetime import date
 
 from django.http import HttpResponse
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -106,7 +106,6 @@ class GenerateCvView(APIView):
     dell'offerta selezionati dall'utente da colmare in questa generazione,
     con istruzione opzionale su come farlo — vedi `apps.cv.gap_filling`."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -134,7 +133,6 @@ class CvDraftView(APIView):
     ogni chiamata: più semplice di operazioni granulari, e sufficiente dato
     che il frontend tiene comunque l'intero stato in memoria)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -176,7 +174,6 @@ class CvDraftPreviewView(APIView):
     Nessuna chiamata AI, solo rendering: economico, pensato per essere
     richiamato spesso (debounced) dal frontend."""
 
-    permission_classes = [permissions.IsAuthenticated]
     throttle_scope = "draft_preview"
 
     def post(self, request, pk):
@@ -201,7 +198,6 @@ class FinalizeCvDraftView(APIView):
     """Genera il PDF finale dalla bozza corrente (Sprint 51): nessun
     consumo di quota/credito, non è una nuova generazione AI."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -218,7 +214,6 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
     applicate automaticamente, vedi `apps.cv.draft_chat`. Il GET restituisce
     la cronologia già persistita (apertura/ricarica dell'editor)."""
 
-    permission_classes = [permissions.IsAuthenticated]
     post_throttle_scope = "chat"
 
     def get(self, request, pk):
@@ -279,7 +274,6 @@ class GenerateCoverLetterView(APIView):
     dell'utente autenticato (Sprint 42): sempre manuale, mai automatica,
     budget quota/credito indipendente da quello del CV."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -302,7 +296,6 @@ class CoverLetterDraftView(APIView):
     """Mirror di CvDraftView (Sprint 63): bozza modificabile della cover
     letter in corso, stesso pattern GET/POST/PATCH."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -340,7 +333,6 @@ class CoverLetterDraftPreviewView(APIView):
     """Mirror di CvDraftPreviewView (Sprint 63): rendering PDF economico
     della bozza corrente, nessuna chiamata AI."""
 
-    permission_classes = [permissions.IsAuthenticated]
     throttle_scope = "draft_preview"
 
     def post(self, request, pk):
@@ -365,7 +357,6 @@ class FinalizeCoverLetterDraftView(APIView):
     """Mirror di FinalizeCvDraftView (Sprint 63): nessun consumo di
     quota/credito, non è una nuova generazione AI."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -381,7 +372,6 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
     elementi (niente 'focus_bullets': con 3-5 paragrafi l'ambiguità è
     bassa, il solo testo libero basta — vedi apps.cv.cover_letter_draft_chat)."""
 
-    permission_classes = [permissions.IsAuthenticated]
     post_throttle_scope = "chat"
 
     def get(self, request, pk):
@@ -430,7 +420,6 @@ class CoverLetterInstructionsView(APIView):
     menu a tendina nel popup di generazione, non è legato a un job
     specifico (le indicazioni sono riusabili tra job diversi)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         return Response({"instructions": get_recent_instructions(request.user)})
@@ -457,7 +446,6 @@ class GenerateReferralMessageView(APIView):
     precedenti — la risposta porta già il testo generato, non solo un id,
     perché qui non c'è un PDF da scaricare in un secondo giro."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -487,7 +475,6 @@ class ReferralMessageListView(APIView):
     """Storico dei messaggi di networking generati per un job (Sprint 50):
     a differenza di CV/cover letter, mostrati tutti, non solo l'ultimo."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -501,7 +488,6 @@ class ReferralMessageInstructionsView(APIView):
     non è legato a un job specifico, stesso principio delle istruzioni
     cover letter."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         return Response({"instructions": get_recent_referral_instructions(request.user)})
@@ -511,7 +497,6 @@ class ImportJobView(APIView):
     """Import manuale di un job da link LinkedIn, riservato al piano Pro
     (Sprint 14, 01-specifiche-funzionali-v4.md §4.9)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         url = request.data.get("url", "")
@@ -536,7 +521,6 @@ class CreateManualJobView(APIView):
     sezione "Importati"): disponibile su entrambi i piani, budget
     giornaliero separato da quello dell'import da LinkedIn."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         serializer = ManualJobCreateSerializer(data=request.data)
@@ -559,7 +543,6 @@ class CollectJobsView(APIView):
     per non sprecare chiamate Apify nei giorni in cui i risultati non
     verrebbero comunque controllati."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         try:
@@ -577,7 +560,6 @@ class JobDetailView(APIView):
     (Sprint 19) per una vista di dettaglio deep-linkabile/sopravvivente al
     refresh, senza dover tenere lo stato solo lato client dalla lista."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -589,7 +571,6 @@ class JobListView(APIView):
     location e ricerca testuale confinata alla sezione (Sprint 15,
     01-specifiche-funzionali-v4.md §4.5)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         section = request.query_params.get("section", "main")
@@ -710,7 +691,6 @@ class JobFilterPresetListCreateView(APIView):
     corrente): combinazioni di filtri salvate con un nome, per applicarle
     di nuovo rapidamente. Mai l'intervallo di date — vedi modello."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         presets = JobFilterPreset.objects.filter(user=request.user)
@@ -733,7 +713,6 @@ class JobFilterPresetDeleteView(APIView):
     """Elimina un filtro preferito dell'utente autenticato (sprint
     corrente): nessun rinomina, si ricrea da capo se serve un nome diverso."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, pk):
         preset = get_object_or_404(JobFilterPreset, pk=pk, user=request.user)
@@ -744,7 +723,6 @@ class JobFilterPresetDeleteView(APIView):
 class ArchiveJobView(APIView):
     """Swipe "archivia" (Sprint 15, §4.5 funzionali)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -757,7 +735,6 @@ class UnarchiveJobView(APIView):
     "archivia" accidentale (Sprint 15, §4.5 funzionali): in entrambi i casi
     si tratta di riportare `is_archived` a `False`, mantenendo lo status."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -769,7 +746,6 @@ class FavoriteJobView(APIView):
     """Marca un Job come preferito (Sprint 46): alimenta la sezione
     "Preferiti", indipendente da origine/stato."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -780,7 +756,6 @@ class FavoriteJobView(APIView):
 class UnfavoriteJobView(APIView):
     """Rimuove un Job dai preferiti (Sprint 46)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -792,7 +767,6 @@ class MarkApplicationDoneView(APIView):
     """Marca un Job come "candidatura fatta" (Sprint 16, 01-specifiche
     -funzionali-v4.md §4.10)."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -809,7 +783,6 @@ class HomeStatsView(APIView):
     """Statistiche aggregate per la Home (Sprint 44): job trovati, CV
     generati, candidature fatte, oggi/ultima settimana/totali."""
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         return Response(get_home_stats(request.user))

@@ -34,10 +34,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # il codice (di root) resta in sola lettura: scrivibili solo staticfiles e
 # mediafiles. uid fisso 1000: i volumi media_data/static_data esistenti vanno passati a
 # questo uid una volta prima del primo avvio (DEPLOY.md §4.5); i volumi nuovi
-# ereditano il proprietario dalle cartelle create qui sotto.
+# ereditano il proprietario dalle cartelle create qui sotto (compresa
+# /app/backups, volume `local_backups` dei backup locali, Sprint 67).
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
-    && mkdir -p /app/staticfiles /app/mediafiles \
-    && chown app:app /app/staticfiles /app/mediafiles
+    && mkdir -p /app/staticfiles /app/mediafiles /app/backups \
+    && chown app:app /app/staticfiles /app/mediafiles \
+    && chown app:app /app/backups && chmod 700 /app/backups
 
 COPY . .
 

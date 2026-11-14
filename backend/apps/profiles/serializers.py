@@ -123,3 +123,13 @@ class ProfileSerializer(serializers.ModelSerializer):
             return sanitize_photo(value)
         except InvalidPhoto as exc:
             raise serializers.ValidationError(str(exc)) from exc
+
+    def update(self, instance, validated_data):
+        # La FileField non cancella il file sostituito (Sprint 67): senza
+        # questo la foto precedente resterebbe su disco anche dopo la
+        # cancellazione dell'account, non più collegata a nessun record.
+        old_photo_name = instance.photo.name if instance.photo else ""
+        instance = super().update(instance, validated_data)
+        if "photo" in validated_data and old_photo_name and old_photo_name != instance.photo.name:
+            instance.photo.storage.delete(old_photo_name)
+        return instance

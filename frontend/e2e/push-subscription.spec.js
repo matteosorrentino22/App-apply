@@ -39,7 +39,7 @@ async function registerUser(request, baseURL) {
   const email = `e2e-push-${Date.now()}-${uniqueSuffix}@example.com`
   const password = 'SuperSecret123!'
   const response = await request.post(`${baseURL}/api/accounts/register/`, {
-    data: { email, password },
+    data: { email, password, accept_privacy: true, accept_terms: true, confirm_age: true },
   })
   const body = await response.json()
   return { email, password, token: body.token }

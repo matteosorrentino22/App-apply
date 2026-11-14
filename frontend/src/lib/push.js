@@ -52,3 +52,12 @@ export async function subscribeToPush(vapidPublicKey) {
   }
   return { status: 'granted', subscription }
 }
+
+// Notifiche disattivate da Impostazioni (Sprint 67): oltre alle
+// sottoscrizioni eliminate lato server, si annulla quella del browser.
+export async function unsubscribeFromPush() {
+  if (!isPushSupported() || !navigator.serviceWorker.controller) return
+  const registration = await navigator.serviceWorker.ready
+  const subscription = await registration.pushManager.getSubscription()
+  if (subscription) await subscription.unsubscribe()
+}

@@ -21,6 +21,8 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
   await page.goto('/register')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
+  // Sprint 67: informativa, termini ed età minima (tre spunte obbligatorie).
+  for (const box of await page.getByRole('checkbox').all()) await box.click()
   await page.getByRole('button', { name: 'Registrati' }).click()
 
   await expect(page).toHaveURL(/\/onboarding$/)
@@ -55,6 +57,8 @@ test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI'
   await page.goto('/register')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
+  // Sprint 67: informativa, termini ed età minima (tre spunte obbligatorie).
+  for (const box of await page.getByRole('checkbox').all()) await box.click()
   await page.getByRole('button', { name: 'Registrati' }).click()
   await expect(page).toHaveURL(/\/onboarding$/)
 

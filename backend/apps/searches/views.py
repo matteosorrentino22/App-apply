@@ -1,6 +1,6 @@
 import requests
-from rest_framework import permissions, status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
@@ -12,7 +12,6 @@ from .serializers import SavedSearchSerializer
 
 class SavedSearchViewSet(viewsets.ModelViewSet):
     serializer_class = SavedSearchSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return SavedSearch.objects.filter(user=self.request.user)
@@ -44,7 +43,6 @@ class SavedSearchViewSet(viewsets.ModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def city_autocomplete(request):
     """Proxy verso Nominatim (OpenStreetMap) per l'autocomplete città/paese
     delle ricerche salvate: il frontend non chiama mai Nominatim

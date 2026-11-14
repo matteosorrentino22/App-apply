@@ -6,19 +6,52 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
+from .emails import email_enabled
+from .legal import MIN_AGE, missing_acceptances
 from .models import User
 
 
 INVALID_INVITE_MESSAGE = "Registrazione non consentita: codice di invito mancante o non valido."
+EMAIL_TAKEN_MESSAGE = "Un utente con questa email esiste già."
 
 
-class RegisterSerializer(serializers.ModelSerializer):
+class LegalConsentFields(serializers.Serializer):
+    """Le tre spunte obbligatorie (Sprint 67): mai pre-selezionate nella PWA,
+    validate anche qui — un valore diverso da true è rifiutato."""
+
+    accept_privacy = serializers.BooleanField(write_only=True)
+    accept_terms = serializers.BooleanField(write_only=True)
+    confirm_age = serializers.BooleanField(write_only=True)
+
+    def validate_accept_privacy(self, value):
+        if value is not True:
+            raise serializers.ValidationError("Devi dichiarare di aver letto l'informativa privacy.")
+        return value
+
+    def validate_accept_terms(self, value):
+        if value is not True:
+            raise serializers.ValidationError("Devi accettare i termini di servizio.")
+        return value
+
+    def validate_confirm_age(self, value):
+        if value is not True:
+            raise serializers.ValidationError(f"Per usare l'app devi avere almeno {MIN_AGE} anni.")
+        return value
+
+
+class RegisterSerializer(LegalConsentFields, serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, max_length=128, validators=[validate_password])
     invite_code = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=200)
+    interface_language = serializers.ChoiceField(
+        choices=User.InterfaceLanguage.choices, required=False, write_only=True
+    )
 
     class Meta:
         model = User
-        fields = ["email", "password", "invite_code"]
+        fields = [
+            "email", "password", "invite_code", "interface_language",
+            "accept_privacy", "accept_terms", "confirm_age",
+        ]
         # Il controllo di unicità è in validate(), dopo il codice di invito:
         # senza codice valido non si scopre se un'email è già registrata.
         extra_kwargs = {"email": {"validators": []}}
@@ -29,16 +62,21 @@ class RegisterSerializer(serializers.ModelSerializer):
             attrs.get("invite_code", "").encode(), expected.encode()
         ):
             raise serializers.ValidationError({"invite_code": [INVALID_INVITE_MESSAGE]})
-        if User.objects.filter(email__iexact=attrs["email"]).exists():
-            raise serializers.ValidationError({"email": ["Un utente con questa email esiste già."]})
+        attrs["existing_user"] = User.objects.filter(email__iexact=attrs["email"]).first()
+        # Con l'invio email attivo un'email già registrata non si rivela
+        # (la view risponde come a una registrazione riuscita e avvisa per
+        # email il titolare dell'indirizzo); senza email, comportamento di prima.
+        if attrs["existing_user"] is not None and not email_enabled():
+            raise serializers.ValidationError({"email": [EMAIL_TAKEN_MESSAGE]})
         return attrs
 
     def create(self, validated_data):
-        validated_data.pop("invite_code", None)
         return User.objects.create_user(
             username=validated_data["email"],
             email=validated_data["email"],
             password=validated_data["password"],
+            interface_language=validated_data.get("interface_language", User.InterfaceLanguage.IT),
+            email_verified=not email_enabled(),
         )
 
 
@@ -75,12 +113,37 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             "cv_language_mode",
             "cv_include_photo",
             "objective_statement",
+            "email_verified",
+            "notifications_enabled",
+            "legal_acceptance_required",
+            "legal_missing",
+            "legal_acceptances",
         ]
         # extra_credit è gestito solo da amministratore (Django Admin, §3
         # funzionali "Gestione account": nessun checkout/pagamento in UI) —
         # esposto qui in lettura per la schermata account (Sprint 20).
-        read_only_fields = ["id", "email", "plan", "extra_credit"]
+        read_only_fields = ["id", "email", "plan", "extra_credit", "email_verified"]
         extra_kwargs = {"objective_statement": {"max_length": 2000}}
+
+    legal_acceptance_required = serializers.SerializerMethodField()
+    legal_missing = serializers.SerializerMethodField()
+    legal_acceptances = serializers.SerializerMethodField()
+
+    def get_legal_missing(self, user):
+        return missing_acceptances(user)
+
+    def get_legal_acceptance_required(self, user):
+        return bool(missing_acceptances(user))
+
+    def get_legal_acceptances(self, user):
+        # Ultima accettazione per documento (lo storico completo è nell'export).
+        latest = {}
+        for acceptance in user.legal_acceptances.all():
+            latest[acceptance.document] = {
+                "version": acceptance.version,
+                "accepted_at": acceptance.accepted_at,
+            }
+        return latest
 
     def validate_timezone(self, value):
         if value not in zoneinfo.available_timezones():
@@ -95,4 +158,58 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save(update_fields=list(validated_data))
+        if validated_data.get("notifications_enabled") is False:
+            # Notifiche spente (Sprint 67): via anche le sottoscrizioni push
+            # di tutti i dispositivi, non solo il flag.
+            instance.push_subscriptions.all().delete()
         return instance
+
+
+class PasswordCheckMixin:
+    def validate_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Password non corretta.")
+        return value
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, max_length=128)
+    new_password = serializers.CharField(write_only=True, max_length=128)
+
+    def validate_old_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Password attuale non corretta.")
+        return value
+
+    def validate(self, attrs):
+        validate_password(attrs["new_password"], self.context["request"].user)
+        return attrs
+
+
+class DeleteAccountSerializer(PasswordCheckMixin, serializers.Serializer):
+    password = serializers.CharField(write_only=True, max_length=128)
+    confirm = serializers.BooleanField(write_only=True)
+
+    def validate_confirm(self, value):
+        if value is not True:
+            raise serializers.ValidationError("Conferma esplicita richiesta.")
+        return value
+
+
+class LegalAcceptanceSerializer(LegalConsentFields):
+    pass
+
+
+class EmailOnlySerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=500)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(max_length=50)
+    token = serializers.CharField(max_length=100)
+    new_password = serializers.CharField(write_only=True, max_length=128)

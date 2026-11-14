@@ -13,6 +13,8 @@ from .tokens import hash_token_key, revoke_all_tokens
 
 User = get_user_model()
 PASSWORD = "pw-Security-12345!"
+# Sprint 67: le tre spunte obbligatorie della registrazione.
+CONSENTS = {"accept_privacy": True, "accept_terms": True, "confirm_age": True}
 
 
 def _make_user(email="secure@example.com"):
@@ -105,7 +107,7 @@ class AuthTokenTests(APITestCase):
 
     def test_register_returns_a_working_token(self):
         response = self.client.post(
-            "/api/accounts/register/", {"email": "new@example.com", "password": PASSWORD}, format="json"
+            "/api/accounts/register/", {"email": "new@example.com", "password": PASSWORD, **CONSENTS}, format="json"
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(self._me(response.data["token"]).status_code, 200)
@@ -136,7 +138,7 @@ class InviteCodeTests(APITestCase):
     def _register(self, **extra):
         return self.client.post(
             "/api/accounts/register/",
-            {"email": "invited@example.com", "password": PASSWORD, **extra},
+            {"email": "invited@example.com", "password": PASSWORD, **CONSENTS, **extra},
             format="json",
         )
 
@@ -189,14 +191,14 @@ class ThrottlingTests(APITestCase):
         for index in range(5):
             response = self.client.post(
                 "/api/accounts/register/",
-                {"email": f"new{index}@example.com", "password": PASSWORD},
+                {"email": f"new{index}@example.com", "password": PASSWORD, **CONSENTS},
                 format="json",
                 HTTP_X_FORWARDED_FOR="192.0.2.10",
             )
             self.assertEqual(response.status_code, 201)
         response = self.client.post(
             "/api/accounts/register/",
-            {"email": "new-extra@example.com", "password": PASSWORD},
+            {"email": "new-extra@example.com", "password": PASSWORD, **CONSENTS},
             format="json",
             HTTP_X_FORWARDED_FOR="192.0.2.10",
         )

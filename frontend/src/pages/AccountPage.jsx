@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
-import { updateMe } from '../api/auth'
+import { changePassword, updateMe } from '../api/auth'
 import {
   fetchSearches,
   createSearch,
@@ -11,7 +12,7 @@ import {
   deactivateSearch,
 } from '../api/searches'
 import { fetchVapidPublicKey, registerPushSubscription } from '../api/notifications'
-import { isPushSupported, isIOS, isStandalone, subscribeToPush } from '../lib/push'
+import { isPushSupported, isIOS, isStandalone, subscribeToPush, unsubscribeFromPush } from '../lib/push'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import CityAutocomplete from '@/components/CityAutocomplete'
+import { DeleteAccountButton, ExportDataButton } from '@/components/AccountDataActions'
 import { SUPPORTED_LANGUAGES } from '../i18n/translations'
 
 const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', city: '', country: '' }
@@ -52,6 +54,11 @@ export default function AccountPage() {
   // PATCH + refreshUser, sembrando "non rispondere" al click.
   const [cvLanguageMode, setCvLanguageMode] = useState(user?.cv_language_mode)
   const [cvIncludePhoto, setCvIncludePhoto] = useState(user?.cv_include_photo ?? false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(user?.notifications_enabled ?? true)
+
+  const [passwordForm, setPasswordForm] = useState({ old: '', next: '', confirm: '' })
+  const [passwordError, setPasswordError] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
     loadSearches()
@@ -172,6 +179,58 @@ export default function AccountPage() {
     } catch {
       showToast(t('common.genericError'))
     }
+  }
+
+  async function handleNotificationsPreference(enabled) {
+    setNotificationsEnabled(enabled)
+    if (!enabled) {
+      try {
+        await unsubscribeFromPush()
+      } catch {
+        // la sottoscrizione lato server viene comunque eliminata
+      }
+      setNotificationStatus('idle')
+    }
+    await handleSettingChange({ notifications_enabled: enabled })
+  }
+
+  async function handleChangePassword(event) {
+    event.preventDefault()
+    setPasswordError('')
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordError(t('account.passwordMismatch'))
+      return
+    }
+    setChangingPassword(true)
+    try {
+      await changePassword(passwordForm.old, passwordForm.next)
+      setPasswordForm({ old: '', next: '', confirm: '' })
+      showToast(t('account.passwordChanged'))
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setPasswordError(t('common.tooManyRequests'))
+      } else if (err instanceof ApiError && err.data && typeof err.data === 'object') {
+        const first = Object.values(err.data).flat()[0]
+        setPasswordError(typeof first === 'string' ? first : t('common.genericError'))
+      } else {
+        setPasswordError(t('common.genericError'))
+      }
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
+  function acceptedLabel(document) {
+    const acceptance = user.legal_acceptances?.[document]
+    if (!acceptance) return null
+    return t('account.acceptedOn')
+      .replace('{version}', acceptance.version)
+      .replace(
+        '{date}',
+        new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'long', year: 'numeric' }).format(
+          new Date(acceptance.accepted_at),
+        ),
+      )
   }
 
   async function handleEnableNotifications() {
@@ -456,8 +515,17 @@ export default function AccountPage() {
           <CardTitle>{t('account.notificationsTitle')}</CardTitle>
           <CardDescription>{t('account.notificationsHint')}</CardDescription>
         </CardHeader>
-        <CardContent>
-          {!isPushSupported() ? (
+        <CardContent className="flex flex-col gap-4">
+          <label className="flex items-center gap-2.5 text-sm">
+            <Checkbox
+              checked={notificationsEnabled}
+              onCheckedChange={(checked) => handleNotificationsPreference(checked === true)}
+            />
+            {t('account.notificationsPreference')}
+          </label>
+          {!notificationsEnabled ? (
+            <p className="text-sm text-muted-foreground">{t('account.notificationsOffHint')}</p>
+          ) : !isPushSupported() ? (
             <p className="text-sm text-muted-foreground">{t('account.notificationsUnsupported')}</p>
           ) : isIOS() && !isStandalone() ? (
             <p className="text-sm text-muted-foreground">{t('account.notificationsIosHint')}</p>
@@ -472,6 +540,102 @@ export default function AccountPage() {
               {t('account.notificationsEnable')}
             </Button>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('account.privacyTitle')}</CardTitle>
+          <CardDescription>{t('account.privacyHint')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <form onSubmit={handleChangePassword} className="flex flex-col gap-3" noValidate>
+            <h3 className="text-sm font-semibold text-foreground">{t('account.changePasswordTitle')}</h3>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="old-password">{t('account.oldPassword')}</Label>
+              <Input
+                id="old-password"
+                type="password"
+                value={passwordForm.old}
+                onChange={(e) => setPasswordForm({ ...passwordForm, old: e.target.value })}
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                <Label htmlFor="new-password">{t('account.newPassword')}</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={passwordForm.next}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="flex min-w-40 flex-1 flex-col gap-1.5">
+                <Label htmlFor="confirm-new-password">{t('account.confirmNewPassword')}</Label>
+                <Input
+                  id="confirm-new-password"
+                  type="password"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+            {passwordError && (
+              <p role="alert" className="text-sm text-destructive">
+                {passwordError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              variant="secondary"
+              className="w-fit"
+              disabled={changingPassword || !passwordForm.old || !passwordForm.next}
+            >
+              {t('account.changePasswordSubmit')}
+            </Button>
+          </form>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-foreground">{t('account.legalDocsTitle')}</h3>
+            <ul className="flex flex-col gap-1 text-sm">
+              <li>
+                <Link to="/privacy" className="font-medium text-primary hover:underline">
+                  {t('legal.privacy')}
+                </Link>
+                {acceptedLabel('privacy') && (
+                  <span className="text-muted-foreground"> — {acceptedLabel('privacy')}</span>
+                )}
+              </li>
+              <li>
+                <Link to="/terms" className="font-medium text-primary hover:underline">
+                  {t('legal.terms')}
+                </Link>
+                {acceptedLabel('terms') && (
+                  <span className="text-muted-foreground"> — {acceptedLabel('terms')}</span>
+                )}
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-foreground">{t('account.exportTitle')}</h3>
+            <p className="text-sm text-muted-foreground">{t('account.exportHint')}</p>
+            <ExportDataButton />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-destructive">{t('account.dangerZoneTitle')}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-foreground">{t('account.deleteTitle')}</h3>
+          <p className="text-sm text-muted-foreground">{t('account.deleteHint')}</p>
+          <DeleteAccountButton />
         </CardContent>
       </Card>
     </div>

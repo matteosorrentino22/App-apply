@@ -3,7 +3,7 @@
 ## Progetto
 App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte e ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap). L'utente riceve una notifica mattutina e trova la lista già pronta; su ogni offerta genera su richiesta CV personalizzato in PDF (con "colma i gap"), cover letter e messaggi di networking, li rifinisce con editor + chat AI e traccia la candidatura. Nessuna generazione automatica di CV (rimossa, Sprint 45).
 
-Riferimenti (as-is al 2026-11-14, Sprint 64):
+Riferimenti (documenti vivi, sempre allineati all'as-is):
 - `Docs/01-specifiche-funzionali-v6.md` — cosa fa l'app
 - `Docs/02-specifiche-tecniche-v5.md` — come è costruita (modello dati, flussi, API, test)
 - `Docs/03-specifiche-funzionali-contenuto-cv-v5.md` — regole di contenuto/impaginazione del CV (prevale su 01/02 per questi temi)
@@ -70,6 +70,12 @@ i container del progetto. Se qualcuno avvia `docker-compose.yml` (dev) sul
 VPS per debug rapido, va sempre riportato a `docker-compose.prod.yml` con
 `build` + `up -d` prima di lasciare il server, non lasciato "per ora così".
 
+## Sicurezza e privacy — regole fisse (Sprint 66–67)
+- I file degli utenti (CV, cover letter, foto, export) **non si servono mai** da `/media/*` (Caddy risponde 404): solo da URL firmati a scadenza generati per il proprietario (`apps/common/files.py`). Ogni nuovo tipo di file segue lo stesso schema, con nome casuale su disco.
+- Ogni nuova view eredita i permessi di default (login + accettazione legale): dichiarare `permission_classes` solo per gli endpoint che devono esserne esenti, motivandolo.
+- Nuovi dati personali raccolti, nuovi fornitori che li ricevono o nuove conservazioni vanno riportati nell'informativa (`frontend/src/legal/`, copia in `Docs/legal/`) aumentandone la versione in `apps/accounts/legal.py` (gli utenti la riaccettano al prossimo accesso), e coperti da export e cancellazione account.
+- Testi liberi che finiscono al modello AI o nei PDF hanno sempre un `max_length` lato server.
+
 ## Cosa NON fare
 - Non introdurre dipendenze/librerie non necessarie senza chiedere
 - Non modificare l'architettura decisa nelle specifiche tecniche
@@ -110,4 +116,6 @@ documentazione e ricostruiti a posteriori):
    repository GitHub è pubblico).
 5. Test backend nel container di produzione: sempre con
    `-e DJANGO_DEBUG=true` (vedi `DEPLOY.md` §4.4), altrimenti ~60 test
-   falliscono per il redirect HTTPS senza che ci sia una regressione.
+   falliscono per il redirect HTTPS senza che ci sia una regressione; e con
+   `-e REGISTRATION_INVITE_CODE=` (il codice di invito reale del `.env` fa
+   fallire i test di registrazione).

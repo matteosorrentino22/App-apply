@@ -7,7 +7,9 @@
 
 	# Access log (Sprint 66): JSON su file nel volume caddy_logs, ruotato ogni
 	# giorno e cancellato dopo 14 giorni (contiene gli IP dei client). Mai la
-	# firma dei download (?s=) né gli header di autenticazione.
+	# firma dei download e dell'export (?s=), i token dei link di verifica
+	# email e recupero password (?t=, ?token=, Sprint 67) né gli header di
+	# autenticazione; niente Referer, che riporterebbe gli stessi token.
 	log {
 		output file /var/log/caddy/access.log {
 			roll_size 10MiB
@@ -18,8 +20,11 @@
 			wrap json
 			request>uri query {
 				replace s REDACTED
+				replace t REDACTED
+				replace token REDACTED
 			}
 			request>headers>Authorization delete
+			request>headers>Referer delete
 			request>headers>Cookie delete
 			resp_headers>Set-Cookie delete
 		}

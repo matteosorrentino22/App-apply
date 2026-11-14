@@ -54,6 +54,14 @@ class User(AbstractUser):
     # se il flag è "stantio" (`COLLECTION_STALE_AFTER` in apps.jobs.tasks) e
     # va quindi ignorato, non per altro.
     collection_started_at = models.DateTimeField(null=True, blank=True)
+    # Sprint 67. Indirizzo confermato dal link inviato via email: con l'invio
+    # email non configurato i nuovi account nascono già verificati, e gli
+    # utenti esistenti prima dello sprint sono stati marcati verificati
+    # dalla migrazione 0010.
+    email_verified = models.BooleanField(default=False)
+    # Preferenza notifiche (Sprint 67): con False i task di notifica saltano
+    # l'utente; spegnendola si eliminano anche le sottoscrizioni push.
+    notifications_enabled = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
@@ -80,3 +88,31 @@ class AuthToken(models.Model):
 
     def __str__(self):
         return f"AuthToken({self.user}, {self.created_at:%Y-%m-%d})"
+
+
+class LegalAcceptance(models.Model):
+    """Registro delle accettazioni (Sprint 67): informativa privacy, termini
+    di servizio e dichiarazione dell'età minima, con la versione accettata.
+    Solo inserimenti: una nuova versione aggiunge righe, quelle vecchie
+    restano come storico (si cancellano solo con l'account)."""
+
+    class Document(models.TextChoices):
+        PRIVACY = "privacy", "Informativa privacy"
+        TERMS = "terms", "Termini di servizio"
+        AGE = "age", "Dichiarazione età minima"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="legal_acceptances")
+    document = models.CharField(max_length=10, choices=Document.choices)
+    version = models.CharField(max_length=20)
+    accepted_at = models.DateTimeField(default=django_timezone.now)
+
+    class Meta:
+        ordering = ["accepted_at", "id"]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("LegalAcceptance è append-only: le righe esistenti non si modificano.")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.user} — {self.document} {self.version}"

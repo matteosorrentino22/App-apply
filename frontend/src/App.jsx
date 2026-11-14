@@ -17,6 +17,11 @@ import CvDraftEditorPage from './pages/CvDraftEditorPage'
 import CoverLetterDraftEditorPage from './pages/CoverLetterDraftEditorPage'
 import AccountPage from './pages/AccountPage'
 import ProfilePage from './pages/ProfilePage'
+import LegalPage from './pages/LegalPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import LegalFooter from './components/LegalFooter'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -53,15 +58,18 @@ function NavItem({ to, label }) {
 function Topbar() {
   const { user } = useAuth()
   const { t } = useLanguage()
+  // Finché mancano le accettazioni legali (Sprint 67) ogni pagina protetta
+  // mostra la schermata di accettazione: la navigazione non serve.
+  const showNav = user && !user.legal_acceptance_required
 
   return (
     <div
       className={cn(
         'mx-auto flex max-w-2xl items-center gap-4 px-4 pt-4',
-        user ? 'justify-between' : 'justify-end',
+        showNav ? 'justify-between' : 'justify-end',
       )}
     >
-      {user && (
+      {showNav && (
         <nav className="flex items-center gap-1 rounded-full bg-muted p-1">
           <NavItem to="/home" label={t('home.navLink')} />
           <NavItem to="/list" label={t('jobs.navLink')} />
@@ -86,6 +94,11 @@ export default function App() {
               <Route path="/" element={<Navigate to="/list" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/privacy" element={<LegalPage document="privacy" />} />
+              <Route path="/terms" element={<LegalPage document="terms" />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route
                 path="/onboarding"
                 element={
@@ -151,6 +164,7 @@ export default function App() {
                 }
               />
             </Routes>
+            <LegalFooter />
           </BrowserRouter>
         </ToastProvider>
       </AuthProvider>

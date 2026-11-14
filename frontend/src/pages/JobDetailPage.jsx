@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import AiNotice from '../components/AiNotice'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Heart, UserRound } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -487,6 +488,8 @@ export default function JobDetailPage() {
         )}
       </div>
 
+      <AiNotice />
+
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" disabled={generating || job.cv_generation_in_progress} onClick={handleGenerate}>
           {generating || job.cv_generation_in_progress
@@ -690,6 +693,8 @@ export default function JobDetailPage() {
             )}
           </div>
 
+          <AiNotice />
+
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setShowReferralDialog(false)}>
               {t('jobs.cancel')}
@@ -738,6 +743,8 @@ export default function JobDetailPage() {
               </div>
             )}
           </div>
+
+          <AiNotice />
 
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setShowCoverLetterDialog(false)}>

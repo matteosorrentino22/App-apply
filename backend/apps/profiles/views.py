@@ -3,7 +3,7 @@ import logging
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
-from rest_framework import mixins, permissions, status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -28,7 +28,6 @@ class ProfileViewSet(
     mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet
 ):
     serializer_class = ProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
@@ -46,7 +45,6 @@ class ProfileViewSet(
 
 
 class ProfileSectionViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return self.queryset.filter(profile__user=self.request.user)
@@ -106,7 +104,6 @@ def _reserve_cv_import(user):
 class CVImportView(PostOnlyScopeMixin, APIView):
     """Pre-popola il profilo da un CV caricato (PDF/.docx), senza salvarlo (§5.4 tecniche)."""
 
-    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser]
     post_throttle_scope = "cv_import"
 

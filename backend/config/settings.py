@@ -186,13 +186,70 @@ AUTH_TOKEN_IDLE_DAYS = 30
 # Registrazione su invito (Sprint 66): se valorizzato, POST /api/accounts/
 # register/ richiede `invite_code` uguale; vuoto = registrazione aperta.
 REGISTRATION_INVITE_CODE = os.environ.get("REGISTRATION_INVITE_CODE", "")
+if TESTING:
+    # Come per l'email: il codice reale del .env non deve cambiare l'esito
+    # dei test (quelli dell'invito lo impostano con override_settings).
+    REGISTRATION_INVITE_CODE = ""
+
+# Accettazione di informativa privacy, termini ed età minima (Sprint 67,
+# apps.accounts.legal): chi non ha accettato le versioni correnti riceve 403
+# `legal_acceptance_required` su quasi tutta l'API. Spento nei test, dove la
+# gran parte degli utenti è creata senza accettazioni: i test del gate lo
+# riaccendono con override_settings.
+LEGAL_GATE_ENABLED = not TESTING
+# Titolare del trattamento, mostrato nelle pagine legali (GET /api/legal/):
+# mai nel repository, che è pubblico. Se mancano nome o email le pagine
+# mostrano un avviso "dati del titolare da completare".
+LEGAL_CONTROLLER_NAME = os.environ.get("LEGAL_CONTROLLER_NAME", "").strip()
+LEGAL_CONTROLLER_ADDRESS = os.environ.get("LEGAL_CONTROLLER_ADDRESS", "").strip()
+LEGAL_CONTROLLER_EMAIL = os.environ.get("LEGAL_CONTROLLER_EMAIL", "").strip()
+
+# URL pubblico della PWA, usato nei link delle email (verifica dell'indirizzo,
+# recupero password). Default: https://$DOMAIN (già nel .env di produzione
+# per Caddy); in sviluppo il server Vite.
+DOMAIN = os.environ.get("DOMAIN", "").strip()
+PUBLIC_BASE_URL = (
+    os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    or (f"https://{DOMAIN}" if DOMAIN else "http://localhost:5173")
+)
+
+# Email di servizio (Sprint 67) via SMTP, pensato per Gmail con una password
+# per le app. Senza EMAIL_HOST_USER/EMAIL_HOST_PASSWORD l'app funziona lo
+# stesso: nessuna email (warning nei log), verifica dell'indirizzo spenta
+# (nuovi account già verificati), recupero password non disponibile
+# (apps.accounts.emails.email_enabled).
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND") or "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.environ.get("EMAIL_HOST") or "smtp.gmail.com"
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT") or 587)
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "").strip()
+# Google mostra la password per le app in gruppi separati da spazi: gli
+# spazi non fanno parte della password.
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").replace(" ", "").strip()
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "").strip() or EMAIL_HOST_USER or "webmaster@localhost"
+EMAIL_TIMEOUT = 20
+if TESTING:
+    # I test lanciati nel container di produzione leggono il .env reale: mai
+    # credenziali SMTP vere (i test dell'invio email le simulano con
+    # override_settings).
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    EMAIL_HOST_USER = EMAIL_HOST_PASSWORD = ""
+# Link di verifica dell'email validi 3 giorni, come quelli di recupero
+# password (PASSWORD_RESET_TIMEOUT, default di Django).
+EMAIL_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60
+PASSWORD_RESET_TIMEOUT = 3 * 24 * 60 * 60
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.accounts.authentication.ExpiringTokenAuthentication",
     ],
+    # Il gate delle accettazioni legali (Sprint 67) vale per ogni view che
+    # non dichiara `permission_classes`: le poche eccezioni (me, logout,
+    # accettazione, export, cancellazione account, cambio password) le
+    # dichiarano esplicitamente con il solo IsAuthenticated.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        "apps.accounts.permissions.LegalAcceptanceRequired",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -212,6 +269,13 @@ REST_FRAMEWORK = {
         "cv_import": "10/hour",
         "chat": "20/min",
         "draft_preview": "60/min",
+        # Sprint 67: email inviate su richiesta (reinvio verifica, recupero
+        # password) per IP e per indirizzo; cambio password e cancellazione
+        # account (tentativi di password); export dei dati.
+        "email_request": "10/hour",
+        "email_address": "3/hour",
+        "password_check": "10/hour",
+        "data_export": "3/day",
     },
     # Caddy è l'unico proxy davanti a Django e sostituisce X-Forwarded-For
     # con l'IP del client: l'identificativo usato dal throttling è quello.
@@ -258,6 +322,8 @@ SOCIALACCOUNT_PROVIDERS = {
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Nei test i task (invio email, Sprint 67) girano in linea, senza Redis.
+CELERY_TASK_ALWAYS_EAGER = TESTING
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -274,21 +340,24 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # Modello per lo step di strutturazione del parsing CV configurabile a
 # parte: dominio a basso volume, non richiede necessariamente lo stesso
 # modello usato per scoring/generazione CV.
-AWS_BEDROCK_REGION = os.environ.get("AWS_BEDROCK_REGION", "us-east-1")
-BEDROCK_CV_PARSING_MODEL = os.environ.get("BEDROCK_CV_PARSING_MODEL", "us.anthropic.claude-opus-5")
+# Default UE (Sprint 67, come dichiarato nell'informativa privacy): regione
+# di Francoforte e profili di inferenza "eu.", che instradano le richieste
+# solo verso regioni AWS dell'Unione Europea.
+AWS_BEDROCK_REGION = os.environ.get("AWS_BEDROCK_REGION", "eu-central-1")
+BEDROCK_CV_PARSING_MODEL = os.environ.get("BEDROCK_CV_PARSING_MODEL", "eu.anthropic.claude-opus-5")
 # Scoring gira ogni notte su tutti i job raccolti di tutti gli utenti (alto
 # volume): famiglia di modello più economica di default, come indicato
 # esplicitamente da 02-specifiche-tecniche-v3.md §3.5 ("una famiglia più
 # economica per lo scoring ad alto volume, una più capace per il CV") — resta
 # comunque un parametro di configurazione, non un vincolo architetturale.
 BEDROCK_SCORING_MODEL = os.environ.get(
-    "BEDROCK_SCORING_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    "BEDROCK_SCORING_MODEL", "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
 # Generazione contenuti CV: dominio a basso volume (max 15 job/utente/notte
 # tenuti dal cap, più le generazioni manuali) rispetto allo scoring — famiglia
 # più capace di default, come indicato da 02-specifiche-tecniche-v3.md §3.5.
 BEDROCK_CV_GENERATION_MODEL = os.environ.get(
-    "BEDROCK_CV_GENERATION_MODEL", "us.anthropic.claude-opus-5"
+    "BEDROCK_CV_GENERATION_MODEL", "eu.anthropic.claude-opus-5"
 )
 
 # Fonte offerte Apify/LinkedIn (02-specifiche-tecniche-v3.md §5.3): token in
@@ -335,3 +404,8 @@ BACKUP_S3_BUCKET = os.environ.get("BACKUP_S3_BUCKET", "")
 BACKUP_S3_ACCESS_KEY = os.environ.get("BACKUP_S3_ACCESS_KEY", "")
 BACKUP_S3_SECRET_KEY = os.environ.get("BACKUP_S3_SECRET_KEY", "")
 BACKUP_S3_REGION = os.environ.get("BACKUP_S3_REGION", "auto")
+# Backup locale ruotato (Sprint 67), usato quando il bucket S3 non è
+# configurato: dump del DB + archivio media nel volume `local_backups`,
+# conservati BACKUP_LOCAL_KEEP_DAYS giorni (come dichiarato nell'informativa).
+BACKUP_LOCAL_DIR = Path(os.environ.get("BACKUP_LOCAL_DIR") or BASE_DIR / "backups")
+BACKUP_LOCAL_KEEP_DAYS = 7

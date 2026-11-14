@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import AuthToken, User
+from .models import AuthToken, LegalAcceptance, User
 
 
 @admin.register(User)
@@ -18,6 +18,8 @@ class UserAdmin(DjangoUserAdmin):
                     "cv_include_photo",
                     "objective_statement",
                     "extra_credit",
+                    "email_verified",
+                    "notifications_enabled",
                     "last_activity_reset",
                     "last_notified_at",
                 )
@@ -38,4 +40,21 @@ class AuthTokenAdmin(admin.ModelAdmin):
     exclude = ("key_hash",)
 
     def has_add_permission(self, request):
+        return False
+
+
+@admin.register(LegalAcceptance)
+class LegalAcceptanceAdmin(admin.ModelAdmin):
+    """Registro append-only (Sprint 67): sola lettura. La cancellazione resta
+    permessa perché serve alla cascata quando si elimina un utente dall'admin."""
+
+    list_display = ("user", "document", "version", "accepted_at")
+    list_filter = ("document", "version")
+    search_fields = ("user__email",)
+    readonly_fields = ("user", "document", "version", "accepted_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False

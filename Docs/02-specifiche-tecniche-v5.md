@@ -1,7 +1,7 @@
 # Specifiche Tecniche — App di ricerca lavoro e generazione CV
 
 > **Documento:** 02 — Specifiche tecniche
-> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66, sicurezza)
+> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66 sicurezza, Sprint 67 privacy e GDPR)
 > **Stato:** documento vivo, va aggiornato nello stesso commit di ogni sprint che cambia il comportamento (regola in `CLAUDE.md`, "Workflow sprint")
 > **Ambito:** *come* è costruita l'applicazione: architettura, stack, modello dati, flussi, generazione dei documenti, deploy, amministrazione, API, test, limiti tecnici. Il *cosa* è in `Docs/01-specifiche-funzionali-v6.md`. Le regole di contenuto e impaginazione del CV sono in `Docs/03-specifiche-funzionali-contenuto-cv-v5.md`, che per quei temi prevale su questo documento. Procedure operative, variabili d'ambiente e runbook: `DEPLOY.md`.
 >
@@ -12,7 +12,7 @@
 > 4. Copertura: backend, frontend, database, hosting/deploy, autenticazione.
 > 5. MVP per una **cerchia ristretta di utenti di test**: nessun requisito di scala.
 >
-> **Numerazione.** La numerazione dei paragrafi §1–§11 delle versioni precedenti è mantenuta, perché il codice la cita nei commenti (es. §3.5, §3.8, §5.1, §5.2, §5.3, §5.5, §6.3, §8.4). Le parti nuove sono aggiunte in coda ai paragrafi esistenti (§4.9–§4.14, §5.6–§5.13, §6.6–§6.7) o come nuove sezioni (§12 API REST, §13 Test). I commenti nel codice citano ancora `02-specifiche-tecniche-v3.md`: vanno letti come riferimenti a questo documento.
+> **Numerazione.** La numerazione dei paragrafi §1–§11 delle versioni precedenti è mantenuta, perché il codice la cita nei commenti (es. §3.5, §3.8, §5.1, §5.2, §5.3, §5.5, §6.3, §8.4). Le parti nuove sono aggiunte in coda ai paragrafi esistenti (§4.9–§4.16, §5.6–§5.18, §6.6–§6.7) o come nuove sezioni (§12 API REST, §13 Test). I commenti nel codice citano ancora `02-specifiche-tecniche-v3.md`: vanno letti come riferimenti a questo documento.
 
 ### Nota di versione (v5)
 
@@ -39,6 +39,7 @@ Novità principali rispetto alle versioni precedenti, per sprint:
 | 63 | Editor e chat della cover letter (`CoverLetterDraft`) | §4.11, §5.12, §5.13 |
 | 64 | Filtri preferiti salvabili (`JobFilterPreset`) | §4.13 |
 | 66 | Sicurezza: download con URL firmati e nomi file casuali, token con scadenza per inattività e logout, throttling, registrazione su invito, limiti di input, header HTTP, push in allowlist, container non-root, log | §3.7, §4.15, §7.1, §8, §12 |
+| 67 | Privacy e GDPR: consensi in registrazione e gate delle accettazioni (`LegalAcceptance`), verifica email, recupero e cambio password, email di servizio via Celery, export ZIP e cancellazione dell'account, preferenza notifiche, Bedrock in UE, backup locale ruotato, access log senza token | §3.5, §3.7, §4.1, §4.16, §5.14–§5.18, §7.1, §8, §12, §13 |
 
 Decisioni delle versioni precedenti **superate dal codice** e quindi tolte da questo documento: limite di raccolta 50/100 job per utente per notte; cap di intake di 15 job/giorno con tie-break; generazione automatica dei CV per i job 4–5; una sola chiamata Apify per utente; scoring fallito = offerta scartata; scala 1–5; "riserva all'accodamento" con task Celery per le generazioni manuali; 3 livelli di compattamento del CV; selezione delle 3 voci di istruzione più recenti; budget bullet 12/10/9 distribuito per peso; arricchimento del profilo salvabile; `Education.end_date` obbligatoria; voucher.
 
@@ -47,7 +48,7 @@ Decisioni delle versioni precedenti **superate dal codice** e quindi tolte da qu
 - **v1–v2** (luglio 2026): architettura monolitica Django + Celery, modello dati, flussi del ciclo notturno, deploy su VPS con Docker Compose. Batch alle 02:00 Europe/Rome, riserva della quota con restituzione su fallimento, foto on/off, pipeline di parsing del CV caricato.
 - **v3** (luglio 2026, revisione criticità): credito come saldo in euro con listino; niente Word; una chiamata Apify per utente con limite 50/100; reset quote a mezzanotte Europe/Rome; notifica basata su `last_notified_at`; guardia di concorrenza. Aggiornata poi in place con gli sprint 39 e 47.
 - **v4** (01/08/2026): recepisce il documento 03 v3 (pipeline CV con budget deterministico e loop di ripiego, `Education.start_date/end_date`, rimozione di `key_achievements`).
-- **v5** (14/11/2026): fusione di v3 e v4, allineamento all'as-is degli sprint 40–64, aggiunte le sezioni API REST (§12) e Test (§13).
+- **v5** (14/11/2026): fusione di v3 e v4, allineamento all'as-is degli sprint 40–64, aggiunte le sezioni API REST (§12) e Test (§13). Aggiornata in place con lo Sprint 66 (sicurezza) e lo Sprint 67 (privacy e GDPR).
 
 Le versioni superate sono conservate in `Docs/archivio/` solo come storico (vedi `Docs/CHANGELOG.md`).
 
@@ -63,15 +64,15 @@ Le versioni superate sono conservate in `Docs/archivio/` solo come storico (vedi
 | Frontend | React 19 come PWA (Vite, Tailwind, shadcn/ui su Radix) | Installabile sul telefono, push; nessuna cache offline dei dati. |
 | Database | PostgreSQL 16 | Dati relazionali per utente. |
 | Fonte offerte | Apify (actor `cheap_scraper~linkedin-job-scraper`) dietro un'interfaccia interna; API guest di LinkedIn per l'import da URL | Una chiamata per gruppo (tipo ricerca × città × paese), al massimo 150 risultati per chiamata, nessun tetto per piano. |
-| Motore AI | Claude via **AWS Bedrock** (`AnthropicBedrock`), helper unico `apps/common/ai.py` | Output strutturato con tool-use forzato e validazione `jsonschema`, modelli per uso configurabili da env. |
+| Motore AI | Claude via **AWS Bedrock** (`AnthropicBedrock`), helper unico `apps/common/ai.py` | Output strutturato con tool-use forzato e validazione `jsonschema`, modelli per uso configurabili da env; default in UE (Sprint 67). |
 | Usi dell'AI | Scoring, parsing del CV caricato, contenuti del CV, cover letter, messaggi di networking, chat degli editor | Sette punti di chiamata, tutti dallo stesso helper. |
 | Documenti | Template HTML/CSS → PDF con WeasyPrint (CV in Caladea a dimensione fissa; cover letter a 3 livelli di compattamento) | Solo PDF; editor in-app con bozza e chat AI. |
 | Credito | Saldo in € (`Decimal`) + listino prezzi unitari da env | Oltre il massimale giornaliero si paga a credito; le chat sono sempre a credito. |
-| Autenticazione | Email/password con token propri (`AuthToken`, scadenza dopo 30 giorni di inattività) + login Google (django-allauth) | Google è implementato ma **non configurato in produzione**; registrazione su invito opzionale. |
-| Notifiche | Web Push (VAPID, `pywebpush`) | Notifica mattutina alle 10 locali e promemoria di inattività a 7 giorni. |
+| Autenticazione | Email/password con token propri (`AuthToken`, scadenza dopo 30 giorni di inattività) + login Google (django-allauth) | Google è implementato ma **non configurato in produzione** (pulsante nascosto); registrazione su invito opzionale; consensi obbligatori, verifica email e recupero password (Sprint 67). |
+| Notifiche | Web Push (VAPID, `pywebpush`); email di servizio via SMTP (Gmail) | Notifica mattutina alle 10 locali e promemoria di inattività a 7 giorni, disattivabili; email solo di servizio (verifica, recupero password, cancellazione). |
 | Hosting | VPS singolo economico | Tutto lo stack su un server con Docker. |
 | Deploy | Docker Compose (`docker-compose.prod.yml`) + Caddy | HTTPS automatico; un solo file compose in produzione. |
-| Backup | Task Celery `pg_dump` + media verso storage S3-compatibile | Implementato ma **non configurato in produzione** (§8.4). |
+| Backup | Task Celery `pg_dump` + media: su storage S3-compatibile se configurato, altrimenti in un volume locale con rotazione a 7 giorni | In produzione è attivo il backup **locale** (Sprint 67), sullo stesso VPS (§8.4). |
 | Amministrazione | Django Admin | Piani e credito si gestiscono solo da Admin; non esistono voucher né checkout. |
 
 L'app deriva dal **prototipo n8n** del committente (workflow *01 Job Collection*, *02 Job Scoring*, *03 CV Generation*), da cui sono stati recuperati l'actor Apify, l'impianto dei prompt e il layout del CV; Google Sheets e Google Drive sono stati sostituiti da PostgreSQL e dalla generazione PDF sul server (§10).
@@ -87,7 +88,7 @@ L'applicazione è un **unico progetto Django** che espone:
 - un'**API REST** (`/api/...`) consumata dalla PWA (§12);
 - il **Django Admin** (path da `DJANGO_ADMIN_PATH`, default `/admin/`) per l'amministrazione (§9);
 - gli URL di **django-allauth** (`/accounts/...`) per il login Google;
-- alcuni **lavori programmati** eseguiti dal worker Celery (ciclo notturno, notifiche, backup).
+- alcuni **lavori programmati** eseguiti dal worker Celery (ciclo notturno, notifiche, backup) e l'invio delle **email di servizio** (Sprint 67).
 
 La PWA React è un progetto separato (`frontend/`) compilato in file statici serviti da Caddy; parla solo con l'API.
 
@@ -96,10 +97,10 @@ La PWA React è un progetto separato (`frontend/`) compilato in file statici ser
 | Processo | Comando | Cosa fa |
 |---|---|---|
 | `web` | `gunicorn config.wsgi:application --workers 4 --timeout 1800` | Risponde a tutte le richieste della PWA. **Esegue in modo sincrono** anche le operazioni lente richieste dall'utente: generazione di CV, cover letter e messaggi di networking, messaggi delle chat degli editor, import da link e creazione manuale (con scoring), raccolta manuale "Collect now" (raccolta + scoring di tutte le ricerche attive), parsing del CV caricato. |
-| `worker` | `celery -A config worker` | Esegue solo i task schedulati da Beat: ciclo notturno, notifiche, backup. Concorrenza = numero di CPU (oggi 1). |
+| `worker` | `celery -A config worker` | Esegue i task schedulati da Beat (ciclo notturno, notifiche, backup) e, dallo Sprint 67, l'invio delle email di servizio accodate dal `web`. Concorrenza = numero di CPU (oggi 1). |
 | `beat` | `celery -A config beat` con `DatabaseScheduler` | Fa partire i task alle ore previste; le pianificazioni stanno nel DB e sono modificabili da Admin (§5.1, §5.5, §8.4). |
 
-Nel codice applicativo **non c'è nessuna chiamata `.delay()` / `apply_async()`**: nessun lavoro viene accodato su Celery a partire da una richiesta dell'utente. Redis serve solo da broker/result backend per i task di Beat. Il timeout di 30 minuti di gunicorn esiste proprio perché raccolta manuale e generazioni girano dentro la richiesta (Sprint 44–45, §8.2); la PWA mostra un indicatore di caricamento e attende la risposta.
+L'unico lavoro accodato su Celery da una richiesta dell'utente è l'**invio delle email di servizio** (`send_service_email.delay`, Sprint 67, §5.14): un invio SMTP lento o fallito non deve bloccare né far fallire la richiesta. Nessun'altra azione dell'utente usa `.delay()` / `apply_async()`. Redis serve da broker/result backend per questi task e, dallo Sprint 66, da cache per il throttling (§7.1). Il timeout di 30 minuti di gunicorn esiste proprio perché raccolta manuale e generazioni girano dentro la richiesta (Sprint 44–45, §8.2); la PWA mostra un indicatore di caricamento e attende la risposta.
 
 Tutti i processi condividono lo stesso codice (un'unica immagine `backend/Dockerfile`) e lo stesso database.
 
@@ -138,7 +139,8 @@ Tutti i processi condividono lo stesso codice (un'unica immagine `backend/Docker
                     │    (raccolta + scoring)           │   │
                     │  • ogni 15': notifica 10:00 e     │   │
                     │    promemoria inattività          │   │
-                    │  • 03:30 backup (se configurato)  │   │
+                    │  • 03:30 backup (locale o S3)     │   │
+                    │  • email di servizio (Gmail SMTP) │   │
                     └──────┬──────────────┬─────────────┘   │
                            │              │                 │
      ┌─────────────────────┼──────────────┼─────────────────┼──────────────┐
@@ -151,10 +153,12 @@ Tutti i processi condividono lo stesso codice (un'unica immagine `backend/Docker
 │          │   │ parsing CV)      │ │          │ │                  │ │ città)   │
 └──────────┘   └──────────────────┘ └──────────┘ └──────────────────┘ └──────────┘
                                                         Storage S3-compatibile
-                                                        (backup, non configurato)
+                                                        (backup, facoltativo, non
+                                                        configurato) · Gmail SMTP
+                                                        (email di servizio)
 ```
 
-Apify e Bedrock sono chiamati sia dal `web` (azioni manuali) sia dal `worker` (ciclo notturno). Web Push è usato solo dal worker. LinkedIn guest API e Nominatim solo dal `web`.
+Apify e Bedrock sono chiamati sia dal `web` (azioni manuali) sia dal `worker` (ciclo notturno). Web Push e l'SMTP delle email di servizio sono usati solo dal worker. LinkedIn guest API e Nominatim solo dal `web`.
 
 Tutti i container girano sullo **stesso VPS**, orchestrati da `docker-compose.prod.yml` (§8).
 
@@ -164,15 +168,15 @@ App Django in `backend/apps/` (una per dominio):
 
 | App | Contenuto principale |
 |---|---|
-| `accounts` | `User` custom, `AuthToken` e autenticazione a token con scadenza, registrazione (su invito)/login/logout, throttle del login, limite dei login all'admin, `/me`, comando `set_e2e_account` |
-| `common` | `ai.py` (helper Bedrock), `files.py` (nomi casuali, URL firmati, ricodifica foto) e view `/api/files/…`, task di backup, comandi `restore_backup` e `secure_media_files`, test di isolamento multi-utente |
+| `accounts` | `User` custom, `AuthToken` e autenticazione a token con scadenza, registrazione (su invito)/login/logout, throttle del login, limite dei login all'admin, `/me`, comando `set_e2e_account`; dallo Sprint 67 `LegalAcceptance` e versioni dei testi (`legal.py`), gate delle accettazioni (`permissions.py`), verifica email e recupero/cambio password, email di servizio (`emails.py`, `tasks.py`), export e cancellazione dell'account (`account_data.py`, `signals.py`) |
+| `common` | `ai.py` (helper Bedrock), `files.py` (nomi casuali, URL firmati, ricodifica foto) e view `/api/files/…`, task di backup (S3 o locale ruotato), comandi `restore_backup` e `secure_media_files`, test di isolamento multi-utente |
 | `profiles` | `Profile` e sezioni, opzioni lingua/livello (`language_options.py`), import CV (`cv_import.py`) |
 | `searches` | `SavedSearch`, limiti di piano (`services.py`), downgrade (`signals.py`), proxy Nominatim (`geo.py`) |
 | `jobs` | `Job`, `DailyQuota`, `RunLog`, `JobFilterPreset`; fonte offerte (`sources/`), raccolta, scoring, import, job manuale, lista/filtri, statistiche, ciclo notturno (`tasks.py`); **tutte** le view dei job, incluse quelle di CV, cover letter, messaggi ed editor |
 | `cv` | `CVDocument`, `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument`; pipeline CV (`ai_content`, `selection`, `generation`, `rendering`), gap filling, cover letter, messaggi, editor (`draft*`, `cover_letter_draft*`), template HTML |
 | `notifications` | `PushSubscription`, invio push, task notifiche |
 
-Frontend in `frontend/src/`: `pages/` (Login, Register, Onboarding, Home, JobList, JobDetail, CvDraftEditor, CoverLetterDraftEditor, Account/Impostazioni, Profile), `components/`, `api/` (client fetch e funzioni per endpoint), `i18n/` (traduzioni it/en), `sw.js` (service worker).
+Frontend in `frontend/src/`: `pages/` (Login, Register, Onboarding, Home, JobList, JobDetail, CvDraftEditor, CoverLetterDraftEditor, Account/Impostazioni, Profile; dallo Sprint 67 Legal, LegalAcceptance, VerifyEmail, ForgotPassword, ResetPassword), `components/`, `api/` (client fetch e funzioni per endpoint), `legal/` (testi di informativa e termini in JSX, it/en, Sprint 67), `i18n/` (traduzioni it/en), `sw.js` (service worker).
 
 ---
 
@@ -195,8 +199,9 @@ Celery con broker e result backend Redis (`CELERY_BROKER_URL`, `CELERY_RESULT_BA
 | `apps.notifications.tasks.send_inactivity_notifications` | ogni 15 minuti (stessa migrazione) |
 | `apps.common.tasks.backup_database` | crontab 03:30 Europe/Rome (`common/0001_schedule_backup`) |
 | `apps.common.tasks.add` | nessuna; task di prova |
+| `apps.accounts.tasks.send_service_email` | nessuna; accodato dalle view dell'account (Sprint 67, §5.14) |
 
-Le pianificazioni sono righe di `django_celery_beat` modificabili da Admin. Le azioni dell'utente **non** passano da Celery (§2.2).
+Le pianificazioni sono righe di `django_celery_beat` modificabili da Admin. Le azioni dell'utente **non** passano da Celery, salvo l'invio delle email di servizio (§2.2). Nei test `CELERY_TASK_ALWAYS_EAGER = True`: i task girano in linea, senza Redis.
 
 ### 3.3 Frontend — React come PWA
 
@@ -204,9 +209,9 @@ React 19 + React Router 7, build con Vite 7, Tailwind CSS 4, componenti in stile
 
 **PWA.** `vite-plugin-pwa` in modalità `injectManifest` con service worker proprio (`src/sw.js`): precache con Workbox dei soli asset di build (installabilità), `skipWaiting` + `clients.claim`, gestione di `push` e `notificationclick` (apre `/`). **Nessuna runtime cache per `/api`**: le chiamate API vanno sempre in rete. "Apertura lista immediata" resta un requisito di reattività dell'API, non di cache locale.
 
-**Client API** (`src/api/client.js`): `fetch` su percorsi relativi `/api/...`, header `Authorization: Token <token>` se presente nel `localStorage` (chiave `app_apply_token`). Gli errori diventano `ApiError` con `status` e `detail`; un 401 con token presente (sessione scaduta o revocata) cancella il token locale ed emette l'evento `app-apply:auth-expired`, che `AuthContext` usa per tornare al login (Sprint 66). Le anteprime PDF degli editor usano un `fetch` diretto per leggere blob e header `X-Page-Count`.
+**Client API** (`src/api/client.js`): `fetch` su percorsi relativi `/api/...`, header `Authorization: Token <token>` se presente nel `localStorage` (chiave `app_apply_token`). Gli errori diventano `ApiError` con `status` e `detail`; un 401 con token presente (sessione scaduta o revocata) cancella il token locale ed emette l'evento `app-apply:auth-expired`, che `AuthContext` usa per tornare al login (Sprint 66); un 403 con `code = legal_acceptance_required` emette `app-apply:legal-required` (`LEGAL_REQUIRED_EVENT`), che fa ricaricare l'utente e quindi mostrare la schermata di accettazione (Sprint 67, §5.17). Le anteprime PDF degli editor usano un `fetch` diretto per leggere blob e header `X-Page-Count`.
 
-**i18n.** Dizionario proprio in `src/i18n/translations.js`, lingue `it` ed `en`; lingua iniziale da `localStorage` o dal dispositivo, poi `User.interface_language` dopo il login. I messaggi d'errore del backend e i testi delle notifiche push sono solo in italiano.
+**i18n.** Dizionario proprio in `src/i18n/translations.js`, lingue `it` ed `en`; lingua iniziale da `localStorage` o dal dispositivo, poi `User.interface_language` dopo il login. I messaggi d'errore del backend e i testi delle notifiche push sono solo in italiano; le email di servizio seguono `User.interface_language` (it/en, Sprint 67). I testi di informativa e termini sono componenti JSX in `src/legal/` (it/en), con versione, data e dati del titolare letti da `GET /api/legal/`.
 
 **iPhone.** Le push via web funzionano su iOS solo con la PWA aggiunta alla schermata Home; l'app lo segnala in Impostazioni quando rileva iOS fuori dalla modalità standalone.
 
@@ -226,10 +231,12 @@ PostgreSQL 16 (`postgres:16-alpine`), volume `postgres_data`. Tutti i dati appli
 
 | Variabile | Default | Usata da |
 |---|---|---|
-| `AWS_BEDROCK_REGION` | `us-east-1` | client |
-| `BEDROCK_SCORING_MODEL` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | scoring |
-| `BEDROCK_CV_GENERATION_MODEL` | `us.anthropic.claude-opus-5` | contenuti CV, cover letter, messaggi di networking, chat editor CV e cover letter |
-| `BEDROCK_CV_PARSING_MODEL` | `us.anthropic.claude-opus-5` | import CV in onboarding |
+| `AWS_BEDROCK_REGION` | `eu-central-1` | client |
+| `BEDROCK_SCORING_MODEL` | `eu.anthropic.claude-haiku-4-5-20251001-v1:0` | scoring |
+| `BEDROCK_CV_GENERATION_MODEL` | `eu.anthropic.claude-opus-5` | contenuti CV, cover letter, messaggi di networking, chat editor CV e cover letter |
+| `BEDROCK_CV_PARSING_MODEL` | `eu.anthropic.claude-opus-5` | import CV in onboarding |
+
+**Elaborazione in UE (Sprint 67).** I default sono la regione di Francoforte (`eu-central-1`) e i profili di inferenza cross-region `eu.`, che instradano le richieste solo verso regioni AWS dell'Unione Europea (non necessariamente Francoforte), come dichiarato nell'informativa privacy; prima dello Sprint 67 erano `us-east-1` e i profili `us.`. I valori effettivi sono quelli del `.env` (aggiornato a mano dal committente) e i profili `eu.` vanno abilitati nella console Bedrock della regione. L'accesso ai profili `eu.` dall'account AWS non è stato verificato nello sprint.
 
 **Punti di chiamata:**
 
@@ -259,18 +266,28 @@ PostgreSQL 16 (`postgres:16-alpine`), volume `postgres_data`. Tutti i dati appli
 
 ### 3.7 Autenticazione
 
-- **Email + password.** `User` custom (`AbstractUser`, `email` unica; `username` = email alla registrazione). `POST /api/accounts/register/` e `/login/` creano ogni volta un **nuovo token** (`AuthToken`, §4.15: uno per login/dispositivo, 256 bit casuali da `secrets.token_urlsafe(32)`), che la PWA salva nel `localStorage` e invia come `Authorization: Token …`. Nel DB c'è solo lo SHA-256 del token.
-- **Scadenza per inattività (Sprint 66).** L'autenticazione DRF è solo `apps.accounts.authentication.ExpiringTokenAuthentication` (niente `TokenAuthentication` né `SessionAuthentication` di DRF): un token non usato da più di `AUTH_TOKEN_IDLE_DAYS = 30` giorni viene cancellato e la richiesta riceve 401; a ogni uso `last_used_at` viene aggiornato, al massimo una volta l'ora. `POST /api/accounts/logout/` cancella il solo token della richiesta (gli altri dispositivi restano collegati); `apps.accounts.tokens.revoke_all_tokens(user)` li cancella tutti (per cambio password e cancellazione account, non ancora esistenti). I token DRF esistenti sono stati cancellati dalla migrazione `accounts/0008` (tutti gli utenti hanno rifatto il login); l'app `rest_framework.authtoken` non è più installata (la sua tabella resta, vuota).
+- **Email + password.** `User` custom (`AbstractUser`, `email` unica; `username` = email alla registrazione). `POST /api/accounts/login/` e `/register/` (quest'ultima solo con l'invio email non configurato, vedi sotto) creano ogni volta un **nuovo token** (`AuthToken`, §4.15: uno per login/dispositivo, 256 bit casuali da `secrets.token_urlsafe(32)`), che la PWA salva nel `localStorage` e invia come `Authorization: Token …`. Nel DB c'è solo lo SHA-256 del token.
+- **Scadenza per inattività (Sprint 66).** L'autenticazione DRF è solo `apps.accounts.authentication.ExpiringTokenAuthentication` (niente `TokenAuthentication` né `SessionAuthentication` di DRF): un token non usato da più di `AUTH_TOKEN_IDLE_DAYS = 30` giorni viene cancellato e la richiesta riceve 401; a ogni uso `last_used_at` viene aggiornato, al massimo una volta l'ora. `POST /api/accounts/logout/` cancella il solo token della richiesta (gli altri dispositivi restano collegati); `apps.accounts.tokens.revoke_all_tokens(user)` li cancella tutti (usato da recupero e cambio password dello Sprint 67; la cancellazione dell'account li elimina a cascata). I token DRF esistenti sono stati cancellati dalla migrazione `accounts/0008` (tutti gli utenti hanno rifatto il login); l'app `rest_framework.authtoken` non è più installata (la sua tabella resta, vuota).
 - **Registrazione su invito.** Se `REGISTRATION_INVITE_CODE` è valorizzato, la registrazione richiede `invite_code` uguale (confronto a tempo costante con `hmac.compare_digest`); il controllo precede quello sull'email già registrata, quindi senza codice valido non si scopre se un'email esiste. Vuoto = registrazione aperta.
-- **Login.** Messaggio d'errore unico ("Credenziali non valide.") per email inesistente e password errata; anche con email inesistente si passa da `authenticate()` (che calcola comunque un hash), così i tempi non rivelano se l'account esiste. Limiti di frequenza in §7.1.
+- **Consensi in registrazione (Sprint 67).** `RegisterSerializer` (via `LegalConsentFields`) richiede `accept_privacy`, `accept_terms`, `confirm_age` tutti `true` (400 per campo altrimenti) e accetta `interface_language` (lingua delle email). Dopo la creazione `record_acceptances(user)` scrive le tre righe `LegalAcceptance` con le versioni correnti (§4.16). La PWA non pre-seleziona mai le caselle.
+- **Verifica dell'email (Sprint 67).** Attiva solo se l'invio email è configurato (`apps.accounts.emails.email_enabled()`: `EMAIL_HOST_USER` e `EMAIL_HOST_PASSWORD` valorizzati).
+  - Token: `TimestampSigner(salt="apps.accounts.verify-email")` su `"<user_id>:<email in minuscolo>"`, validità `EMAIL_VERIFICATION_MAX_AGE` = 3 giorni; nessuna tabella. Link `PUBLIC_BASE_URL/verify-email?t=<token>`, aperto dalla PWA che chiama `POST /api/accounts/verify-email/`: firma scaduta → 400 `code: expired`, firma manomessa, payload non valido o utente/email non corrispondenti (o non attivo) → 400 `code: invalid`; altrimenti `email_verified = True`. La verifica non crea un token: l'utente fa poi il login.
+  - Registrazione con email attiva: risposta sempre `201 {"verification_required": true}`, senza token. Se l'email è nuova crea l'utente con `email_verified = False` e invia il link; se è già registrata non crea nulla e invia al titolare dell'indirizzo l'email "tentativo di registrazione" (non enumerazione). Senza email: comportamento precedente, utente creato con `email_verified = True`, risposta `201 {token, verification_required: false}`, email duplicata → 400 "Un utente con questa email esiste già.".
+  - Login con email attiva e `email_verified = False`: **403** `{code: "email_not_verified"}`, restituito solo **dopo** la verifica della password (credenziali errate → sempre il 400 generico).
+  - Reinvio: `POST /api/accounts/verify-email/resend/ {email}` risponde sempre `200 {"status": "sent_if_registered"}` e invia solo se l'account esiste, è attivo e non è verificato.
+  - La migrazione `accounts/0010` ha marcato verificati tutti gli utenti esistenti.
+- **Recupero della password (Sprint 67).** `POST /api/accounts/password-reset/ {email}`: senza email configurata 503 `code: email_unavailable`; altrimenti sempre `200 {"status": "sent_if_registered"}`, con invio solo per un account attivo con password utilizzabile. Link `PUBLIC_BASE_URL/reset-password?uid=<id base64>&token=<token>` con il `default_token_generator` di Django: monouso (il token dipende dall'hash della password e da `last_login`), validità `PASSWORD_RESET_TIMEOUT` = 3 giorni. `POST /api/accounts/password-reset/confirm/ {uid, token, new_password}`: link non valido o scaduto → 400 `code: invalid_link`; password che non supera i validatori → 400 `new_password`; altrimenti nuova password, `email_verified = True` (il link è arrivato all'indirizzo) e `revoke_all_tokens` (logout ovunque). Non restituisce un token.
+- **Cambio della password (Sprint 67).** `POST /api/accounts/password/change/ {old_password, new_password}`, autenticato: password attuale errata o nuova non valida → 400; altrimenti `revoke_all_tokens` e **nuovo token** per il dispositivo corrente nella risposta (la PWA lo salva subito).
+- **Login.** Messaggio d'errore unico ("Credenziali non valide.") per email inesistente e password errata; anche con email inesistente si passa da `authenticate()` (che calcola comunque un hash), così i tempi non rivelano se l'account esiste. Con email attiva e indirizzo non verificato: 403 `email_not_verified` (vedi sopra). Limiti di frequenza in §7.1.
+- **Gate delle accettazioni legali (Sprint 67).** `DEFAULT_PERMISSION_CLASSES = [IsAuthenticated, apps.accounts.permissions.LegalAcceptanceRequired]`: per un utente autenticato a cui manca l'accettazione della versione corrente di almeno un documento (`missing_acceptances`, una query per richiesta) ogni view che usa i permessi di default risponde **403** `{"code": "legal_acceptance_required", "detail": …}`. **Regola: una view che dichiara `permission_classes` esplicitamente è esente dal gate**; per questo nello Sprint 67 sono state tolte le `permission_classes = [IsAuthenticated]` ridondanti da job, profilo, ricerche e notifiche. Le uniche view esenti sono: `me`, `logout`, `legal-acceptance`, `export`, `delete`, `password/change` (con `IsAuthenticated`) e gli endpoint pubblici con `AllowAny` (`register`, `login`, `verify-email`, `verify-email/resend`, `password-reset`, `password-reset/confirm`, `export/download`, `GET /api/legal/`, download firmati `/api/files/…`). Le richieste non autenticate ricevono sempre 401 prima del gate. `LEGAL_GATE_ENABLED = not TESTING`: spento nei test (quasi tutti gli utenti dei test non hanno accettazioni), riacceso con `override_settings` in quelli dedicati. Flusso completo in §5.17.
 - **Django Admin.** Usa la propria sessione Django (non l'API). Path configurabile con `DJANGO_ADMIN_PATH`; i tentativi di login falliti sono limitati per IP (§7.1).
-- **Login Google.** django-allauth (`allauth.account`, `allauth.socialaccount`, provider Google, `SITE_ID = 1`), URL sotto `/accounts/` proxati da Caddy; la PWA apre `/accounts/google/login/?process=login` a piena pagina. Dallo Sprint 66 l'API non accetta più la sessione Django: al ritorno da Google l'utente avrebbe una sessione ma nessun token, quindi il percorso va completato (sessione → token) prima di attivare il login Google. Login solo via email, verifica email disattivata (`ACCOUNT_EMAIL_VERIFICATION = "none"`). Credenziali da `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`: **oggi vuote in produzione**, quindi il login Google non è attivo. `LOGIN_REDIRECT_URL` non è impostato (vale il default Django) e il ritorno da Google non è stato verificato.
+- **Login Google.** django-allauth (`allauth.account`, `allauth.socialaccount`, provider Google, `SITE_ID = 1`), URL sotto `/accounts/` proxati da Caddy; la PWA apre `/accounts/google/login/?process=login` a piena pagina. Dallo Sprint 67 il pulsante compare solo se `GET /api/legal/` riporta `google_login_enabled` (vero se `GOOGLE_OAUTH_CLIENT_ID` è valorizzato). Dallo Sprint 66 l'API non accetta più la sessione Django: al ritorno da Google l'utente avrebbe una sessione ma nessun token, quindi il percorso va completato (sessione → token) prima di attivare il login Google. Login solo via email, verifica email disattivata (`ACCOUNT_EMAIL_VERIFICATION = "none"`). Credenziali da `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`: **oggi vuote in produzione**, quindi il login Google non è attivo. `LOGIN_REDIRECT_URL` non è impostato (vale il default Django) e il ritorno da Google non è stato verificato. Il percorso allauth salta anche le spunte dei consensi e il codice di invito. Le URL di allauth (`/accounts/*`, compresa la registrazione di allauth) restano comunque raggiungibili: un account creato da lì non ottiene un token per l'API ed è soggetto al gate.
 - Password solo come hash (default Django), validatori standard; lunghezza massima 128 caratteri in registrazione/login.
-- **Non esistono**: recupero o cambio password, cancellazione account, export dati.
+- **Cancellazione dell'account ed export dei dati** (Sprint 67): §5.15 e §5.16. **Non esiste** il cambio dell'indirizzo email (in `me` è in sola lettura).
 
 ### 3.8 Notifiche — Web Push
 
-Standard Web Push con chiavi VAPID (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CLAIMS_EMAIL`), invio con `pywebpush.webpush` (`apps/notifications/services.py`). La PWA legge la chiave pubblica da `GET /api/notifications/vapid-public-key/`, fa `PushManager.subscribe` e registra la sottoscrizione con `POST /api/notifications/push-subscriptions/` (`update_or_create` per utente + endpoint). Nessun servizio esterno a pagamento. Meccanismo di invio in §5.5. Non esiste un endpoint per annullare la sottoscrizione. Dallo Sprint 66 l'endpoint della sottoscrizione è accettato solo se `https`, senza porta esplicita né credenziali, con host di un push service noto (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`); al massimo 10 sottoscrizioni per utente (oltre si eliminano le più vecchie).
+Standard Web Push con chiavi VAPID (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CLAIMS_EMAIL`), invio con `pywebpush.webpush` (`apps/notifications/services.py`). La PWA legge la chiave pubblica da `GET /api/notifications/vapid-public-key/`, fa `PushManager.subscribe` e registra la sottoscrizione con `POST /api/notifications/push-subscriptions/` (`update_or_create` per utente + endpoint). Nessun servizio esterno a pagamento. Meccanismo di invio in §5.5. Non esiste un endpoint per annullare la sottoscrizione di un solo dispositivo; dallo Sprint 67 `PATCH /api/accounts/me/ {notifications_enabled: false}` elimina **tutte** le `PushSubscription` dell'utente (e la PWA annulla quella del browser corrente con `PushSubscription.unsubscribe()`), mentre la registrazione di una nuova sottoscrizione rimette `notifications_enabled = True`. Dallo Sprint 66 l'endpoint della sottoscrizione è accettato solo se `https`, senza porta esplicita né credenziali, con host di un push service noto (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`); al massimo 10 sottoscrizioni per utente (oltre si eliminano le più vecchie).
 
 ---
 
@@ -288,7 +305,7 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 | `first_name`, `last_name` | testo | Nome mostrato su CV, cover letter, firma dei messaggi e nei nomi file; se mancano si usa l'email di login |
 | `plan` | `free` \| `pro` (default `free`) | Piano; modificabile solo da Admin. Il passaggio Pro→Free disattiva tutte le ricerche (segnale in `apps/searches/signals.py`) |
 | `timezone` | testo, default `Europe/Rome` | Fuso per la notifica delle 10:00, per "oggi" della lista e delle statistiche. Nessuna UI per impostarlo (è scrivibile via `PATCH /api/accounts/me/`, solo con un nome IANA valido) |
-| `interface_language` | `it` \| `en` (default `it`) | Lingua dell'interfaccia; non usata dal backend |
+| `interface_language` | `it` \| `en` (default `it`) | Lingua dell'interfaccia; dal backend usata solo per la lingua delle email di servizio (Sprint 67; in registrazione arriva dalla PWA) |
 | `cv_language_mode` | `english` \| `job_language` (default `job_language`) | Lingua di CV, cover letter e messaggi |
 | `cv_include_photo` | bool (default false) | Foto nel CV on/off |
 | `objective_statement` | testo (max 2.000 via API) | Situazione/obiettivo raccolto in onboarding; **inerte** (non usato da nessun prompt) |
@@ -299,6 +316,10 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 | `extra_credit` | `Decimal(8,2)`, default 0 | Saldo del credito in euro; caricato da Admin, scalato e riaccreditato in modo atomico |
 | `collection_in_progress` | bool | Guardia di concorrenza della raccolta manuale (per utente) |
 | `collection_started_at` | datetime, null | Inizio della raccolta in corso; la guardia è considerata stantia dopo 2 ore o se il timestamp manca |
+| `email_verified` | bool (default false) | Sprint 67: indirizzo confermato dal link di verifica (o da un recupero password). Con l'invio email non configurato i nuovi account nascono già verificati; la migrazione dati `accounts/0010` ha marcato verificati tutti gli utenti esistenti. In sola lettura via API |
+| `notifications_enabled` | bool (default true) | Sprint 67: preferenza notifiche. Con false i task di notifica saltano l'utente; impostarla a false via `PATCH /me` elimina tutte le sue `PushSubscription`; registrare una sottoscrizione la rimette a true |
+
+Migrazioni dello Sprint 67: `accounts/0009_user_email_verified_legalacceptance` (i due campi sopra e il modello `LegalAcceptance`, §4.16) e `accounts/0010_mark_existing_users_verified` (migrazione dati).
 
 ### 4.2 `Profile` e sezioni (`apps/profiles/models.py`)
 
@@ -398,7 +419,7 @@ I massimali sono costanti nel codice (`MANUAL_CV_PLAN_LIMITS`, `COVER_LETTER_PLA
 
 ### 4.7 `RunLog` (diario tecnico)
 
-Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `failure`), `message`, `started_at`, `finished_at`. Non visibile all'utente; consultabile da Admin.
+Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `failure`), `message`, `started_at`, `finished_at`. Non visibile all'utente; consultabile da Admin. Alla cancellazione di un utente (Sprint 67) i suoi `RunLog` e quelli dei suoi job restano, con `user`/`job` a NULL (`SET_NULL`) e `message` svuotato (§5.15). Nessuna pulizia automatica dei `RunLog`.
 
 | `task_type` | Quando viene scritto |
 |---|---|
@@ -485,7 +506,18 @@ Il frontend ricarica il dettaglio del job ogni 20 minuti e quando la pagina torn
 
 **Foto profilo.** Alla scrittura (`ProfileSerializer.validate_photo` → `sanitize_photo`) è riaperta con Pillow e ricodificata da zero: solo JPEG/PNG/WebP, max 5 MB e 4000×4000 pixel, orientamento applicato ai pixel (`ImageOps.exif_transpose`), nessun metadato EXIF/GPS/XMP (resta solo il profilo colore). L'API non espone più il campo `photo` in lettura: `has_photo` (bool) e `photo_url` (firmato, `null` se assente). Il rendering PDF continua a leggerla dal filesystem (`file://{profile.photo.path}`, `generation._build_photo_url`).
 
+**Cancellazione dei file (Sprint 67).** I segnali di `apps/accounts/signals.py` eliminano il file su disco dopo il commit (`transaction.on_commit`) quando si cancella una riga `CVDocument`, `CoverLetterDocument` o `Profile` (`post_delete`), qualunque sia la strada (cancellazione dell'account, Django Admin, shell, cascata). `ProfileSerializer.update` cancella la foto precedente quando ne viene caricata una nuova: era l'unica fonte di file orfani, perché CV e cover letter creano sempre una riga nuova.
+
 **File esistenti.** Il comando idempotente `manage.py secure_media_files [--dry-run] [--delete-orphans]` rinomina con nomi casuali i file con nomi del vecchio schema aggiornando il DB (le foto vengono anche ricodificate come sopra) e, con `--delete-orphans`, elimina i file in `MEDIA_ROOT` non più referenziati da nessun record (versioni vecchie di foto, file di record cancellati).
+
+### 4.16 `LegalAcceptance` (Sprint 67)
+
+Registro delle accettazioni (`apps/accounts/models.py`): `user` (FK, `related_name="legal_acceptances"`, cascata), `document` (`privacy` | `terms` | `age`), `version` (20), `accepted_at` (default now); ordinamento per `accepted_at, id`.
+
+- **Solo inserimenti**: `save()` solleva `ValueError` su una riga già esistente; una nuova versione aggiunge righe e quelle vecchie restano come storico (si cancellano solo con l'account). In Admin è in sola lettura, senza aggiunta né modifica.
+- **Versioni correnti** come costanti in `apps/accounts/legal.py`: `PRIVACY_VERSION = TERMS_VERSION = "1.0"`, `PRIVACY_DATE = TERMS_DATE = "2026-11-14"` (data di entrata in vigore mostrata nelle pagine), `MIN_AGE = 16`; la versione della dichiarazione d'età è l'età minima stessa (`AGE_VERSION = "16"`), così un cambio del requisito richiede una nuova dichiarazione.
+- `missing_acceptances(user)`: documenti di cui manca la coppia (documento, versione corrente), calcolato con una query e memorizzato sull'oggetto `user` per la durata della richiesta. `record_acceptances(user, documents=None)`: `bulk_create` delle versioni correnti (tutte o solo quelle indicate). `public_legal_info()`: versioni, date, età minima e dati del titolare (`LEGAL_CONTROLLER_NAME`, `_ADDRESS`, `_EMAIL`, con `complete` vero se ci sono nome ed email).
+- Cambiare un testo in modo sostanziale = nuovo numero di versione e data in `legal.py` (e nei testi in `frontend/src/legal/` e `Docs/legal/`): tutti gli utenti rivedono la schermata di accettazione al primo accesso.
 
 ---
 
@@ -563,12 +595,12 @@ L'import non consuma credito. Lato frontend il pre-fill scarta date e `technolog
 
 ### 5.5 Notifiche: meccanismo
 
-Due task Beat ogni 15 minuti iterano su tutti gli utenti (`apps/notifications/tasks.py`):
+Due task Beat ogni 15 minuti iterano sugli utenti attivi con `notifications_enabled = True` (`apps/notifications/tasks.py`; filtro aggiunto nello Sprint 67, ricontrollato anche nella funzione per singolo utente):
 
 - **Mattutina** (`send_morning_notifications`): se l'ora locale dell'utente (`User.timezone`) è **10** (qualunque minuto tra 10:00 e 10:59) ed esiste almeno un `Job` con `date_collected > last_notified_at`, invia a tutte le sue `PushSubscription` il payload fisso "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista." e aggiorna `last_notified_at`. Il confronto col timestamp è la guardia anti doppio invio e gestisce i fusi a est (si annuncia il batch più recente non ancora annunciato). Contano tutti i job creati (raccolti, raccolta manuale, importati, manuali, anche senza punteggio).
 - **Inattività** (`send_inactivity_notifications`): se sono passati 7 giorni (`INACTIVITY_THRESHOLD`) da `last_activity_reset` e non è già stato inviato un promemoria per questo periodo (`last_inactivity_notified_at >= last_activity_reset`), invia "Non ti candidi da un po'" / "Entra nell'app e valuta le offerte in attesa." e aggiorna `last_inactivity_notified_at`.
 
-I testi sono solo in italiano. I timestamp vengono aggiornati anche se l'utente non ha sottoscrizioni o se gli invii falliscono. Dallo Sprint 66: `webpush(..., timeout=10)`; una risposta 404/410 del push service elimina la sottoscrizione; qualunque altro errore su una sottoscrizione viene registrato nel log (solo l'id, mai l'endpoint) e si prosegue con le altre; un errore su un utente non interrompe il giro degli utenti successivi.
+I testi sono solo in italiano. I timestamp vengono aggiornati anche se l'utente non ha sottoscrizioni o se gli invii falliscono; per un utente con le notifiche disattivate invece non vengono toccati, quindi alla riattivazione la prima notifica mattutina considera i job creati dall'ultima notifica inviata. Dallo Sprint 66: `webpush(..., timeout=10)`; una risposta 404/410 del push service elimina la sottoscrizione; qualunque altro errore su una sottoscrizione viene registrato nel log (solo l'id, mai l'endpoint) e si prosegue con le altre; un errore su un utente non interrompe il giro degli utenti successivi.
 
 ### 5.6 Raccolta manuale "Collect now" (Home)
 
@@ -689,6 +721,73 @@ Endpoint `…/cv-draft/chat/` e `…/cover-letter-draft/chat/` (moduli `draft_ch
 
 **Costi.** Un messaggio = un addebito, a prescindere dal numero di azioni proposte; nessun `RunLog` per i messaggi riusciti.
 
+### 5.14 Email di servizio (Sprint 67)
+
+Testo semplice, in italiano o in inglese secondo `User.interface_language` (`apps/accounts/emails.py`), oggetto con prefisso "App-apply — " e firma "email automatica: non rispondere". Mai dati del profilo nel corpo: solo il link o la conferma dell'operazione. Quattro tipi:
+
+| Tipo | Quando | Contenuto |
+|---|---|---|
+| `verify` | Registrazione con email attiva; reinvio | Link `/verify-email?t=…` (3 giorni) |
+| `already_registered` | Registrazione con un'email già registrata (email attiva) | Avviso del tentativo, link a `/login` e `/forgot-password` |
+| `password_reset` | Richiesta di recupero | Link `/reset-password?uid=…&token=…` (3 giorni, monouso) |
+| `account_deleted` | Dopo la cancellazione dell'account | Conferma, backup cancellati entro 7 giorni |
+
+I link sono costruiti da `PUBLIC_BASE_URL` (default `https://$DOMAIN`, in sviluppo `http://localhost:5173`).
+
+**Invio.** `send_templated_email` compone destinatario, oggetto e corpo e accoda il task `apps.accounts.tasks.send_service_email(to, subject, body)` con `.delay()`. Il task non legge il database, quindi funziona anche per un utente appena cancellato e non dipende dal commit della transazione che lo accoda; ritenta fino a 3 volte con backoff (`autoretry_for=OSError`, che comprende gli errori SMTP). Se il broker non risponde l'eccezione è registrata nel log (solo il tipo di email, mai l'indirizzo) e l'operazione dell'utente prosegue senza email.
+
+**Configurazione.** SMTP di Django pensato per Gmail con una password per le app: `EMAIL_HOST` (default `smtp.gmail.com`), `EMAIL_PORT` (587), `EMAIL_USE_TLS` (true), `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` (gli spazi con cui Google mostra la password sono ignorati), `DEFAULT_FROM_EMAIL` (default `EMAIL_HOST_USER`), `EMAIL_TIMEOUT = 20` s; `EMAIL_BACKEND` sovrascrivibile da env.
+
+**Senza credenziali** (`email_enabled()` falso): il task registra un warning e non invia; registrazione senza verifica (utenti già verificati, token subito), login senza controllo dell'indirizzo, reinvio della verifica e recupero password rispondono 503 `email_unavailable` (la PWA lo sa in anticipo da `GET /api/legal/` → `email_enabled` e mostra "non disponibile"). Nei test `EMAIL_BACKEND` locmem e credenziali azzerate (`TESTING`), così la suite lanciata nel container di produzione non legge le credenziali reali del `.env`.
+
+**Non enumerazione.** Con l'email attiva registrazione, reinvio e recupero rispondono allo stesso modo che l'indirizzo esista o no (§3.7); i limiti per indirizzo usano l'hash dell'email nella chiave di cache (§7.1).
+
+### 5.15 Cancellazione dell'account (Sprint 67)
+
+`POST /api/accounts/delete/ {password, confirm: true}` (`DeleteAccountView`, esente dal gate, throttle `password_check`):
+
+1. `DeleteAccountSerializer` verifica la password (400 `password` se errata) e `confirm is True` (400 altrimenti).
+2. Si salvano email e lingua dell'utente, che servono per l'email di conferma dopo la cancellazione.
+3. `delete_account(user)` (`apps/accounts/account_data.py`): `user.delete()` in una transazione. La cascata elimina profilo e sezioni, ricerche, job, CV, cover letter, bozze e chat, messaggi di networking, filtri preferiti, `DailyQuota`, `AuthToken` (tutti i dispositivi disconnessi), `PushSubscription` e `LegalAcceptance`.
+4. I segnali di `apps/accounts/signals.py` fanno la pulizia che la cascata non fa: `pre_delete` di `User` svuota `message` dei `RunLog` dell'utente e dei suoi job (le righe restano, con `user`/`job` a NULL per `SET_NULL`, come statistiche tecniche: il messaggio è il testo di un'eccezione e può contenere testo derivato dalle richieste); `post_delete` di `CVDocument`, `CoverLetterDocument` e `Profile` registra con `transaction.on_commit` la cancellazione del PDF o della foto su disco (un errore di file è solo registrato nel log). Valgono anche per una cancellazione da Django Admin o dalla shell.
+5. Email `account_deleted` all'indirizzo salvato (solo con l'endpoint dell'utente, non dall'Admin); risposta **204**.
+
+I dati restano nei backup locali fino alla loro rotazione (7 giorni, §5.18). Le copie delle email inviate restano nella cartella "Posta inviata" dell'account Gmail mittente (§11).
+
+### 5.16 Export dei dati (Sprint 67)
+
+Due passi, come per i PDF dello Sprint 66, perché un semplice link funziona anche nella PWA iOS (che non può aggiungere l'header `Authorization` a un download):
+
+1. `POST /api/accounts/export/` (autenticato, esente dal gate, throttle `data_export` **3 al giorno** per utente) → `200 {"url": "/api/accounts/export/download/?s=…"}`, firma `TimestampSigner(salt="apps.accounts.export")` sull'id utente, validità `EXPORT_URL_MAX_AGE` = 10 minuti. Il limite si applica qui, non al download.
+2. `GET /api/accounts/export/download/?s=…` (nessuna autenticazione): firma assente, manomessa o scaduta, o utente non attivo → 404; altrimenti `build_export(user)` genera lo ZIP **in modo sincrono** (`SpooledTemporaryFile`, in memoria fino a 20 MB, poi su disco) e lo restituisce come allegato `app-apply-dati-<id>.zip`, `Cache-Control: private, no-store`.
+
+Contenuto dello ZIP:
+- `README.txt`: spiegazione in italiano e in inglese;
+- `dati.json`: `exported_at`, `account` (campi dell'`User` rilevanti per l'utente, comprese preferenze, credito, timestamp di attività e notifica), `legal_acceptances` (storico completo), `profile` (con `experiences`, `educations`, `skills`, `certifications`, `languages` e `photo_file`), `saved_searches`, `jobs`, `cv_documents`, `cv_drafts`, `cover_letter_documents`, `cover_letter_drafts`, `referral_messages`, `job_filter_presets`, `daily_quotas`, `sessions` (`AuthToken`), `push_subscriptions`, `run_logs`; ogni documento ha un campo `file` con il percorso nell'archivio;
+- `files/`: `foto.<ext>`, `cv/cv_job<job>_<id>.pdf`, `cover_letter/cover_letter_job<job>_<id>.pdf` (un file mancante su disco è saltato con un warning).
+
+Esclusi: hash della password (non è tra i campi esportati), `key_hash` dei token, chiavi `p256dh`/`auth` delle sottoscrizioni push, `html_source` dei documenti (il PDF è già incluso), dati di altri utenti.
+
+### 5.17 Gate delle accettazioni legali (Sprint 67)
+
+1. **Registrazione**: le tre accettazioni si registrano con l'account (§3.7).
+2. **Utenti senza le versioni correnti** (registrati prima dello Sprint 67, o dopo un cambio di versione in `legal.py`): `GET /api/accounts/me/` (esente) riporta `legal_acceptance_required: true` e `legal_missing` (elenco dei documenti); `ProtectedRoute` mostra allora `LegalAcceptancePage` al posto di qualunque pagina protetta, senza barra di navigazione. Qualunque altra chiamata riceve 403 `legal_acceptance_required` e il client emette `LEGAL_REQUIRED_EVENT`, che fa ricaricare l'utente (§3.3).
+3. **Accettazione**: `POST /api/accounts/legal-acceptance/ {accept_privacy, accept_terms, confirm_age}` (tutti `true`, altrimenti 400) registra solo i documenti mancanti e restituisce l'utente aggiornato (`UserOnboardingSerializer`), con cui la PWA esce dalla schermata.
+4. **Alternative** dalla stessa schermata, tutte esenti dal gate: export dei dati, cancellazione dell'account, logout.
+
+Le pagine pubbliche `/privacy` e `/terms` (`LegalPage`, testi in `frontend/src/legal/PrivacyContent.jsx` e `TermsContent.jsx`) leggono da `GET /api/legal/` versioni, date, età minima e titolare; se `controller.complete` è falso mostrano l'avviso "dati del titolare da completare". Il footer `LegalFooter` con i due link è in tutte le pagine. Copia di riferimento dei testi, con i segnaposto, in `Docs/legal/` (it/en).
+
+### 5.18 Backup giornaliero (Sprint 21, rivisto nello Sprint 67)
+
+Task `apps.common.tasks.backup_database` (Beat, 03:30 Europe/Rome, eseguito dal `worker`), data del nome file = data del giorno (`AAAA-MM-GG`):
+
+1. **Dump**: `pg_dump -Fc` → `db-AAAA-MM-GG.dump` e `tar.gz` di `MEDIA_ROOT` (cartella `media/` nell'archivio) → `media-AAAA-MM-GG.tar.gz`.
+2. **Con `BACKUP_S3_BUCKET` valorizzato**: i due file, scritti in una cartella temporanea, sono caricati sul bucket S3-compatibile con boto3 (nessuna rotazione lato app).
+3. **Senza bucket (situazione di produzione)**: backup **locale** in `BACKUP_LOCAL_DIR` (default `<BASE_DIR>/backups`, cioè `/app/backups`, volume `local_backups`). I dump si scrivono in una cartella temporanea `.tmp-*` dentro il volume e poi si spostano con `os.replace` (un dump fallito non tocca quelli buoni né quello del giorno), con permessi `0600`; la cartella è `0700` (creata così dal `Dockerfile`).
+4. **Rotazione**: `rotate_local_backups` cancella i file `db-*`/`media-*` con data **nel nome** (non `mtime`) anteriore agli ultimi `BACKUP_LOCAL_KEEP_DAYS = 7` giorni, oggi compreso; i file con altri nomi (per esempio dump manuali) sono ignorati.
+
+Ripristino e stato in produzione in §8.4.
+
 ---
 
 ## 6. Generazione del CV in dettaglio
@@ -752,7 +851,7 @@ Valori in `rendering.py` (`COMPACT_LEVELS`) e in `cv_template.html`, fissati con
 - La PWA usa la data del browser per il default "oggi–oggi" del filtro date e per formattare le date mostrate.
 - Per fusi lontani da Roma restano piccole incoerenze accettate (reset quote in un'ora inattesa, freschezza del batch, spostamento DST).
 
-**Isolamento.** Tutte le view richiedono autenticazione per default (`DEFAULT_PERMISSION_CLASSES = IsAuthenticated`, Sprint 66): gli endpoint pubblici (registrazione, login, download firmati) dichiarano `AllowAny` esplicitamente. Ogni record è legato a un `user`; ogni queryset delle view filtra per l'utente autenticato (`get_object_or_404(Job, pk=pk, user=request.user)`, `filter(profile__user=…)`, ecc.): un oggetto di un altro utente restituisce 404. Coperto da `apps/common/test_multi_user_isolation.py`. I file degli utenti seguono la stessa regola tramite gli URL firmati (§4.15).
+**Isolamento.** Tutte le view richiedono autenticazione per default (`DEFAULT_PERMISSION_CLASSES = IsAuthenticated`, Sprint 66; dallo Sprint 67 insieme al gate `LegalAcceptanceRequired`, §3.7): gli endpoint pubblici (registrazione, login, verifica email, recupero password, `GET /api/legal/`, download firmati) dichiarano `AllowAny` esplicitamente. Ogni record è legato a un `user`; ogni queryset delle view filtra per l'utente autenticato (`get_object_or_404(Job, pk=pk, user=request.user)`, `filter(profile__user=…)`, ecc.): un oggetto di un altro utente restituisce 404. Coperto da `apps/common/test_multi_user_isolation.py`. I file degli utenti seguono la stessa regola tramite gli URL firmati (§4.15).
 
 ### 7.1 Limiti di frequenza e di input (Sprint 66)
 
@@ -768,6 +867,12 @@ Valori in `rendering.py` (`COMPACT_LEVELS`) e in `cv_template.html`, fissati con
 | `cv_import` | 10/ora per utente | `POST /api/profile/import-cv/` (oltre alla quota di 5/giorno) |
 | `chat` | 20/min per utente | `POST` delle due chat degli editor |
 | `draft_preview` | 60/min per utente | anteprime PDF delle bozze |
+| `email_request` | 10/ora per IP | Sprint 67: `POST` di `verify-email/resend/`, `password-reset/` e `password-reset/confirm/` (contatore condiviso tra i tre endpoint, stesso scope) |
+| `email_address` | 3/ora per email (hash) | Sprint 67: `verify-email/resend/` e `password-reset/` (`EmailAddressRateThrottle`): nessuno può usare l'app per inondare di email una casella altrui |
+| `password_check` | 10/ora per utente | Sprint 67: `password/change/` e `delete/` (tentativi di password) |
+| `data_export` | 3/giorno per utente | Sprint 67: `POST /api/accounts/export/` (non il download) |
+
+I contatori stanno nella cache Redis con la durata della propria finestra: il più lungo (`data_export`) dura 24 ore, il limite di conservazione dichiarato nell'informativa.
 
 **Django Admin.** La view di login è sostituita da `apps/accounts/admin_login.throttled_admin_login`: dopo 10 tentativi falliti dallo stesso IP in 15 minuti (finestra fissa dal primo errore, azzerata da un login riuscito) risponde 429. Path da `DJANGO_ADMIN_PATH` (con "/" finale, default `admin/`), da passare identico anche a Caddy.
 
@@ -807,13 +912,13 @@ In produzione si usa **solo** `docker-compose.prod.yml` (mai mescolato con `dock
 |---|---|---|
 | `db` | `postgres:16-alpine` | Database, volume `postgres_data`, healthcheck `pg_isready` |
 | `redis` | `redis:7-alpine` | Broker Celery (db 0/1) e cache Django (db 2: throttling) |
-| `web` | `./backend` | All'avvio `migrate` + `collectstatic`, poi `gunicorn --workers 4 --timeout 1800`; volumi `static_data`, `media_data` |
-| `worker` | `./backend` | `celery worker`; volume `media_data` |
+| `web` | `./backend` | All'avvio `migrate` + `collectstatic`, poi `gunicorn --workers 4 --timeout 1800`; volumi `static_data`, `media_data`, `local_backups` (Sprint 67, letto da `restore_backup`) |
+| `worker` | `./backend` | `celery worker` (task di Beat ed email di servizio); volumi `media_data`, `local_backups` (Sprint 67, scritto dal backup) |
 | `beat` | `./backend` | `celery beat` (`DatabaseScheduler`) |
 | `frontend-build` | `./frontend` | One-shot: `npm run build` nel volume `frontend_dist`, poi termina |
 | `caddy` | `caddy:2-alpine` | Porte 80/443, monta in sola lettura `static_data` e `frontend_dist` (non `media_data`, Sprint 66); access log nel volume `caddy_logs` |
 
-Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 file da 10 MB per container, Sprint 66). `web`, `worker` e `beat` girano come utente non privilegiato `app` (uid 1000, `backend/Dockerfile`): il codice è di root e in sola lettura, scrivibili solo `/app/staticfiles` e `/app/mediafiles`; `pg_dump` del backup e WeasyPrint funzionano senza privilegi. I volumi `media_data`/`static_data` creati prima dello Sprint 66 vanno passati a uid 1000 una volta (`DEPLOY.md` §4.5).
+Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 file da 10 MB per container, Sprint 66). `web`, `worker` e `beat` girano come utente non privilegiato `app` (uid 1000, `backend/Dockerfile`): il codice è di root e in sola lettura, scrivibili solo `/app/staticfiles`, `/app/mediafiles` e (Sprint 67) `/app/backups` (`0700`; un'eventuale cartella `backups/` locale non entra nell'immagine, esclusa da `.dockerignore`); il volume `local_backups` non è montato da `caddy`, quindi i backup non sono mai serviti; `pg_dump` del backup e WeasyPrint funzionano senza privilegi. I volumi `media_data`/`static_data` creati prima dello Sprint 66 vanno passati a uid 1000 una volta (`DEPLOY.md` §4.5).
 
 `web`, `worker` e `beat` condividono la stessa immagine: dopo una modifica al backend vanno ricostruiti tutti e tre. Il timeout di 1800 s e i 4 worker gunicorn servono alle operazioni sincrone (raccolta manuale con decine di job da scorare, generazioni): con 4 worker al massimo 4 operazioni lunghe possono essere in corso contemporaneamente su tutto il sito.
 
@@ -827,17 +932,20 @@ Dallo Sprint 66 Caddy aggiunge a tutte le risposte (sostituendo i valori equival
 
 Motivazioni (verificate sul bundle di build): nessuno script inline in `index.html` né `eval`, nessuna risorsa esterna; `'unsafe-inline'` negli stili perché le primitive Radix inseriscono elementi `<style>` a runtime; l'anteprima PDF degli editor è un `<iframe>` su un URL `blob:` (i documenti blob ereditano la policy, quindi servono `frame-src blob:` e `object-src blob:` per il visualizzatore PDF del browser; `frame-ancestors` e `X-Frame-Options` non si applicano ai documenti blob). Il service worker è `/sw.js` (stessa origine).
 
-**Access log** in JSON su file nel volume `caddy_logs` (`/var/log/caddy/access.log`), ruotato ogni 24 ore o a 10 MiB e cancellato dopo 14 giorni (`roll_keep_for 336h`); il parametro `s` dei download firmati è sostituito con `REDACTED`, gli header `Authorization`/`Cookie` e `Set-Cookie` sono rimossi. Log applicativo Django su stdout (`LOGGING`: errori 5xx di `django.request`, warning e log del package `apps`), mai token, header o query string.
+Lo Sprint 67 **non ha cambiato la CSP**: le nuove pagine (`/privacy`, `/terms`, verifica email, recupero password, schermata di accettazione) usano solo risorse della stessa origine; il link al sito del Garante e i `mailto:` del titolare sono navigazioni, non risorse caricate; il download dell'export è una navigazione verso `/api/...` (stessa origine).
+
+**Access log** in JSON su file nel volume `caddy_logs` (`/var/log/caddy/access.log`), ruotato ogni 24 ore o a 10 MiB e cancellato dopo 14 giorni (`roll_keep_for 336h`); i parametri `s` (download firmati ed export) e, dallo Sprint 67, `t` e `token` (link di verifica email e di recupero password, che aprono la PWA con il token nella query) sono sostituiti con `REDACTED`; gli header `Authorization`/`Cookie` e `Set-Cookie` sono rimossi e, dallo Sprint 67, anche `Referer`, che riporterebbe gli stessi token sulle chiamate API successive della pagina. Log applicativo Django su stdout (`LOGGING`: errori 5xx di `django.request`, warning e log del package `apps`), mai token, header o query string.
 
 ### 8.4 Backup
 
-- **Implementato**: task `apps.common.tasks.backup_database` (Beat, 03:30 Europe/Rome) che esegue `pg_dump -Fc` del database e un `tar.gz` di `MEDIA_ROOT` e li carica su un bucket S3-compatibile (`BACKUP_S3_ENDPOINT_URL`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY`, `BACKUP_S3_REGION`) con boto3. Ripristino con il comando `restore_backup AAAA-MM-GG --confirm` (`pg_restore --clean --if-exists`).
-- **Non configurato in produzione**: le variabili `BACKUP_S3_*` sono vuote, quindi il task registra solo un warning e **non esiste un backup automatico fuori dal VPS**. Esistono solo dump manuali locali nella cartella `backups/` (non versionata). Il ripristino end-to-end non è mai stato provato in produzione.
-- I PDF sono rigenerabili dall'HTML salvato, ma i file media (anche le foto) sono inclusi nel backup previsto.
+- **Task** `apps.common.tasks.backup_database` (Beat, 03:30 Europe/Rome): `pg_dump -Fc` del database e `tar.gz` di `MEDIA_ROOT`, caricati su un bucket S3-compatibile (`BACKUP_S3_ENDPOINT_URL`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY`, `BACKUP_S3_REGION`, boto3) se `BACKUP_S3_BUCKET` è valorizzato, altrimenti (Sprint 67) scritti nel volume locale `local_backups` (`BACKUP_LOCAL_DIR`, default `/app/backups`) come `db-AAAA-MM-GG.dump` e `media-AAAA-MM-GG.tar.gz`, file `0600`, cartella `0700`, scrittura in una cartella temporanea e poi spostamento, rotazione per data nel nome con conservazione degli ultimi `BACKUP_LOCAL_KEEP_DAYS = 7` giorni (costante nel codice). Flusso in §5.18.
+- **Ripristino**: `restore_backup AAAA-MM-GG --confirm` oppure `restore_backup --file <path> --confirm` (`pg_restore --clean --if-exists`; pensato per un ambiente di test separato). Con la data il dump si cerca sul bucket S3 se `BACKUP_S3_BUCKET` è valorizzato, altrimenti in `BACKUP_LOCAL_DIR`; senza `--confirm` o senza data/`--file` il comando rifiuta. Ripristina solo il database: l'archivio dei media va estratto a mano.
+- **In produzione** `BACKUP_S3_*` sono vuote, quindi è attivo il **backup locale**: i backup restano sullo stesso VPS dei dati (un guasto del disco li perde insieme), non sono cifrati e la copia fuori dal VPS è manuale (`DEPLOY.md` §6). Il ripristino end-to-end non è mai stato provato in produzione. I dump fatti a mano nella cartella `backups/` sul VPS (non versionata, fuori dal volume) non rientrano nella rotazione e vanno eliminati a mano.
+- I 7 giorni sono anche il termine, dichiarato nell'informativa, entro cui i dati di un account cancellato spariscono dai backup. I PDF sono rigenerabili dall'HTML salvato, ma i file media (anche le foto) sono inclusi nel backup.
 
 ### 8.5 Configurazione e segreti
 
-Solo variabili d'ambiente, lette in `config/settings.py`; `.env.example` alla radice documenta le chiavi, `.env` non è mai committato. Gruppi: Django (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_ADMIN_PATH`, `REGISTRATION_INVITE_CODE`), database (`POSTGRES_*`), Celery e cache (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `REDIS_CACHE_URL`), AI (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_*_MODEL`), Apify (`APIFY_API_TOKEN`, l'unica letta dal codice), Google OAuth (vuote in produzione), Web Push (`VAPID_*`), prezzi (`PRICE_*`, §4.6), deploy (`DOMAIN`, `CADDY_EMAIL`), backup (`BACKUP_S3_*`, vuote in produzione). Dopo una modifica a `.env` i container vanno ricreati, non solo riavviati. I massimali giornalieri e i parametri della pipeline CV sono invece costanti nel codice.
+Solo variabili d'ambiente, lette in `config/settings.py`; `.env.example` alla radice documenta le chiavi, `.env` non è mai committato. Gruppi: Django (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_ADMIN_PATH`, `REGISTRATION_INVITE_CODE`), titolare del trattamento (Sprint 67: `LEGAL_CONTROLLER_NAME`, `LEGAL_CONTROLLER_EMAIL`, `LEGAL_CONTROLLER_ADDRESS` facoltativo; mai nel repository, che è pubblico), email di servizio (Sprint 67: `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `PUBLIC_BASE_URL` per i link, default `https://$DOMAIN`), database (`POSTGRES_*`), Celery e cache (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `REDIS_CACHE_URL`), AI (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_*_MODEL`), Apify (`APIFY_API_TOKEN`, l'unica letta dal codice), Google OAuth (vuote in produzione; `GOOGLE_OAUTH_CLIENT_ID` decide anche se il pulsante compare), Web Push (`VAPID_*`), prezzi (`PRICE_*`, §4.6), deploy (`DOMAIN`, `CADDY_EMAIL`), backup (`BACKUP_S3_*`, vuote in produzione; `BACKUP_LOCAL_DIR`, Sprint 67). Dopo una modifica a `.env` i container vanno ricreati, non solo riavviati. I massimali giornalieri e i parametri della pipeline CV sono invece costanti nel codice.
 
 ### 8.6 Aggiornamenti di sicurezza
 
@@ -853,7 +961,7 @@ L'amministratore gestisce piani e credito **solo dal Django Admin** (`/admin/`),
 
 | Modello | Configurazione |
 |---|---|
-| `User` | `UserAdmin` di Django con un fieldset "App di ricerca lavoro": `plan`, `timezone`, `interface_language`, `cv_language_mode`, `cv_include_photo`, `objective_statement`, `extra_credit`, `last_activity_reset`, `last_notified_at`; in lista anche `plan` ed `extra_credit`. Non sono esposti `last_inactivity_notified_at`, `collection_in_progress`, `collection_started_at` |
+| `User` | `UserAdmin` di Django con un fieldset "App di ricerca lavoro": `plan`, `timezone`, `interface_language`, `cv_language_mode`, `cv_include_photo`, `objective_statement`, `extra_credit`, `last_activity_reset`, `last_notified_at` e, dallo Sprint 67, `email_verified`, `notifications_enabled`; in lista anche `plan` ed `extra_credit`. Non sono esposti `last_inactivity_notified_at`, `collection_in_progress`, `collection_started_at` |
 | `Profile` | Con inline di `Experience`, `Education`, `Skill`, `Certification`, `Language` |
 | `SavedSearch` | Lista con keywords, città, paese, utente, attiva |
 | `Job` | Lista con titolo, azienda, utente, source, origin, status, score, archiviato, `discarded_by_cap`; filtri e ricerca |
@@ -862,12 +970,15 @@ L'amministratore gestisce piani e credito **solo dal Django Admin** (`/admin/`),
 | `CVDocument` | Lista con job, utente, tipo, data |
 | `PushSubscription` | Lista con utente, endpoint, data |
 | `AuthToken` | Sprint 66: lista in sola lettura con utente, creazione, ultimo uso, user agent; nessuna aggiunta; eliminare una riga disconnette quel dispositivo |
+| `LegalAcceptance` | Sprint 67: registro in sola lettura (utente, documento, versione, data); nessuna aggiunta né modifica |
 
 Registrati automaticamente dalle librerie: sito e account social di allauth, PeriodicTask e pianificazioni di `django_celery_beat` (da qui si modificano gli orari dei task).
 
 **Non registrati**: `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument`, `JobFilterPreset`. Per consultarli serve la shell.
 
-Comandi di gestione: `set_e2e_account` e `seed_e2e_jobs` (solo con `DEBUG=True`, per i test e2e), `restore_backup`.
+Comandi di gestione: `set_e2e_account` e `seed_e2e_jobs` (solo con `DEBUG=True`, per i test e2e), `restore_backup` (S3 o cartella locale, oppure `--file`), `secure_media_files`.
+
+Un utente eliminato da Admin perde, grazie ai segnali di §5.15, anche i file su disco e il testo dei `RunLog`; non riceve però l'email di conferma, che parte solo dall'endpoint dell'utente.
 
 ---
 
@@ -895,24 +1006,24 @@ Rispetto al prototipo e alle prime versioni di questo documento sono venuti meno
 
 ## 11. Punti aperti e limiti tecnici noti
 
-Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (aggiornato allo Sprint 66, che ha chiuso i punti su import CV, token senza scadenza e invio push non protetto). Non sono decisioni: sono lo stato attuale, da valutare in sprint futuri. I punti aperti delle versioni precedenti già chiusi o superati (supporto multi-filtro dell'actor, distribuzione tra ricerche con tetto unico, compattamento del CV, prezzi e modelli "da fissare", formato di `Education`, overflow estremo) sono stati tolti. La numerazione è rifatta.
+Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (aggiornato allo Sprint 66, che ha chiuso i punti su import CV, token senza scadenza e invio push non protetto, e allo Sprint 67, che ha chiuso quelli su cancellazione ed export dei dati, recupero e cambio password, backup assente e notifiche non disattivabili: i punti 4, 5, 6, 11 e 22 sono stati riscritti con quello che resta aperto, i nuovi sono in coda dal 37). Non sono decisioni: sono lo stato attuale, da valutare in sprint futuri. I punti aperti delle versioni precedenti già chiusi o superati (supporto multi-filtro dell'actor, distribuzione tra ricerche con tetto unico, compattamento del CV, prezzi e modelli "da fissare", formato di `Education`, overflow estremo) sono stati tolti. La numerazione è rifatta.
 
 **Rischi di prodotto e conformità**
 
 1. **Conformità scraping LinkedIn.** Apify e la pagina guest di LinkedIn possono violare i termini di servizio di LinkedIn: rischio di blocco della fonte o legale, da rivalutare prima di un pubblico reale.
 2. **Dipendenza dal credito Apify.** Con il credito dell'account Apify esaurito ogni chiamata risponde 403 e nessun utente riceve offerte finché il token non viene cambiato (già successo; `DEPLOY.md` §7.1). Non c'è un avviso automatico.
 3. **Notifiche push su iPhone** solo con la PWA aggiunta alla Home: canale fragile proprio dove passa il valore principale del prodotto.
-4. **Privacy (GDPR).** Mancano cancellazione dell'account ed export dei dati (la cancellazione a cascata dall'`User` sarebbe semplice), recupero e cambio password.
+4. **Privacy (GDPR): residui dello Sprint 67.** Le funzioni di base esistono (§3.7, §5.14–§5.17). Restano: le **copie delle email** inviate via Gmail (indirizzo del destinatario e testo, mai dati del profilo) nella cartella "Posta inviata" dell'account mittente, anche dopo la cancellazione dell'account: vanno cancellate periodicamente a mano o la conservazione va dichiarata nell'informativa (decisione del committente); nessun cambio dell'indirizzo email dall'app; i `RunLog` degli utenti cancellati restano senza messaggio e non c'è una pulizia automatica dei `RunLog` in generale.
 
 **Infrastruttura e operatività**
 
-5. **Backup non operativo.** Il backup su storage esterno è implementato ma non configurato; nessun ripristino è mai stato provato (§8.4).
-6. **Login Google non attivo** in produzione (credenziali vuote), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Dallo Sprint 66 l'API accetta solo token: per attivarlo serve un passaggio sessione → token dopo il ritorno da Google (§3.7).
+5. **Backup solo sul VPS.** Senza storage S3 configurato il backup è locale (Sprint 67): un guasto del disco perde dati e backup insieme, la copia fuori dal VPS è manuale, i file non sono cifrati. `restore_backup` ripristina solo il database (i media vanno estratti a mano); nessun ripristino è mai stato provato in produzione (§8.4).
+6. **Login Google non attivo** in produzione (credenziali vuote; dallo Sprint 67 il pulsante è nascosto), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Dallo Sprint 66 l'API accetta solo token: per attivarlo servono un passaggio sessione → token dopo il ritorno da Google e la raccolta delle accettazioni e del codice di invito, che il flusso allauth salta (§3.7). Le URL di allauth (`/accounts/*`, compresa la sua registrazione) restano raggiungibili: un account creato da lì non ottiene un token ed è soggetto al gate (superficie di allauth: vedi anche il punto 41).
 7. **Operazioni lunghe sincrone in gunicorn.** Raccolta manuale e generazioni occupano un worker gunicorn per tutta la durata; con 4 worker, poche operazioni contemporanee bastano a rallentare tutto il sito. Un deploy o riavvio durante un'operazione la interrompe.
 8. **Flag transitori senza timeout.** `cv_generation_in_progress`, `cover_letter_generation_in_progress` e `referral_message_generation_in_progress` vengono spenti solo dal codice della richiesta; se il processo muore (timeout gunicorn → `SystemExit`, non intercettato da `except Exception`; riavvio) il flag resta acceso e il job resta bloccato per quel tipo di generazione, con la riserva di quota/credito non restituita. Solo la guardia della raccolta manuale ha uno sblocco automatico (2 ore).
 9. **Raccolta notturna fragile.** Un errore su un solo gruppo Apify fa perdere tutta la raccolta dell'utente; un errore durante la creazione dei job lascia job senza punteggio; i job senza punteggio non vengono mai ritentati. Il ciclo è sequenziale su tutti gli utenti in un unico task.
 10. **Nessuna guardia condivisa** tra raccolta manuale e notturna (doppie chiamate Apify possibili). Lo sblocco di una seconda raccolta manuale nello stesso giorno richiede la shell.
-11. **Notifiche.** Non esiste un modo per disattivare le notifiche dall'app né per annullare la sottoscrizione di un dispositivo al logout.
+11. **Notifiche.** Il logout non annulla la sottoscrizione push di quel dispositivo; la preferenza dello Sprint 67 vale solo per tutto l'account. Con la preferenza spenta `last_notified_at` non avanza, quindi alla riattivazione la prima notifica mattutina conta anche i job creati nel periodo di silenzio.
 12. **Osservabilità limitata.** `RunLog` registra solo i fallimenti per CV, cover letter, messaggi e chat (più il caso multi-pagina del CV); le generazioni riuscite, le offerte scartate dalla raccolta (campi mancanti, troppo lunghi, duplicati) e i consumi di quota/credito non lasciano traccia. Non esiste un registro contabile del credito.
 13. **Modelli non in Admin.** `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument` e `JobFilterPreset` non sono registrati; la lista `DailyQuota` mostra 2 contatori su 6; `User` in Admin non espone i campi della raccolta manuale e dell'inattività.
 14. **Costi AI e Apify non stimati.** Senza tetto per notte il costo della raccolta cresce con il numero di gruppi (ogni chiamata fattura almeno 150 risultati) e quello dello scoring con il numero di offerte raccolte; nessuna soglia o monitoraggio è definito.
@@ -926,8 +1037,8 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 19. **Job manuale senza restituzione**: se qualcosa fallisce dopo la riserva la quota resta consumata (lo scoring fallito non fa fallire la richiesta).
 20. **Scoring.** Il cap lingua dipende dal fatto che il modello segnali la lingua richiesta; il prefisso del cap è sempre in italiano; la località del job non è passata al modello; i punteggi storici su 1–5 si mescolano a quelli su 1–10 in ordinamento, filtro e colori.
 21. **Ricerche salvate.** La `PATCH` che cambia il tipo di una ricerca attiva non ricontrolla i limiti di piano; su Free la disattivazione automatica della ricerca precedente non è segnalata dalla UI.
-22. **Profilo.** `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo; le foto e le versioni precedenti dei documenti restano su disco finché non si esegue `secure_media_files --delete-orphans`.
-23. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese.
+22. **Profilo.** `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo. Dallo Sprint 67 la foto sostituita e i file dei record cancellati vengono eliminati (§4.15); eventuali orfani precedenti restano finché non si esegue `secure_media_files --delete-orphans`.
+23. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese; fanno eccezione le email di servizio (it/en, Sprint 67).
 24. **Commenti e docstring superati** nel codice: "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft` ("generare un nuovo CV sovrascrive il draft") e di `CoverLetterDraft`; nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md`.
 
 **Editor e chat**
@@ -951,20 +1062,40 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 
 36. **Parametri della pipeline CV** (budget 18/16/14, minimo 2 bullet garantiti, 4 iterazioni di ripiego, 5 esperienze) e prezzi del listino sono valori da tarare con l'uso reale; sono costanti nel codice o variabili d'ambiente, senza impatto architetturale.
 
+**Privacy, account ed email (Sprint 67)**
+
+37. **Gate legato a una convenzione.** Una view che dichiara `permission_classes` è esente dal gate delle accettazioni: una view futura che ripete `permission_classes = [IsAuthenticated]` lo aggira senza errori. La regola va rispettata a mano: `test_privacy.py` verifica il 403 solo su un campione di endpoint (lista job, ricerche, profilo, chiave VAPID), non su tutte le view.
+38. **Email via Celery.** Se il `worker` è fermo le email restano in coda; se il broker non risponde l'email è persa (solo un log). Nessun avviso all'utente; consegna e antispam di Gmail non sono stati verificati.
+39. **Export sincrono** nella richiesta, senza limite di dimensione: per account con moltissimi PDF occupa un worker gunicorn per qualche secondo.
+40. **Onboarding dopo la verifica email.** Con l'email attiva il pulsante della pagina `/verify-email` porta a `/login?next=/onboarding` e il login prosegue nell'onboarding (`next` accetta solo quel percorso); un login fatto in altro modo porta alla lista (`/list`) e l'onboarding, con l'import del CV, non viene proposto.
+41. **Fuori perimetro dall'audit dello Sprint 66**, non affrontati: restrizione dell'admin per IP e superficie di allauth (M5), race condition minori sulle ricerche (B4), delimitazione dei contenuti di terzi nei prompt (B6).
+42. **Testi legali con data fissa.** `PRIVACY_DATE`/`TERMS_DATE` sono costanti in `legal.py`; i testi della PWA (`frontend/src/legal/`) e la copia in `Docs/legal/` vanno tenuti allineati a mano, senza controllo automatico.
+43. *(Risolto nello Sprint 67: il dialogo della PWA annuncia l'email di conferma solo con `email_enabled` di `GET /api/legal/`.)*
+
 ---
 
 ## 12. API REST
 
-Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedono autenticazione (header `Authorization: Token …`, §3.7; la sessione Django non è accettata dall'API) e restituiscono 401 senza credenziali o con token scaduto/revocato. Oltre i limiti di frequenza (§7.1) rispondono 429. Ogni oggetto è filtrato sull'utente autenticato: un id di un altro utente dà **404**. Le risposte d'errore hanno la forma `{"detail": "…"}` (o gli errori per campo di DRF per i 400 di validazione). Prefissi da `backend/config/urls.py`; route in `apps/*/urls.py`.
+Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedono autenticazione (header `Authorization: Token …`, §3.7; la sessione Django non è accettata dall'API) e restituiscono 401 senza credenziali o con token scaduto/revocato. Dallo Sprint 67 gli endpoint autenticati sono anche soggetti al **gate delle accettazioni** (§3.7, §5.17): 403 `{"code": "legal_acceptance_required"}` finché l'utente non ha accettato le versioni correnti; nelle tabelle sono indicati gli endpoint **esenti** e quelli **pubblici** (senza autenticazione, quindi fuori dal gate). Oltre i limiti di frequenza (§7.1) rispondono 429. Ogni oggetto è filtrato sull'utente autenticato: un id di un altro utente dà **404**. Le risposte d'errore hanno la forma `{"detail": "…"}` (o gli errori per campo di DRF per i 400 di validazione). Prefissi da `backend/config/urls.py`; route in `apps/*/urls.py`.
 
 ### 12.1 Account, profilo, ricerche, notifiche
 
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
-| POST | `/api/accounts/register/` | Registrazione `{email, password, invite_code?}` (pubblico; `invite_code` obbligatorio se `REGISTRATION_INVITE_CODE` è valorizzato) | 201 `{token}`; 400 validazione o codice di invito errato; 429 |
-| POST | `/api/accounts/login/` | Login (pubblico); crea un nuovo token per questo dispositivo | 200 `{token}`; 400 credenziali errate (messaggio generico); 429 |
-| POST | `/api/accounts/logout/` | Revoca il token della richiesta (Sprint 66) | 204; 401 |
-| GET, PATCH | `/api/accounts/me/` | Dati utente e preferenze: `id, email, first_name, last_name, plan, extra_credit, timezone, interface_language, cv_language_mode, cv_include_photo, objective_statement` (read-only: id, email, plan, extra_credit) | 200; 400 |
+| POST | `/api/accounts/register/` | Registrazione `{email, password, invite_code?, interface_language?, accept_privacy, accept_terms, confirm_age}` (pubblico; `invite_code` obbligatorio se `REGISTRATION_INVITE_CODE` è valorizzato; le tre accettazioni devono essere `true`, Sprint 67) | Email non configurata: 201 `{token, verification_required: false}`, 400 anche per email già registrata. Email configurata: sempre 201 `{verification_required: true}` senza token, anche per un'email già registrata (non enumerazione, §3.7). 400 validazione, consensi mancanti o codice di invito errato; 429 |
+| POST | `/api/accounts/login/` | Login (pubblico); crea un nuovo token per questo dispositivo | 200 `{token}`; 400 credenziali errate (messaggio generico); 403 `{code: "email_not_verified"}` con email configurata e indirizzo non confermato, solo dopo una password corretta (Sprint 67); 429 |
+| POST | `/api/accounts/logout/` | Revoca il token della richiesta (Sprint 66); **esente** dal gate | 204; 401 |
+| GET, PATCH | `/api/accounts/me/` | Dati utente e preferenze: `id, email, first_name, last_name, plan, extra_credit, timezone, interface_language, cv_language_mode, cv_include_photo, objective_statement`; dallo Sprint 67 `email_verified`, `notifications_enabled` (scrivibile: `false` elimina tutte le `PushSubscription`), `legal_acceptance_required`, `legal_missing` (documenti mancanti), `legal_acceptances` (per documento: ultima `version` e `accepted_at`). Read-only: id, email, plan, extra_credit, email_verified e i tre campi `legal_*`. **Esente** dal gate | 200; 400 |
+| GET | `/api/legal/` | Sprint 67, **pubblico** (nessuna autenticazione): `{privacy: {version, date}, terms: {version, date}, min_age, controller: {name, address, email, complete}, google_login_enabled, email_enabled}` | 200 |
+| POST | `/api/accounts/legal-acceptance/` | Sprint 67: accettazione delle versioni correnti `{accept_privacy, accept_terms, confirm_age}` (tutti `true`); registra solo i documenti mancanti. **Esente** dal gate | 200 utente come `me`; 400 |
+| POST | `/api/accounts/verify-email/` | Sprint 67, **pubblico**: conferma dell'indirizzo `{token}` (§3.7) | 200 `{status: "verified"}`; 400 `{code: "expired" \| "invalid"}` |
+| POST | `/api/accounts/verify-email/resend/` | Sprint 67, **pubblico**: nuovo link `{email}`, inviato solo a un account attivo non verificato | 200 `{status: "sent_if_registered"}` in ogni caso; 400 email non valida; 429 (`email_request`, `email_address`); 503 `{code: "email_unavailable"}` senza email configurata |
+| POST | `/api/accounts/password-reset/` | Sprint 67, **pubblico**: richiesta di recupero `{email}` | Come il reinvio: 200 `{status: "sent_if_registered"}`; 400; 429; 503 |
+| POST | `/api/accounts/password-reset/confirm/` | Sprint 67, **pubblico**: `{uid, token, new_password}`; revoca tutti i token | 200 `{status: "password_reset"}`; 400 `{code: "invalid_link"}` o errori su `new_password`; 429 (`email_request`) |
+| POST | `/api/accounts/password/change/` | Sprint 67: `{old_password, new_password}`; revoca tutti i token. **Esente** dal gate | 200 `{token}` (nuovo token per questo dispositivo); 400 password attuale errata o nuova non valida; 429 (`password_check`) |
+| POST | `/api/accounts/delete/` | Sprint 67: cancellazione immediata `{password, confirm: true}` (§5.15). **Esente** dal gate | 204; 400 password errata o conferma mancante; 429 (`password_check`) |
+| POST | `/api/accounts/export/` | Sprint 67: URL firmato dell'export (§5.16). **Esente** dal gate | 200 `{url}` (valido 10 minuti); 429 oltre 3 al giorno (`data_export`) |
+| GET | `/api/accounts/export/download/?s=…` | Sprint 67, **pubblico** (URL firmato, nessun header di autenticazione): ZIP generato al momento | 200 `application/zip` allegato `app-apply-dati-<id>.zip`, `Cache-Control: private, no-store`; 404 firma assente/manomessa/scaduta o utente non attivo |
 | GET, PATCH | `/api/profiles/me/` | Profilo dell'utente (creato se manca); PATCH JSON o multipart per la foto (`photo` solo in scrittura; in lettura `has_photo` e `photo_url` firmato, §4.15) | 200; 400 (anche foto non ammessa) |
 | GET, PUT, PATCH | `/api/profiles/<id>/` | Stesso profilo per id (solo il proprio) | 200; 404 |
 | GET, POST | `/api/experiences/`, `/api/educations/`, `/api/skills/`, `/api/certifications/`, `/api/languages/` | Elenco e creazione delle voci del profilo | 200; 201; 400 (es. lingua/livello fuori lista) |
@@ -976,9 +1107,9 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 | POST | `/api/searches/<id>/deactivate/` | Disattiva | 200 |
 | GET | `/api/searches-city-autocomplete/?q=` | Proxy Nominatim (min 2 caratteri, max 8 risultati, cache 1 h) | 200 lista `{city, country…}`, `[]` anche su errore di rete |
 | GET | `/api/notifications/vapid-public-key/` | Chiave pubblica VAPID | 200 `{public_key}` |
-| POST | `/api/notifications/push-subscriptions/` | Registra/aggiorna la sottoscrizione `{endpoint, keys:{p256dh, auth}}`; endpoint solo verso push service noti (§3.8), max 10 per utente | 201; 400 |
+| POST | `/api/notifications/push-subscriptions/` | Registra/aggiorna la sottoscrizione `{endpoint, keys:{p256dh, auth}}`; endpoint solo verso push service noti (§3.8), max 10 per utente; dallo Sprint 67 rimette `notifications_enabled = true` | 201; 400 |
 | GET | `/api/` | Radice del router DRF (autenticata; navigabile solo con `DEBUG=True`) | 200; 401 |
-| GET | `/api/files/cv/<doc_id>/?s=…`, `/api/files/cover-letter/<doc_id>/?s=…` | Download del PDF con URL firmato (Sprint 66, §4.15); **nessun header di autenticazione richiesto** | 200 PDF allegato, `Cache-Control: private, no-store`; 404 firma assente/manomessa/scaduta o documento non dell'utente della firma |
+| GET | `/api/files/cv/<doc_id>/?s=…`, `/api/files/cover-letter/<doc_id>/?s=…` | Download del PDF con URL firmato (Sprint 66, §4.15); **nessun header di autenticazione richiesto** (pubblico, fuori dal gate) | 200 PDF allegato, `Cache-Control: private, no-store`; 404 firma assente/manomessa/scaduta o documento non dell'utente della firma |
 | GET | `/api/files/photo/?s=…` | Foto profilo con URL firmato | 200 immagine inline; 404 come sopra |
 
 ### 12.2 Job: lista, azioni, raccolta, import
@@ -1027,7 +1158,7 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 | Path | Scopo |
 |---|---|
 | `/admin/` (o `DJANGO_ADMIN_PATH`) | Django Admin (sessione, utenti staff); login limitato a 10 errori per IP in 15 minuti (429) |
-| `/accounts/…` | django-allauth (login Google: `/accounts/google/login/`, callback) |
+| `/accounts/…` | django-allauth (login Google: `/accounts/google/login/`, callback); raggiungibile anche se il pulsante è nascosto (§3.7) |
 | `/static/…` | Servito direttamente da Caddy in produzione |
 | `/media/…` | **Mai servito** (404 da Caddy; nessuna rotta Django): i file si scaricano da `/api/files/…` |
 
@@ -1037,7 +1168,7 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 
 ### 13.1 Suite backend
 
-299 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 66)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
+345 test Django (`python manage.py test`; 299 allo Sprint 66), **tutti verdi il 2026-11-14 (Sprint 67)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3, `pg_dump`/`pg_restore`) sono sempre simulate con mock; le email usano il backend locmem e i task Celery girano in linea (`CELERY_TASK_ALWAYS_EAGER`). Nei test sono spenti il gate delle accettazioni (`LEGAL_GATE_ENABLED`), l'invio email e il codice di invito del `.env`, riaccesi con `override_settings` nei test dedicati (§3.7, §5.14).
 
 | File | Test | Cosa copre |
 |---|---|---|
@@ -1049,9 +1180,10 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 | `apps/common/test_multi_user_isolation.py` | 11 | Isolamento dei dati tra utenti sulle API |
 | `apps/searches/tests.py` | 10 | Limiti di piano delle ricerche, attivazione per tipo su Free, downgrade, modifica |
 | `apps/profiles/tests.py` | 7 | API del profilo (foto: `has_photo` e `photo_url` firmato); import CV (4 test, di cui 2 con `call_claude_structured` simulato) |
-| `apps/common/tests.py` | 5 | Schedulazione e task di backup, comando `restore_backup` |
+| `apps/common/tests.py` | 8 | Schedulazione del backup alle 03:30, backup su S3 simulato; Sprint 67: backup locale con `pg_dump` simulato e rotazione a 7 giorni, file con altri nomi ignorati dalla rotazione, dump fallito che non tocca i backup esistenti; `restore_backup` (rifiuto senza `--confirm`, backup locale mancante, ripristino dalla cartella locale e da `--file`) |
 | `apps/accounts/tests.py` | 7 | `/me` (plan e credito esposti e read-only, nome modificabile, nessun lost update di `extra_credit`, fuso orario validato), comando `set_e2e_account` |
-| `apps/accounts/test_security.py` | 21 | Sprint 66: token (solo hash nel DB, un token per login/dispositivo, logout revoca solo il corrente, scadenza a 30 giorni di inattività con scorrimento, `last_used_at` al più ogni ora, `revoke_all_tokens`), errore di login generico, permessi di default e sessione non accettata dall'API, codice di invito (errato, mancante, corretto, vuoto = aperta, nessuna rivelazione dell'email), throttling di login per IP e per email e della registrazione, limite dei login falliti all'admin |
+| `apps/accounts/test_privacy.py` | 43 | Sprint 67: spunte obbligatorie in registrazione e versioni registrate, `LegalAcceptance` append-only; gate (403 con codice su un campione di endpoint, endpoint esenti, accettazione che riapre l'app, nuova versione che richiude il gate, 401 prima del gate); `/api/legal/` (versioni, titolare incompleto, flag Google); verifica email (link valido, scaduto, manomesso, lingua dell'email, login bloccato solo dopo la password corretta, reinvio generico e limitato per indirizzo, non enumerazione in registrazione); migrazione `0010`; flusso senza email configurata (registrazione come prima, login non bloccato, duplicati segnalati, reset e reinvio 503, task che non invia); recupero password (risposta identica per indirizzi noti e sconosciuti, reset che cambia la password e revoca tutti i token, link non valido, password debole); cambio password (errori, revoca e nuovo token); cancellazione (password/conferma mancanti, nessuna riga residua su **tutte** le FK verso `User` e nessun file su disco, cancellazione fuori dall'endpoint pulita dai segnali, token non più valido); export (contenuto completo, niente hash/chiavi/dati di altri utenti, firma, 3 al giorno, funzionante senza accettazioni); foto sostituita cancellata; preferenza notifiche (sottoscrizioni eliminate, task che saltano l'utente, riattivazione con una nuova sottoscrizione) |
+| `apps/accounts/test_security.py` | 21 | Sprint 66: token (solo hash nel DB, un token per login/dispositivo, logout revoca solo il corrente, scadenza a 30 giorni di inattività con scorrimento, `last_used_at` al più ogni ora, `revoke_all_tokens`), errore di login generico, permessi di default e sessione non accettata dall'API, codice di invito (errato, mancante, corretto, vuoto = aperta, nessuna rivelazione dell'email), throttling di login per IP e per email e della registrazione, limite dei login falliti all'admin. Dallo Sprint 67 le registrazioni dei test inviano le tre spunte |
 | `apps/common/test_files.py` | 19 | Sprint 66: download firmati (proprietario senza header, altro utente, firma assente/manomessa/scaduta/di un altro tipo o documento → 404, `/media/` non servito, header di risposta), URL firmati nel `JobSerializer`, nomi casuali, foto (EXIF/GPS rimossi e orientamento applicato, formato/dimensioni/peso, URL firmato), comando `secure_media_files` (dry-run, rinomina idempotente con ricodifica delle foto, orfani) |
 | `apps/jobs/test_input_limits.py` | 16 | Sprint 66: limiti di lunghezza (descrizione job manuale, messaggi di chat, indicazioni cover letter, gap, destinatario), validazione del `content_json` delle bozze CV e cover letter in PATCH e anteprima, import CV (5 MB, formato dai primi byte, 10 pagine, troncamento del testo, quota giornaliera, errore AI → 502 con quota restituita), limiti dei bullet del profilo |
 | `apps/searches/test_geo.py` | 4 | Proxy di autocomplete città (con una LocMemCache: nei test la cache di default è una DummyCache) |
@@ -1062,10 +1194,12 @@ Prima di chiudere uno sprint che tocca i modelli va eseguito anche `makemigratio
 
 In `frontend/e2e/` (`npm run test:e2e`, configurazione `playwright.config.js`, base URL da `E2E_BASE_URL`), con account e job preparati dai comandi `set_e2e_account` e `seed_e2e_jobs` (richiedono `DEBUG=True`):
 
-- `auth-onboarding.spec.js`: registrazione e onboarding manuale, raggruppamento esperienze per azienda, login errato, lingua dell'interfaccia (browser it/en, switcher);
+- `auth-onboarding.spec.js`: registrazione (con le tre spunte dei consensi, Sprint 67) e onboarding manuale, raggruppamento esperienze per azienda, login errato, lingua dell'interfaccia (browser it/en, switcher);
 - `account.spec.js`: piano e saldo, ciclo di vita di una ricerca salvata, limite di piano, persistenza delle impostazioni, istruzione iOS per le push;
 - `job-list.spec.js`: sezioni, filtri (punteggio, stato, location, ricerca multi-selezione, candidati, recruiter), ricerca testuale, archivio con annulla e swipe, generazione CV (pulsante disabilitato), link annuncio e candidatura senza CV, espandi motivazioni, badge candidati e icona recruiter, preferiti, filtri preferiti;
 - `push-subscription.spec.js`: sottoscrizione push verificata lato backend (endpoint finto su `fcm.googleapis.com`, per passare l'allowlist dello Sprint 66).
+
+Dallo Sprint 67 le registrazioni via API degli spec inviano `accept_privacy`, `accept_terms`, `confirm_age` e usano il token della risposta: presuppongono quindi un backend **senza invio email configurato** (con l'email attiva la registrazione non restituisce token). Gli e2e non sono stati rilanciati nello Sprint 67.
 
 L'esecuzione degli e2e non è documentata negli ultimi sprint. `job-list.spec.js` contiene ancora il test "arricchimento con 'salva anche nel profilo'", relativo a una funzione rimossa nello Sprint 44: con il codice attuale non può passare.
 
@@ -1080,6 +1214,9 @@ L'esecuzione degli e2e non è documentata negli ultimi sprint. `job-list.spec.js
 - filtro di grounding su skill/certificazioni del CV (`_filter_grounded_skills`), etichette nelle 5 lingue, grassetto nel PDF;
 - normalizzazione delle lingue (`profiles/0007`), validazione delle choices di `Language`, `Profile.email`;
 - login Google;
+- invio reale delle email via Gmail (consegna, antispam) e i flussi completi nella PWA in un browser: registrazione → email → verifica, recupero password dal link, export su iOS, schermata di accettazione, pagine legali, preferenza notifiche (Sprint 67; i backend sono coperti da `test_privacy.py`, il frontend no);
+- accesso ai profili Bedrock `eu.` dall'account AWS (non verificato);
+- access log di Caddy con i nuovi parametri oscurati (verificato solo con `caddy validate`);
 - renderer solo JSON con `DEBUG=False` (i test girano con `DEBUG=True`), header di Caddy e CSP (verificati solo con `caddy validate` e una prova manuale);
 - frontend senza test unitari: editor, chat, Home e dialog di cover letter e messaggi non hanno test e2e.
 

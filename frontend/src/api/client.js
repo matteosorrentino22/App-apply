@@ -24,6 +24,10 @@ export class ApiError extends Error {
 // per inattività o revocata, Sprint 66): AuthContext lo ascolta e riporta
 // l'utente al login.
 export const AUTH_EXPIRED_EVENT = 'app-apply:auth-expired'
+// Evento emesso quando il backend risponde 403 `legal_acceptance_required`
+// (Sprint 67: nuova versione di informativa/termini non ancora accettata):
+// AuthContext ricarica l'utente e la PWA mostra la schermata di accettazione.
+export const LEGAL_REQUIRED_EVENT = 'app-apply:legal-required'
 
 // Wrapper minimo su fetch: aggiunge il token se presente e normalizza gli
 // errori in ApiError. Percorsi relativi (`/api/...`): in dev il proxy di
@@ -58,6 +62,9 @@ export async function apiFetch(path, { method = 'GET', body, isMultipart = false
   if (response.status === 401 && token) {
     setToken(null)
     window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+  }
+  if (response.status === 403 && data?.code === 'legal_acceptance_required') {
+    window.dispatchEvent(new Event(LEGAL_REQUIRED_EVENT))
   }
   if (!response.ok) {
     throw new ApiError(response.status, data)

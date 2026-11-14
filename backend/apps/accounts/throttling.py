@@ -19,6 +19,14 @@ class LoginEmailRateThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
+class EmailAddressRateThrottle(LoginEmailRateThrottle):
+    """Stesso schema per le email inviate su richiesta (Sprint 67: reinvio
+    della verifica, recupero password): poche per indirizzo, così nessuno
+    può usare l'app per inondare di email una casella altrui."""
+
+    scope = "email_address"
+
+
 class PostOnlyScopeMixin:
     """`ScopedRateThrottle` si applica a tutti i metodi della view: qui serve
     solo sul POST (per esempio il messaggio di chat, non la lettura della

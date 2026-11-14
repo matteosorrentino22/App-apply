@@ -8,6 +8,7 @@ import {
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
+import AiNotice from '@/components/AiNotice'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
@@ -190,22 +191,25 @@ export default function CoverLetterChatPanel({ open, jobId, content, onApplyActi
 
       {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
-      <div className="flex items-end gap-2 border-t border-border bg-muted/30 p-3">
-        <Textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              handleSend()
-            }
-          }}
-          placeholder={t('cvEditor.chatPlaceholder')}
-          className="min-h-10 flex-1 resize-none"
-        />
-        <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
-          {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
-        </Button>
+      <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-3">
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder={t('cvEditor.chatPlaceholder')}
+            className="min-h-10 flex-1 resize-none"
+          />
+          <Button type="button" disabled={sending || !input.trim()} onClick={handleSend}>
+            {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
+          </Button>
+        </div>
+        <AiNotice className="text-[11px]" />
       </div>
     </div>
   )

@@ -39,7 +39,8 @@ def _send_to_all_subscriptions(user, payload):
 
 
 def _for_each_user(task_name, function):
-    for user in User.objects.all():
+    # Solo chi ha le notifiche attive (preferenza di Impostazioni, Sprint 67).
+    for user in User.objects.filter(is_active=True, notifications_enabled=True):
         try:
             function(user)
         except Exception:
@@ -65,7 +66,7 @@ def send_morning_notification_for_user(user):
     definizione "raccolti dopo l'ultima notifica" copre anche gli utenti a
     est dell'Europa la cui giornata locale inizia prima del batch 02:00
     Europe/Rome."""
-    if not _is_around_ten_local(user):
+    if not user.notifications_enabled or not _is_around_ten_local(user):
         return False
 
     has_new_jobs = Job.objects.filter(
@@ -93,6 +94,8 @@ def send_inactivity_notification_for_user(user):
     evita che il task, ripetuto ogni ~15 minuti, rinvii la stessa notifica
     per tutta la durata dell'inattività: una volta inviata, non riparte
     finché `last_activity_reset` non cambia (nuova candidatura)."""
+    if not user.notifications_enabled:
+        return False
     if dj_timezone.now() - user.last_activity_reset < INACTIVITY_THRESHOLD:
         return False
     if (

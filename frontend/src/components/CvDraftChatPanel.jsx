@@ -4,6 +4,7 @@ import { fetchCvDraftChat, recordCvDraftChatDecision, sendCvDraftChatMessage } f
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
+import AiNotice from '@/components/AiNotice'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
@@ -290,6 +291,7 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
             {sending ? t('cvEditor.chatSending') : t('cvEditor.chatSend')}
           </Button>
         </div>
+        <AiNotice className="text-[11px]" />
       </div>
     </div>
   )

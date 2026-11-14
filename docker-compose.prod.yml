@@ -51,6 +51,9 @@ services:
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/mediafiles
+      # Backup locali ruotati (Sprint 67): scritti dal task backup_database
+      # nel worker, letti da restore_backup; mai serviti da Caddy.
+      - local_backups:/app/backups
     env_file:
       - .env
     depends_on:
@@ -66,6 +69,7 @@ services:
     command: celery -A config worker -l info
     volumes:
       - media_data:/app/mediafiles
+      - local_backups:/app/backups
     env_file:
       - .env
     depends_on:
@@ -138,3 +142,4 @@ volumes:
   caddy_data:
   caddy_config:
   caddy_logs:
+  local_backups:
