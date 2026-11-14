@@ -27,6 +27,7 @@ from .views import (
     ReferralMessageInstructionsView,
     ReferralMessageListView,
     UnarchiveJobView,
+    UndoApplicationDoneView,
     UnfavoriteJobView,
 )
 
@@ -117,5 +118,10 @@ urlpatterns = [
         "jobs/<int:pk>/mark-application-done/",
         MarkApplicationDoneView.as_view(),
         name="job-mark-application-done",
+    ),
+    path(
+        "jobs/<int:pk>/undo-application-done/",
+        UndoApplicationDoneView.as_view(),
+        name="job-undo-application-done",
     ),
 ]

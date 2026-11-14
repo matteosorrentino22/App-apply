@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.jobs.models import DailyQuota, Job, RunLog
+from apps.jobs.models import DailyQuota, Job, RunLog, is_generation_active
 from apps.profiles.models import Profile
 
 from .generation import generate_cv
@@ -82,7 +82,7 @@ def _guard_and_reserve(job):
     bloccata finché la prima non ha finito) e viene respinta prima di
     arrivare alla riserva di quota/credito (nessun doppio addebito)."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
-    if locked_job.cv_generation_in_progress:
+    if is_generation_active(locked_job.cv_generation_in_progress, locked_job.cv_generation_started_at):
         raise ManualGenerationRejected("Generazione già in corso per questo job.")
 
     profile = Profile.objects.filter(user=locked_job.user).first()
@@ -94,25 +94,32 @@ def _guard_and_reserve(job):
     charge_mode = _reserve_quota_or_credit(locked_job.user)
 
     locked_job.cv_generation_in_progress = True
-    locked_job.save(update_fields=["cv_generation_in_progress"])
+    locked_job.cv_generation_started_at = timezone.now()
+    locked_job.save(update_fields=["cv_generation_in_progress", "cv_generation_started_at"])
     return charge_mode
 
 
 def request_manual_cv_generation(job, extra_instructions=""):
-    """Punto d'ingresso della generazione manuale di CV (02-specifiche-
-    tecniche-v3.md §5.2): guardia di concorrenza → controllo/riserva quota o
-    credito → generazione → aggiornamento stato Job. Vale sia per una prima
-    generazione manuale sia per una rigenerazione, sia per il "riprova" dopo
-    un fallimento automatico (stesso Job tornato a `new`, stesso contatore).
+    """Punto d'ingresso della generazione manuale di CV (§5.2 tecniche):
+    guardia di concorrenza → controllo/riserva quota o credito →
+    generazione → aggiornamento stato Job. Vale sia per una prima
+    generazione sia per una rigenerazione o un "riprova".
 
     `extra_instructions` (Sprint 44): testo per colmare i gap rilevati per
     questa offerta — vedi `apps.cv.gap_filling`.
 
+    Stato del job (Sprint 69): il successo porta a `cv_generated`, ma un job
+    già `application_done` resta tale; il fallimento non tocca lo stato.
+    `SystemExit` (timeout di gunicorn) è intercettato come nella raccolta
+    manuale: riserva restituita e flag spento prima di lasciar morire il
+    worker. Un processo ucciso senza eccezione (SIGKILL, riavvio) lascia
+    invece la riserva consumata; il flag scade da solo dopo
+    `GENERATION_STALE_AFTER`.
+
     Solleva `ManualGenerationRejected` se la guardia o la quota/credito
     respingono la richiesta (nessun consumo). Solleva
     `ManualGenerationFailed` se la generazione stessa fallisce (la riserva
-    viene restituita e il Job torna a `new` prima di sollevare l'eccezione).
-    """
+    è già stata restituita)."""
     charge_mode = _guard_and_reserve(job)
 
     started_at = timezone.now()
@@ -122,26 +129,31 @@ def request_manual_cv_generation(job, extra_instructions=""):
             CVDocument.GenerationType.MANUAL,
             extra_instructions=extra_instructions,
         )
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         _refund(job.user, charge_mode)
         RunLog.objects.create(
             user=job.user,
             job=job,
             task_type=RunLog.TaskType.CV_GENERATION,
             status=RunLog.Status.FAILURE,
-            message=str(exc),
+            message=str(exc) or exc.__class__.__name__,
             started_at=started_at,
             finished_at=timezone.now(),
         )
         Job.objects.filter(pk=job.pk).update(
-            status=Job.Status.NEW, cv_generation_in_progress=False
+            cv_generation_in_progress=False, cv_generation_started_at=None
         )
+        if isinstance(exc, SystemExit):
+            raise
         raise ManualGenerationFailed("Impossibile creare il CV per questo job.") from exc
 
+    Job.objects.filter(pk=job.pk).exclude(status=Job.Status.APPLICATION_DONE).update(
+        status=Job.Status.CV_GENERATED
+    )
     Job.objects.filter(pk=job.pk).update(
-        status=Job.Status.CV_GENERATED,
         date_cv_generated=timezone.now(),
         cv_generation_in_progress=False,
+        cv_generation_started_at=None,
         is_archived=False,
     )
     return cv_document

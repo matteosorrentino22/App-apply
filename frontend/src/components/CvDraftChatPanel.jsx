@@ -6,9 +6,15 @@ import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { formatEuro, withRetry } from '../utils/retry'
 
 function findExperience(content, profileExperienceId) {
   return content.experiences.find((exp) => exp.profile_experience_id === profileExperienceId)
+}
+
+// Bullet per id stabile (Sprint 69), non per posizione.
+function findBullet(exp, bulletId) {
+  return exp?.bullets?.find((bullet) => bullet.id === bulletId)
 }
 
 function truncate(text, maxLength) {
@@ -26,6 +32,8 @@ function describeAction(action, content, t) {
   const company = exp?.company || ''
   const edu = action.education_index != null ? content.educations[action.education_index] : null
   const language = action.language_index != null ? content.languages[action.language_index] : null
+  const bullet = findBullet(exp, action.bullet_id)
+  const areaBefore = action.area_text ?? content.areas_of_expertise[action.area_index]
 
   switch (action.type) {
     case 'update_summary':
@@ -37,7 +45,7 @@ function describeAction(action, content, t) {
     case 'update_bullet':
       return {
         label: t('cvEditor.chatActionBullet').replace('{company}', company),
-        before: exp?.bullets?.[action.bullet_index]?.text,
+        before: bullet?.text,
         after: action.text,
       }
     case 'add_bullet':
@@ -45,13 +53,13 @@ function describeAction(action, content, t) {
     case 'hide_bullet':
       return {
         label: t('cvEditor.chatActionHideBullet').replace('{company}', company),
-        before: exp?.bullets?.[action.bullet_index]?.text,
+        before: bullet?.text,
         after: null,
       }
     case 'show_bullet':
       return {
         label: t('cvEditor.chatActionShowBullet').replace('{company}', company),
-        before: exp?.bullets?.[action.bullet_index]?.text,
+        before: bullet?.text,
         after: null,
       }
     case 'hide_experience':
@@ -59,11 +67,11 @@ function describeAction(action, content, t) {
     case 'show_experience':
       return { label: t('cvEditor.chatActionShowExperience').replace('{company}', company), before: null, after: null }
     case 'update_area':
-      return { label: t('cvEditor.chatActionArea'), before: content.areas_of_expertise[action.area_index], after: action.text }
+      return { label: t('cvEditor.chatActionArea'), before: areaBefore, after: action.text }
     case 'add_area':
       return { label: t('cvEditor.chatActionNewArea'), before: null, after: action.text }
     case 'remove_area':
-      return { label: t('cvEditor.chatActionRemoveArea'), before: content.areas_of_expertise[action.area_index], after: null }
+      return { label: t('cvEditor.chatActionRemoveArea'), before: areaBefore, after: null }
     case 'toggle_skill':
       return { label: t('cvEditor.chatActionSkill').replace('{name}', action.name), before: null, after: null }
     case 'toggle_certification':
@@ -117,8 +125,19 @@ function ActionCard({ action, content, t, decision, onDecide }) {
   )
 }
 
-export default function CvDraftChatPanel({ open, jobId, content, focusedBullets, onApplyAction, onClose }) {
-  const { t } = useLanguage()
+export default function CvDraftChatPanel({
+  open,
+  jobId,
+  content,
+  focusedBullets,
+  onApplyAction,
+  onBeforeSend,
+  onClose,
+}) {
+  const { t, lang } = useLanguage()
+  // Prezzo del messaggio e saldo (Sprint 69), dal GET della chat e
+  // aggiornato dopo ogni invio.
+  const [pricing, setPricing] = useState(null)
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -136,6 +155,7 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
   useEffect(() => {
     fetchCvDraftChat(jobId)
       .then((data) => {
+        if (data.price != null) setPricing({ price: data.price, balance: data.balance })
         const loadedHistory = data.history || []
         setHistory(loadedHistory)
         const loadedDecisions = {}
@@ -162,12 +182,14 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
     setSending(true)
     setError('')
     try {
-      const { reply, actions } = await sendCvDraftChatMessage(jobId, message, focusedBullets)
+      if (onBeforeSend) await onBeforeSend()
+      const { reply, actions, balance } = await sendCvDraftChatMessage(jobId, message, focusedBullets)
       setHistory((current) => [
         ...current,
         { role: 'user', message },
         { role: 'assistant', message: reply, actions },
       ])
+      if (balance != null) setPricing((current) => (current ? { ...current, balance } : current))
       setInput('')
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
@@ -180,22 +202,27 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
     }
   }
 
-  function handleDecide(messageIndex, actionIndex, action, decision) {
+  function handleDecide(messageIndex, actionIndex, action, choice) {
+    let decision = choice
+    if (decision === 'accepted' && onApplyAction(action) === false) {
+      // Elemento non più presente nella bozza (Sprint 69): niente da
+      // applicare, la proposta viene registrata come rifiutata.
+      setError(t('cvEditor.chatTargetMissing'))
+      decision = 'rejected'
+    }
     setDecisions((current) => ({ ...current, [`${messageIndex}-${actionIndex}`]: decision }))
-    if (decision === 'accepted') onApplyAction(action)
-    // Persistita lato server (Sprint 62): se questa chiamata fallisce, la
-    // card resta comunque disabilitata per il resto della sessione (stato
-    // locale già aggiornato sopra) — solo un reload prematuro prima che
-    // la richiesta arrivi potrebbe far tornare la card "in attesa", un
-    // rischio residuo minimo che non vale un meccanismo di retry.
-    recordCvDraftChatDecision(jobId, messageIndex, actionIndex, decision).catch(() => {})
+    // Persistita lato server (Sprint 62), con tentativi ripetuti e avviso se
+    // non riesce (Sprint 69): altrimenti dopo un ricaricamento la card
+    // tornerebbe "in attesa" e si potrebbe riapplicare la stessa azione.
+    withRetry(() => recordCvDraftChatDecision(jobId, messageIndex, actionIndex, decision)).catch(() =>
+      setError(t('cvEditor.chatDecisionSaveFailed')),
+    )
   }
 
   const focusedSnippets = (focusedBullets || [])
-    .map(({ profileExperienceId, bulletIndex }) => {
-      const exp = findExperience(content, profileExperienceId)
-      return truncate(exp?.bullets?.[bulletIndex]?.text, 40)
-    })
+    .map(({ profileExperienceId, bulletId }) =>
+      truncate(findBullet(findExperience(content, profileExperienceId), bulletId)?.text, 40),
+    )
     .filter(Boolean)
 
   return (
@@ -263,6 +290,13 @@ export default function CvDraftChatPanel({ open, jobId, content, focusedBullets,
       {error && <p className="px-4 text-xs text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-3">
+        {pricing && (
+          <p className="text-[11px] text-muted-foreground">
+            {t('cvEditor.chatPriceInfo')
+              .replace('{price}', formatEuro(pricing.price, lang))
+              .replace('{balance}', formatEuro(pricing.balance, lang))}
+          </p>
+        )}
         {focusedSnippets.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             <span className="text-[11px] font-medium text-muted-foreground">{t('cvEditor.chatFocusLabel')}</span>

@@ -293,7 +293,7 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 | `cv_include_photo` | bool (default false) | Foto nel CV on/off |
 | `objective_statement` | testo (max 2.000 via API) | Situazione/obiettivo raccolto in onboarding; **inerte** (non usato da nessun prompt) |
 | `created_at` | datetime | Creazione; valore iniziale dei due timestamp sotto |
-| `last_activity_reset` | datetime | Inizio del periodo di inattività: inizializzato a `created_at` in `save()`, aggiornato a ogni "candidatura fatta" |
+| `last_activity_reset` | datetime | Inizio del periodo di inattività: inizializzato a `created_at` in `save()`, aggiornato a ogni "candidatura fatta"; l'annullamento della candidatura (Sprint 69) non lo modifica |
 | `last_notified_at` | datetime | Ultima notifica mattutina inviata; "nuovi job" = `date_collected > last_notified_at` |
 | `last_inactivity_notified_at` | datetime, null | Ultimo promemoria di inattività; impedisce di rinviarlo a ogni giro finché `last_activity_reset` non cambia |
 | `extra_credit` | `Decimal(8,2)`, default 0 | Saldo del credito in euro; caricato da Admin, scalato e riaccreditato in modo atomico |
@@ -327,8 +327,8 @@ Un record per offerta e per utente.
 | Provenienza | `matched_search` (255) | Testo libero, non FK: per le ricerche Job role `"<keywords> - <città>, <paese>"` (dal `searchString` Apify), per le Company il nome azienda; vuoto per import e job manuali |
 | Dati LinkedIn | `applicants_count` (int, null), `applicants_bucket` (`under_25` \| `over_200` \| vuoto), `recruiter_name` (255), `recruiter_profile_url` (URL 500) | Valorizzati solo dalla raccolta Apify; count e bucket mai insieme |
 | Sezione | `origin` (`collected` \| `imported`), `is_archived`, `is_favorite` | Sezioni: Raccolti (`collected`, non archiviati), Importati (`imported`, non archiviati: import da link **e** job manuali), Preferiti (`is_favorite`, non archiviati), Archiviati |
-| Stato | `status` (`new` \| `cv_generated` \| `application_done`, default `new`) | Tre stati stabili. Tutti i job nascono `new` |
-| Guardie | `cv_generation_in_progress`, `cover_letter_generation_in_progress`, `referral_message_generation_in_progress` | Flag transitori indipendenti, guardie di concorrenza (§5.2). Solo il primo corrisponde allo stato visibile "CV in generazione"; nessuno ha un timeout |
+| Stato | `status` (`new` \| `cv_generated` \| `application_done`, default `new`) | Tre stati stabili. Tutti i job nascono `new`. Transizioni: generazione CV riuscita → `cv_generated` (un `application_done` resta tale); fallita → invariato; "candidatura fatta" → `application_done`; annullamento → `cv_generated` se esiste un `CVDocument`, altrimenti `new` (Sprint 69) |
+| Guardie | `cv_generation_in_progress`, `cover_letter_generation_in_progress`, `referral_message_generation_in_progress` + `cv_generation_started_at`, `cover_letter_generation_started_at`, `referral_message_generation_started_at` (Sprint 69) | Flag transitori indipendenti, guardie di concorrenza (§5.2), con il momento di accensione. Solo il primo corrisponde allo stato visibile "CV in generazione". Un flag acceso da oltre `GENERATION_STALE_AFTER` (35 minuti, oltre il `--timeout 1800` di gunicorn) o senza timestamp è **stantio**: non blocca la guardia e il serializer lo espone spento (`is_generation_active`, property `*_generation_active`) |
 | Storico | `discarded_by_cap` | Residuo del cap di intake rimosso: non più impostato, non filtrato da lista né statistiche, visibile solo in Admin |
 | Scoring | `score` (1–10, null), `score_match`, `score_gaps` (JSON), `score_reasoning` | `score` nullo = scoring fallito o mai eseguito. Match/gap sono liste di `{label, reason}`; i job scorati prima del 09/09/2026 hanno stringhe semplici, quelli prima dello Sprint 47 punteggi su 1–5 (mai riscalati) |
 | Date | `date_collected` (auto all'inserimento), `date_scored`, `date_cv_generated`, `date_application_done` | `date_collected` è la base del filtro date, della riga "Importato:", delle statistiche e della notifica mattutina |
@@ -344,7 +344,8 @@ Un record per ogni PDF di CV prodotto (generazione AI o finalizzazione dall'edit
 - `generation_type`: `automatic` | `manual`. Oggi si scrive sempre `manual`; `automatic` resta solo per i record storici;
 - `extra_instructions_used`: testo "gap da colmare + indicazioni" usato nella generazione (Sprint 44, ex `enrichment_used`); vuoto per i documenti finalizzati dall'editor;
 - `areas_of_expertise_grounding`: lista `[{label, grounding_reference}]` restituita dal modello, solo per diagnosi; vuota per i documenti finalizzati dall'editor;
-- `content_json`: snapshot strutturato (Sprint 51), `{}` per i CV precedenti, che quindi non sono riapribili nell'editor.
+- `content_json`: snapshot strutturato (Sprint 51), `{}` per i CV precedenti, che quindi non sono riapribili nell'editor (la PWA non mostra "Modifica CV", §12.2 `cv_editable`);
+- `page_count` (Sprint 69, null per i documenti precedenti): pagine del PDF; oltre 1 la PWA lo segnala.
 
 Struttura di `content_json` (uguale in `CVDraft`):
 
@@ -359,7 +360,7 @@ Struttura di `content_json` (uguale in `CVDraft`):
     {"profile_experience_id": int, "company": str, "role": str,
      "location": str, "dates": str, "technologies": [str],
      "shown": bool,                                  # false per le escluse dal cap di 5
-     "bullets": [{"text": str, "shown": bool}]}      # pool completo prodotto dall'AI, testo con **grassetto**
+     "bullets": [{"id": str, "text": str, "shown": bool}]}  # pool completo prodotto dall'AI, testo con **grassetto**; id stabile (Sprint 69)
   ],
   "educations": [{"institution", "title", "location", "dates", "notes"}],  # stringhe già formattate
   "skills": [str], "certifications": [str],          # selezione corrente, sottoinsieme del profilo
@@ -367,7 +368,7 @@ Struttura di `content_json` (uguale in `CVDraft`):
 }
 ```
 
-`shown` di un bullet indica se è sopravvissuto al taglio al budget e al loop di ripiego. Un CV già prodotto **non** cambia se il profilo viene modificato dopo.
+`shown` di un bullet indica se è sopravvissuto al taglio al budget e al loop di ripiego. `id` (Sprint 69, 12 caratteri esadecimali, `apps/cv/draft_ids.py`) identifica il bullet per chat e puntamento ✦ indipendentemente dalla posizione: assegnato alla generazione, dalla PWA per i bullet nuovi e in modo pigro dal server per i contenuti precedenti (lettura della bozza, seed, PATCH, anteprima, finalizzazione). Un CV già prodotto **non** cambia se il profilo viene modificato dopo.
 
 ### 4.6 `DailyQuota` (contatori giornalieri) e listino prezzi
 
@@ -404,7 +405,7 @@ Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `
 |---|---|
 | `collection` | SUCCESS a ogni ciclo per utente (notturno e manuale) con `raccolti=N scorati=M scartati_scoring=K`, anche con 0 ricerche; FAILURE se la raccolta di un utente fallisce |
 | `scoring` | FAILURE per ogni job il cui scoring fallisce |
-| `cv_generation` | FAILURE se la generazione manuale fallisce; SUCCESS **solo** se il CV resta multi-pagina dopo il ripiego |
+| `cv_generation` | FAILURE se la generazione manuale fallisce (anche per `SystemExit`, Sprint 69); SUCCESS **solo** se il CV resta multi-pagina dopo il ripiego |
 | `cover_letter_generation` | solo FAILURE |
 | `referral_message_generation` | solo FAILURE |
 | `cv_draft_chat` | solo FAILURE (chiamata AI della chat) |
@@ -425,14 +426,16 @@ Le generazioni riuscite, le anteprime e le finalizzazioni non lasciano traccia n
   ```
   [{"role": "user", "message": str},
    {"role": "assistant", "message": str,
-    "actions": [{"type": str, "profile_experience_id": int|null, "bullet_index": int|null,
+    "actions": [{"type": str, "profile_experience_id": int|null, "bullet_id": str|null,
                  "area_index": int|null, "education_index": int|null, "language_index": int|null,
                  "text": str|null, "name": str|null, "level": str|null,
+                 "area_text"?: str,                      # solo update_area/remove_area (Sprint 69)
                  "decision": "accepted"|"rejected"}]}]      # "decision" assente finché l'utente non sceglie
   ```
+- `source_document` (Sprint 69, FK nullable a `CVDocument`, `SET_NULL`): documento di riferimento — quello del seed, poi quello prodotto dalla finalizzazione della bozza o quello scelto con "continua la bozza". La bozza è **superata** se l'ultimo `CVDocument` del job (con `content_json`) è un altro. Le bozze esistenti l'hanno ricevuto dalla migrazione `cv/0011` (ultimo documento generato prima della creazione della bozza);
 - `created_at`, `updated_at`.
 
-La bozza non ha un PDF proprio. Il seme si crea dall'ultimo `CVDocument` con `content_json` non vuoto (§5.12). La docstring del modello dice che generare un nuovo CV sovrascrive la bozza: non è implementato (§11).
+La bozza non ha un PDF proprio. Il seme si crea dall'ultimo `CVDocument` con `content_json` non vuoto (§5.12). Una nuova generazione non tocca la bozza: è l'editor a chiedere se riseminarla (§5.12). Le azioni salvate prima dello Sprint 69 (`bullet_index`) ricevono alla prima lettura il `bullet_id` del bullet che occupa quella posizione.
 
 ### 4.10 `CoverLetterDocument` (Sprint 42)
 
@@ -440,19 +443,20 @@ La bozza non ha un PDF proprio. Il seme si crea dall'ultimo `CVDocument` con `co
 - `pdf_file`: file nella cartella media `cover_letter_documents/`, nome casuale `<uuid4>.pdf` (Sprint 66); scaricabile solo con URL firmato (§4.15);
 - `generated_at`;
 - `instructions_used`: indicazioni dell'utente per questa generazione (alimenta lo storico delle indicazioni riusabili); vuoto per i documenti finalizzati dall'editor;
-- `content_json` (Sprint 63): `{"content_language": str, "translated_city": str, "paragraphs": [str]}`; `{}` per le lettere precedenti, non riapribili nell'editor.
+- `content_json` (Sprint 63): `{"content_language": str, "translated_city": str, "paragraphs": [{"id": str, "text": str}]}` (paragrafi con id stabile dallo Sprint 69; quelli salvati come semplici stringhe sono convertiti in modo pigro); `{}` per le lettere precedenti, non riapribili nell'editor;
+- `page_count` (Sprint 69): pagine del PDF, come per il CV.
 
 Ogni generazione o finalizzazione crea un nuovo record; in UI si usa l'ultimo. Non tocca mai `Job.status` né `is_archived`.
 
 ### 4.11 `CoverLetterDraft` (Sprint 63)
 
-`job` (OneToOne, `related_name="cover_letter_draft"`), `user`, `content_json` (stessa struttura di §4.10), `chat_history`, `created_at`, `updated_at`. Ogni turno assistente ha `actions: [{"type": "update_paragraph"|"add_paragraph"|"remove_paragraph", "paragraph_index": int|null, "text": str|null, "decision"?: "accepted"|"rejected"}]`.
+`job` (OneToOne, `related_name="cover_letter_draft"`), `user`, `content_json` (stessa struttura di §4.10), `chat_history`, `source_document` (Sprint 69, come in §4.9), `created_at`, `updated_at`. Ogni turno assistente ha `actions: [{"type": "update_paragraph"|"add_paragraph"|"remove_paragraph", "paragraph_id": str|null, "text": str|null, "decision"?: "accepted"|"rejected"}]` (`paragraph_index` fino allo Sprint 68, convertito in modo pigro).
 
 ### 4.12 `ReferralMessageDocument` (Sprint 50)
 
 - `job` (FK, `related_name="referral_message_documents"`), `user`;
 - `channel`: `linkedin` | `email`;
-- `recipient_name` (255, facoltativo), `recipient_linkedin_url` (URL 500, facoltativo, **salvato ma inerte**: non usato nel prompt né mostrato nello storico);
+- `recipient_name` (255, facoltativo), `recipient_linkedin_url` (URL 500, facoltativo, **salvato ma inerte**: non usato nel prompt, nemmeno come contesto; dallo Sprint 69 la PWA lo mostra nello storico come link e spiega che è solo un riferimento);
 - `instructions_used`, `subject` (255, vuoto per LinkedIn), `content`, `generated_at`.
 
 Nessun PDF. Più messaggi per job (storico, mai sostituiti, non modificabili né cancellabili dall'app).
@@ -515,16 +519,16 @@ Se una chiamata di gruppo ad Apify fallisce dopo 2 tentativi, l'eccezione risale
 
 Tutte le azioni manuali che producono contenuti AI (CV, cover letter, messaggio di networking) seguono lo stesso schema, **sincrono nella richiesta HTTP**:
 
-1. **Guardia di concorrenza + riserva** in un'unica transazione (`_guard_and_reserve`): `select_for_update` sul `Job`; se il flag `*_generation_in_progress` dell'artefatto è già attivo la richiesta è rifiutata (409, nessun consumo). Per il CV si verifica anche `Profile.is_complete` (409 "Completa il profilo…"). Poi si riserva quota o credito (§4.6; saldo insufficiente → 409) e si accende il flag.
+1. **Guardia di concorrenza + riserva** in un'unica transazione (`_guard_and_reserve`): `select_for_update` sul `Job`; se il flag `*_generation_in_progress` dell'artefatto è già attivo **e non stantio** (§4.4, Sprint 69) la richiesta è rifiutata (409, nessun consumo). Per il CV si verifica anche `Profile.is_complete` (409 "Completa il profilo…"). Poi si riserva quota o credito (§4.6; saldo insufficiente → 409) e si accende il flag con `*_generation_started_at = now`.
 2. **Esecuzione** (chiamata Bedrock, eventuale rendering PDF, salvataggio) fuori dalla transazione, nello stesso processo gunicorn.
-3. **Successo**: flag spento; per il CV `status = cv_generated`, `date_cv_generated = now`, `is_archived = False` (il job esce dall'Archivio); cover letter e messaggi non toccano lo stato del job. Risposta 201.
-4. **Fallimento** (qualsiasi `Exception`): restituzione della riserva (contatore decrementato o prezzo riaccreditato), `RunLog` FAILURE, flag spento; per il CV `status` torna a `new`. Risposta 502 con messaggio generico ("Impossibile creare il CV per questo job.").
+3. **Successo**: flag e timestamp spenti; per il CV `status = cv_generated` salvo per un job già `application_done`, che resta tale (Sprint 69), `date_cv_generated = now`, `is_archived = False` (il job esce dall'Archivio); cover letter e messaggi non toccano lo stato del job. Risposta 201 (CV e cover letter con `page_count`, §12.3).
+4. **Fallimento** (qualsiasi `Exception` e, dallo Sprint 69, anche `SystemExit`, cioè il timeout di gunicorn): restituzione della riserva (contatore decrementato o prezzo riaccreditato), `RunLog` FAILURE, flag spento; lo stato del job **non cambia** (Sprint 69, prima tornava a `new`). Risposta 502 con messaggio generico ("Impossibile creare il CV per questo job."); con `SystemExit` l'eccezione viene rilanciata dopo la pulizia e il worker termina.
 
-I tre flag sono indipendenti: si può generare una cover letter mentre è in corso un CV sullo stesso job. Il pulsante della PWA si disabilita durante la richiesta e, per CV e cover letter, quando il flag è attivo nel job serializzato (il flag dei messaggi non è esposto dal serializer, §11).
+I tre flag sono indipendenti: si può generare una cover letter mentre è in corso un CV sullo stesso job. Il pulsante della PWA si disabilita durante la richiesta e quando il flag (non stantio) è attivo nel job serializzato, per tutti e tre gli artefatti (`referral_message_generation_in_progress` esposto dallo Sprint 69).
 
 | Azione | Servizio | Guardia | Contatore / prezzo | Stato del job |
 |---|---|---|---|---|
-| Genera / rigenera CV (con "colma i gap") | `apps/cv/manual_generation.py` | `cv_generation_in_progress` | `manual_cv_count` / `PRICE_MANUAL_CV_EXTRA` | → `cv_generated` (→ `new` se fallisce); esce dall'archivio |
+| Genera / rigenera CV (con "colma i gap") | `apps/cv/manual_generation.py` | `cv_generation_in_progress` (stantio dopo 35 min) | `manual_cv_count` / `PRICE_MANUAL_CV_EXTRA` | → `cv_generated` (`application_done` resta; invariato se fallisce); esce dall'archivio |
 | Genera cover letter | `apps/cv/cover_letter_manual_generation.py` | `cover_letter_generation_in_progress` | `cover_letter_count` / `PRICE_COVER_LETTER_EXTRA` | invariato |
 | Genera messaggio di networking | `apps/cv/referral_message_manual_generation.py` | `referral_message_generation_in_progress` | `referral_message_count` / `PRICE_REFERRAL_MESSAGE_EXTRA` | invariato |
 | Import da link | `apps/jobs/import_service.py` | nessuna (controllo duplicato prima della riserva) | `import_count` / `PRICE_IMPORT_EXTRA`, solo Pro | nuovo job `new` |
@@ -532,7 +536,7 @@ I tre flag sono indipendenti: si può generare una cover letter mentre è in cor
 | Raccolta manuale | `apps/jobs/tasks.py` | `User.collection_in_progress` (stantia dopo 2 h) | `collection_count`, nessun credito | nuovi job `new` |
 | Messaggio chat editor | `apps/cv/draft_chat.py`, `cover_letter_draft_chat.py` | nessuna | solo credito (`PRICE_*_DRAFT_CHAT_MESSAGE`) | invariato |
 
-Il "riprova" dopo un fallimento è una normale nuova richiesta e consuma come tale. Il timeout gunicorn (`SystemExit`) è intercettato solo dalla raccolta manuale; per le generazioni un worker ucciso a metà lascia il flag acceso e la riserva non restituita (§11).
+Il "riprova" dopo un fallimento è una normale nuova richiesta e consuma come tale. Il timeout gunicorn (`SystemExit`) è intercettato dalla raccolta manuale e, dallo Sprint 69, dalle tre generazioni. Un processo ucciso senza eccezione (SIGKILL, OOM, riavvio oltre il tempo di grazia) lascia invece la riserva consumata; il flag scade da solo dopo 35 minuti (§11).
 
 ### 5.3 La "fonte offerte" come componente sostituibile
 
@@ -629,9 +633,9 @@ Moduli `apps/jobs/ai_scoring.py` (prompt, schema, chiamata) e `apps/jobs/scoring
 1. `generate_cover_letter_content` (`cover_letter_content.py`): contesto profilo uguale a quello del CV (sommario, città, esperienze, skill, certificazioni; **non** istruzione e lingue), titolo/azienda/descrizione dell'offerta, indicazioni, lingua. Il modello scrive solo i **paragrafi del corpo** (3–5: apertura, 1–2 di esperienze reali, uno dedicato alle indicazioni se presenti, chiusura), più `translated_city` e `content_language`. Le indicazioni possono orientare il tono o introdurre fatti reali non presenti nel profilo, sotto la responsabilità dell'utente.
 2. Oggetto, saluto ("Dear Hiring Manager," e simili) e chiusura sono testi fissi per lingua (`COVER_LETTER_LABELS`, 5 lingue), mai generati.
 3. Intestazione: nome e cognome; riga contatti "Città tradotta, PAESE | telefono | email del profilo", **senza LinkedIn**. Nessuna data, destinatario, foto o grassetto.
-4. Rendering con `render_cover_letter` (3 livelli di compattamento, §3.6), salvataggio di `CoverLetterDocument` con `instructions_used` e `content_json`.
+4. Rendering con `render_cover_letter` (3 livelli di compattamento, §3.6), salvataggio di `CoverLetterDocument` con `instructions_used`, `content_json` (paragrafi con id) e `page_count`.
 
-Indicazioni riusabili: `GET /api/cover-letter-instructions/` restituisce fino a 20 testi `instructions_used` distinti, su tutti i job dell'utente, dal più recente; la PWA li propone come checkbox e li concatena al testo nuovo separati da una riga vuota.
+Indicazioni riusabili: `GET /api/cover-letter-instructions/` restituisce fino a 20 **voci** distinte, su tutti i job dell'utente, dalla più recente; la PWA le propone come checkbox e le concatena al testo nuovo separate da una riga vuota. Dallo Sprint 69 (`apps/cv/instructions_history.py`) ogni `instructions_used` è scomposto nei blocchi separati da righe vuote e i blocchi sono deduplicati ignorando spazi e maiuscole: una combinazione di voci già note non produce una voce nuova (vale anche per lo storico esistente); un'indicazione scritta su più paragrafi compare come più voci. `instructions_used` resta il testo completo passato al modello.
 
 Nome file di download: `Cover letter {Nome Cognome} - {Titolo job}.pdf` (caratteri `\/:*?"<>|` rimossi; senza nome si usa l'email); per il CV `CV {Nome Cognome} - {Titolo job}.pdf`. Entrambi calcolati da `JobSerializer`.
 
@@ -644,7 +648,7 @@ Nome file di download: `Cover letter {Nome Cognome} - {Titolo job}.pdf` (caratte
 - vincoli di canale solo nel prompt: LinkedIn al massimo 80–100 parole, nessun oggetto; email con oggetto di circa 60 caratteri e corpo di 150–180 parole in 2–3 paragrafi; saluto e firma nel testo; saluto generico se manca il nome; nessuna relazione pregressa inventata; nessun allegato menzionato; richiesta finale chiara;
 - salvataggio di un nuovo `ReferralMessageDocument` (nessun rendering), 201 con il messaggio serializzato (`id, channel, recipient_name, recipient_linkedin_url, subject, content, generated_at`).
 
-Storico per job: `GET /api/jobs/<id>/referral-messages/` (dal più recente). Indicazioni riusabili: `GET /api/referral-message-instructions/` (20 distinte, tutti i job). La copia negli appunti è fatta dalla PWA (`navigator.clipboard`, con "Oggetto: …" in testa per l'email).
+Storico per job: `GET /api/jobs/<id>/referral-messages/` (dal più recente). Indicazioni riusabili: `GET /api/referral-message-instructions/` (20 voci distinte, tutti i job, stesse regole di scomposizione e deduplica della cover letter). `recipient_linkedin_url` non entra nel prompt (nemmeno come contesto: nessun fetch del profilo). La copia negli appunti è fatta dalla PWA (`navigator.clipboard`, con "Oggetto: …" in testa per l'email).
 
 ### 5.12 Editor delle bozze (CV e cover letter)
 
@@ -652,38 +656,40 @@ Stesso schema per i due documenti (moduli `apps/cv/draft.py` e `apps/cv/cover_le
 
 | Passo | CV | Cover letter |
 |---|---|---|
-| **Apertura** | `GET …/cv-draft/` (200 `content_json`, 404 se manca); su 404 la PWA chiama `POST …/cv-draft/` | `GET` / `POST …/cover-letter-draft/` |
-| **Seed** | `seed_draft_for_job`: `update_or_create` della bozza copiando `content_json` dall'ultimo `CVDocument`; 409 se non c'è un documento o se il suo `content_json` è vuoto | `seed_cover_letter_draft_for_job`, stessa logica sull'ultima `CoverLetterDocument` |
-| **Modifica** | `PATCH …/cv-draft/` con l'intero `content_json` (400 se non supera la validazione, vedi sotto), dall'autosave della PWA (debounce 1,2 s) | `PATCH …/cover-letter-draft/` |
+| **Apertura** | La PWA legge prima il job (`cv_draft_outdated`, §12.2): se vero chiede "riparti dal nuovo documento / continua la bozza" (Sprint 69); altrimenti `GET …/cv-draft/` (200 `content_json`, 404 se manca) e su 404 `POST …/cv-draft/` | `GET` / `POST …/cover-letter-draft/`, `cover_letter_draft_outdated` |
+| **Seed / risemina** | `POST …/cv-draft/` → `seed_draft_for_job`: `update_or_create` della bozza copiando `content_json` dall'ultimo `CVDocument` (id dei bullet assegnati se mancano), **chat azzerata**, `source_document` = quel documento; 409 se non c'è un documento o se il suo `content_json` è vuoto | `seed_cover_letter_draft_for_job`, stessa logica sull'ultima `CoverLetterDocument` |
+| **Continua la bozza** | `POST …/cv-draft/` con `{"mode": "keep"}` (Sprint 69) → `keep_cv_draft`: contenuto e chat invariati, `source_document` = ultimo documento; 200. Senza bozza equivale al seed | `keep_cover_letter_draft` |
+| **Lettura** | `load_cv_draft`: normalizzazione pigra (id dei bullet, azioni della chat con `bullet_index` → `bullet_id`), salvata se cambia qualcosa | `load_cover_letter_draft` (paragrafi stringa → `{id, text}`, `paragraph_index` → `paragraph_id`) |
+| **Modifica** | `PATCH …/cv-draft/` con l'intero `content_json`, ripulito da `clean_cv_draft_content` (id mancanti assegnati su una copia, poi validazione; 400 se non la supera), dall'autosave della PWA (debounce 1,2 s); risponde con il contenuto salvato | `PATCH …/cover-letter-draft/` |
 | **Anteprima** | `POST …/cv-draft/preview/` con il contenuto corrente nel body (o quello salvato): PDF binario + header `X-Page-Count`. Nessun taglio automatico: si renderizzano solo esperienze e bullet con `shown = true`, nell'ordine della bozza; codici lingua tradotti | `POST …/cover-letter-draft/preview/`: oggetto, saluto e chiusura fissi, paragrafi e città dalla bozza |
-| **Finalizzazione** | `POST …/cv-draft/finalize/` → nuovo `CVDocument` (`generation_type=manual`, `content_json` = bozza) | `POST …/cover-letter-draft/finalize/` → nuova `CoverLetterDocument` |
+| **Finalizzazione** | `POST …/cv-draft/finalize/` con `{"content": …}` facoltativo (Sprint 69: il contenuto a schermo, ripulito e salvato nella bozza prima del rendering; 400 se non valido) → nuovo `CVDocument` (`generation_type=manual`, `content_json` = bozza, `page_count`), che diventa il `source_document` della bozza | `POST …/cover-letter-draft/finalize/`, stesso schema → nuova `CoverLetterDocument` |
 
 Proprietà comuni:
 - **validazione del `content_json`** (Sprint 66, `apps/cv/draft_validation.py`) in `PATCH` e anteprima: esattamente le chiavi prodotte dalla generazione (chiavi sconosciute o mancanti → 400), tipi attesi, numero massimo di elementi (CV: 20 aree, 30 esperienze con 30 bullet e 50 tecnologie ciascuna, 20 voci di istruzione, 100 skill, 50 certificazioni, 30 lingue; cover letter: 15 paragrafi), lunghezza massima di ogni testo (es. sommario 5.000, bullet 2.000, paragrafo 3.000) e dimensione totale (200.000 caratteri di JSON). Throttle `draft_preview` 60/min sull'anteprima;
 - nessuna chiamata AI e **nessun consumo** di quota o credito in apertura, modifica, anteprima e finalizzazione;
 - la finalizzazione non cambia `Job.status` né `date_cv_generated`; il nuovo PDF diventa quello scaricabile; la bozza resta;
-- la finalizzazione usa la bozza **salvata sul server**: le modifiche degli ultimi ~1,2 s non ancora salvate dall'autosave possono restarne fuori;
-- il backend risemina con `POST`, ma la PWA chiama `POST` solo su 404: una bozza esistente **non viene riseminata** dopo una nuova generazione AI (§11).
+- la PWA invia alla finalizzazione il contenuto a schermo (annullando l'autosave in attesa) e, prima di un messaggio in chat, salva subito l'eventuale modifica in attesa: nessuna modifica resta fuori dal PDF o dal contesto del modello (Sprint 69);
+- una nuova generazione AI non tocca la bozza: alla riapertura dell'editor l'utente sceglie se riseminare o continuare (Sprint 69).
 
-Cosa si modifica nella bozza CV: sommario, qualifica, aree (aggiungi/rimuovi/riordina), per ogni esperienza "mostra nel CV" e ruolo (azienda, luogo, date e tecnologie no), bullet (mostra/nascondi, testo con grassetto, aggiungi/rimuovi/riordina), istruzione (tutti i campi, solo nel CV), skill e certificazioni (solo selezione tra quelle del profilo), lingue (solo nel CV). Nella bozza della cover letter solo i paragrafi (modifica, riordino, aggiunta, eliminazione). Nessuna modifica della bozza viene scritta sul profilo master.
+Cosa si modifica nella bozza CV: sommario e qualifica (con grassetto, Sprint 69), aree (aggiungi/rimuovi/riordina, con grassetto), per ogni esperienza "mostra nel CV" e ruolo (con grassetto; azienda, luogo, date e tecnologie no), bullet (mostra/nascondi, testo con grassetto, aggiungi/rimuovi/riordina), istruzione (tutti i campi, note con grassetto, solo nel CV), skill e certificazioni (solo selezione tra quelle del profilo), lingue (solo nel CV). Nella bozza della cover letter solo i paragrafi (modifica, riordino, aggiunta, eliminazione). Nessuna modifica della bozza viene scritta sul profilo master.
 
 ### 5.13 Chat AI degli editor
 
 Endpoint `…/cv-draft/chat/` e `…/cover-letter-draft/chat/` (moduli `draft_chat.py`, `cover_letter_draft_chat.py`):
 
-- `GET` → `{history}` (404 senza bozza).
+- `GET` → `{history, price, balance}` (404 senza bozza): `price` è `PRICE_CV_DRAFT_CHAT_MESSAGE` / `PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE`, `balance` il saldo dell'utente, entrambi stringhe decimali, mostrati dalla PWA sopra il campo di testo (Sprint 69).
 - `POST {message[, focus_bullets]}`:
   1. messaggio vuoto o oltre 2.000 caratteri → 400 (al massimo 50 `focus_bullets`); bozza assente → 502; throttle `chat` 20/min sul solo `POST`;
   2. **riserva del credito** (`select_for_update` sull'`User`): saldo sotto `PRICE_CV_DRAFT_CHAT_MESSAGE` / `PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE` → **402** "Saldo credito insufficiente…"; non c'è quota gratuita;
-  3. chiamata Bedrock (`BEDROCK_CV_GENERATION_MODEL`, 2000 token) con: `content_json` salvato della bozza (con gli id interni), skill/certificazioni del profilo (CV), titolo/azienda/descrizione dell'offerta, cronologia (solo i testi degli ultimi 20 turni, `MAX_HISTORY_TURNS_IN_PROMPT`, senza azioni né decisioni; la cronologia completa resta salvata), nuovo messaggio; per il CV anche i **bullet puntati** dall'utente (`focus_bullets: [{profile_experience_id, bullet_index}]`, tenuti solo se esistono), presentati come aiuto per le frasi ambigue, non come vincolo;
+  3. chiamata Bedrock (`BEDROCK_CV_GENERATION_MODEL`, 2000 token) con: `content_json` salvato della bozza (con gli id di esperienze, bullet e paragrafi), skill/certificazioni del profilo (CV), titolo/azienda/descrizione dell'offerta, cronologia degli ultimi 20 turni (`MAX_HISTORY_TURNS_IN_PROMPT`; la cronologia completa resta salvata) in cui ogni turno dell'assistente porta anche le **azioni proposte in forma compatta** con la decisione `accepted`/`rejected`/`pending` (Sprint 69, `history_for_prompt`; testo troncato a 200 caratteri), nuovo messaggio; per il CV anche i **bullet puntati** dall'utente (`focus_bullets: [{profile_experience_id, bullet_id}]`, Sprint 69; `bullet_index` ancora accettato dalle schede vecchie; tenuti solo se esistono), presentati come aiuto per le frasi ambigue, non come vincolo;
   4. errore AI → riaccredito, `RunLog` FAILURE, 502;
-  5. **filtro difensivo** sulle azioni (`_sanitize_actions`): per il CV scarta i toggle di skill/certificazioni con nomi non presenti nel profilo e i livelli lingua non validi; per la cover letter scarta gli indici di paragrafo fuori range;
-  6. accoda turno utente e risposta in `chat_history`; risponde `{reply, actions}`. **Il backend non modifica mai `content_json`**.
-- `PATCH {message_index, action_index, decision}` → scrive `decision` (`accepted` | `rejected`) dentro l'azione (Sprint 62); 204, oppure 400 per indici non interi o non validi.
+  5. **filtro difensivo** sulle azioni (`_sanitize_actions`, sulla bozza salvata): per il CV scarta i toggle di skill/certificazioni con nomi non presenti nel profilo, i livelli lingua non validi e — dallo Sprint 69 — le azioni su esperienze o `bullet_id` inesistenti, con `area_index`/`education_index`/`language_index` fuori range o senza il testo richiesto; normalizza `profile_experience_id` sul proprietario del bullet e allega `area_text` alle azioni sulle aree; per la cover letter scarta le azioni con `paragraph_id` inesistente o senza testo;
+  6. accoda turno utente e risposta in `chat_history`; risponde `{reply, actions, balance}`. **Il backend non modifica mai `content_json`**.
+- `PATCH {message_index, action_index, decision}` → scrive `decision` (`accepted` | `rejected`) dentro l'azione (Sprint 62); 204, oppure 400 per indici non interi o non validi. Gli indici sono posizioni nella cronologia, che cresce solo in coda. Dallo Sprint 69 la PWA ritenta la registrazione (3 tentativi) e segnala se non riesce.
 
-**Azioni.** CV, 16 tipi (`CHAT_ACTION_TYPES`): `update_summary`, `update_qualification`, `update_role`, `update_bullet`, `add_bullet`, `hide_bullet`, `show_bullet`, `hide_experience`, `show_experience`, `update_area`, `add_area`, `remove_area`, `toggle_skill`, `toggle_certification`, `update_education_notes`, `update_language_level`. Cover letter, 3 tipi: `update_paragraph`, `add_paragraph` (in coda), `remove_paragraph`. Lo schema dell'azione è "piatto" (un oggetto con `type` e campi nullable, senza `oneOf`) per compatibilità con il tool-use forzato; i riferimenti sono **indici posizionali 0-based** sulla bozza inviata.
+**Azioni.** CV, 16 tipi (`CHAT_ACTION_TYPES`): `update_summary`, `update_qualification`, `update_role`, `update_bullet`, `add_bullet`, `hide_bullet`, `show_bullet`, `hide_experience`, `show_experience`, `update_area`, `add_area`, `remove_area`, `toggle_skill`, `toggle_certification`, `update_education_notes`, `update_language_level`. Cover letter, 3 tipi: `update_paragraph`, `add_paragraph` (in coda), `remove_paragraph`. Lo schema dell'azione è "piatto" (un oggetto con `type` e campi nullable, senza `oneOf`) per compatibilità con il tool-use forzato. Riferimenti (Sprint 69): bullet per **`bullet_id`** e paragrafi per **`paragraph_id`** (id stabili, §4.5), esperienze per `profile_experience_id`; aree, istruzione e lingue restano **indici 0-based** sulla bozza inviata, con `area_text` come riferimento di sicurezza per le aree.
 
-**Pattern proposta → conferma.** Ogni azione è mostrata come card "prima → dopo" con Accetta/Rifiuta; nulla è applicato in automatico. "Accetta" applica la modifica allo stato dell'editor con le stesse funzioni dell'editing manuale, e quindi passa dall'autosave; poi la PWA registra la decisione con `PATCH`. Alla riapertura le card già decise restano disabilitate.
+**Pattern proposta → conferma.** Ogni azione è mostrata come card "prima → dopo" con Accetta/Rifiuta; nulla è applicato in automatico. "Accetta" applica la modifica allo stato dell'editor con le stesse funzioni dell'editing manuale, ritrovando l'elemento per id (o, per le aree, per `area_text`), e quindi passa dall'autosave; se l'elemento non c'è più la modifica non viene applicata, il pannello lo segnala e la decisione registrata è `rejected`. Poi la PWA registra la decisione con `PATCH`. Alla riapertura le card già decise restano disabilitate.
 
 **Grounding.** Il testo narrativo si può amplificare oltre il profilo solo su richiesta esplicita dell'utente nella conversazione, segnalandolo nella risposta; aziende, ruoli e risultati non si inventano mai; skill e certificazioni del CV solo con nomi esatti del profilo, senza eccezioni (vincolo garantito anche dal filtro server). Nella cover letter il modello non scrive mai oggetto, saluto o chiusura.
 
@@ -703,7 +709,7 @@ Il template a placeholder e il prompt del workflow *03* del prototipo erano mode
 
 Punto d'ingresso: `request_manual_cv_generation(job, extra_instructions)` (§5.2) → `generate_cv(job, MANUAL, extra_instructions)` in `apps/cv/generation.py`.
 
-0. **Gap filling** (prima della pipeline, `apps/cv/gap_filling.py`). `POST …/generate-cv/` accetta `{gaps: [str], gap_instructions: str}`; `build_extra_instructions` produce: stringa vuota se non c'è nulla; solo "INDICAZIONI DEL CANDIDATO PER QUESTA GENERAZIONE" se ci sono solo indicazioni; altrimenti l'elenco numerato "GAP DA COLMARE PER QUESTA OFFERTA" (testo "etichetta (motivo)" dei gap selezionati) più le indicazioni dell'utente o `DEFAULT_GAP_INSTRUCTION`. Il testo finisce in `CVDocument.extra_instructions_used`; nulla viene salvato sul profilo.
+0. **Gap filling** (prima della pipeline, `apps/cv/gap_filling.py`). `POST …/generate-cv/` accetta `{gap_numbers: [int], gap_instructions: str}` (Sprint 69; `gaps: [str]` ancora accettato per le schede vecchie). `resolve_selected_gaps` ricava dai numeri le righe "N. etichetta (motivo: …)" con **lo stesso numero e testo del pannello** (posizione 1-based nell'elenco completo `score_gaps`, ordine dell'elenco; numeri fuori range ignorati; dei testi legacy riconosciuti si recupera il numero, gli altri restano senza numero). `build_extra_instructions` produce: stringa vuota se non c'è nulla; solo "INDICAZIONI DEL CANDIDATO PER QUESTA GENERAZIONE" se ci sono solo indicazioni; altrimenti l'elenco "GAP DA COLMARE PER QUESTA OFFERTA" (con la nota che i numeri sono quelli visti dal candidato) più le indicazioni dell'utente o `DEFAULT_GAP_INSTRUCTION`. Il testo finisce in `CVDocument.extra_instructions_used`; nulla viene salvato sul profilo.
 1. **Controllo profilo**: `profile.is_complete` (≥ 1 istruzione), altrimenti `ProfileIncomplete`.
 2. **Contenuti AI** (`apps/cv/ai_content.py`, `generate_cv_content`): una sola chiamata `call_claude_structured` con `BEDROCK_CV_GENERATION_MODEL`, 4000 token, effort medium. Input: profilo (sommario, città, **tutte** le esperienze ordinate per `-end_date, -start_date` con company/role/bullets/technologies, skill, certificazioni; istruzione e lingue non passano dal modello), offerta, `extra_instructions`, istruzione di lingua, intervallo 4–6 delle Areas of Expertise. Schema `CONTENT_JSON_SCHEMA` (tutti i campi obbligatori, `additionalProperties: false`):
    `summary`, `qualification`, `translated_city`, `content_language` (enum 5 lingue), `areas_of_expertise[{label, grounding_reference}]`, `experiences[{company, role, highly_relevant, bullets[{text, relevance_rank}]}]` (una voce per esperienza, stesso ordine, mai più bullet di quelli forniti), `skills[]`, `certifications[]`.
@@ -715,9 +721,9 @@ Punto d'ingresso: `request_manual_cv_generation(job, extra_instructions)` (§5.2
    - `_attach_facts`: riattacca per indice ai contenuti AI i dati fattuali del profilo (`profile_experience_id`, località, date formattate solo come anno, "Present" tradotto per le esperienze in corso, tecnologie), mai riformulati;
    - `select_and_cut_experiences`: oltre `MAX_EXPERIENCES_SHOWN = 5` si tengono le 5 più recenti, con uno swap singolo (la più recente tra le escluse marcate `highly_relevant` sostituisce la meno recente); si tengono i B bullet globalmente più rilevanti (`relevance_rank`); un'esperienza `highly_relevant` rimasta senza bullet ne riceve `MIN_GUARANTEED_BULLETS_FOR_RELEVANT_EXPERIENCE = 2`;
    - skill e certificazioni filtrate sui nomi esatti del profilo (`_filter_grounded_skills`); lingue tradotte nella lingua del CV.
-4. **Rendering e ripiego** (`_render_with_overflow_retry`): `render_cv` a dimensione fissa (§3.6); se il PDF supera una pagina si rimuove il bullet globalmente meno rilevante (`remove_least_relevant_bullet`) e si rirenderizza, fino a `MAX_OVERFLOW_ITERATIONS = 4`. Se resta multi-pagina si salva comunque, senza errore per l'utente, con un `RunLog` `cv_generation`/SUCCESS "CV generato multi-pagina…".
-5. **Snapshot** (`build_draft_content_json`): `content_json` con il pool completo di esperienze e bullet e i flag `shown` (§4.5).
-6. **Salvataggio**: `CVDocument` con `html_source`, `generation_type`, `extra_instructions_used`, `content_json`, `areas_of_expertise_grounding` e il file PDF. L'orchestratore aggiorna poi lo stato del job (§5.2).
+4. **Rendering e ripiego** (`_render_with_overflow_retry`): `render_cv` a dimensione fissa (§3.6); se il PDF supera una pagina si rimuove il bullet globalmente meno rilevante (`remove_least_relevant_bullet`) e si rirenderizza, fino a `MAX_OVERFLOW_ITERATIONS = 4`. Se resta multi-pagina si salva comunque, senza errore, con un `RunLog` `cv_generation`/SUCCESS "CV generato multi-pagina…"; dallo Sprint 69 il numero di pagine è salvato in `page_count` e la PWA avvisa l'utente.
+5. **Snapshot** (`build_draft_content_json`): `content_json` con il pool completo di esperienze e bullet, i flag `shown` e l'`id` di ogni bullet (§4.5).
+6. **Salvataggio**: `CVDocument` con `html_source`, `generation_type`, `extra_instructions_used`, `content_json`, `page_count`, `areas_of_expertise_grounding` e il file PDF. L'orchestratore aggiorna poi lo stato del job (§5.2).
 
 ### 6.3 Dove finiscono i dati personali
 
@@ -735,7 +741,7 @@ La foto compare solo con `User.cv_include_photo = true` e `Profile.photo` presen
 
 ### 6.6 Grassetto sulle keyword (Sprint 58)
 
-Il modello marca con `**…**` al massimo 1–2 brevi espressioni per bullet di esperienza, testo letterale del bullet. Il filtro di template `bold_markup` (`apps/cv/templatetags/cv_extras.py`) fa l'escape HTML del testo e trasforma solo le porzioni marcate in `<strong>` (marcatori non bilanciati restano letterali); è applicato **solo ai bullet delle esperienze**, nel PDF generato, nell'anteprima e nel PDF finalizzato. Nell'editor il componente `RichBulletInput` (contentEditable, pulsante B e Ctrl/Cmd+B) converte marcatori ↔ `<strong>` e salva sempre la stringa con i marcatori.
+Il modello marca con `**…**` al massimo 1–2 brevi espressioni per bullet di esperienza, testo letterale del bullet. Il filtro di template `bold_markup` (`apps/cv/templatetags/cv_extras.py`) fa l'escape HTML del testo e trasforma solo le porzioni marcate in `<strong>` (marcatori non bilanciati restano letterali); è applicato ai bullet delle esperienze e, dallo Sprint 69, anche a qualifica, sommario, aree, ruolo e note dell'istruzione (i campi di testo libero che utente e chat possono modificare), nel PDF generato, nell'anteprima e nel PDF finalizzato; restano letterali solo i campi presi così come sono dal profilo. Nell'editor il componente `RichBulletInput` (contentEditable, pulsante B e Ctrl/Cmd+B), usato per tutti questi campi, converte marcatori ↔ `<strong>` e salva sempre la stringa con i marcatori. La cover letter non ha grassetti.
 
 ### 6.7 Aspetto del template (sintesi)
 
@@ -909,7 +915,7 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 5. **Backup non operativo.** Il backup su storage esterno è implementato ma non configurato; nessun ripristino è mai stato provato (§8.4).
 6. **Login Google non attivo** in produzione (credenziali vuote), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Dallo Sprint 66 l'API accetta solo token: per attivarlo serve un passaggio sessione → token dopo il ritorno da Google (§3.7).
 7. **Operazioni lunghe sincrone in gunicorn.** Raccolta manuale e generazioni occupano un worker gunicorn per tutta la durata; con 4 worker, poche operazioni contemporanee bastano a rallentare tutto il sito. Un deploy o riavvio durante un'operazione la interrompe.
-8. **Flag transitori senza timeout.** `cv_generation_in_progress`, `cover_letter_generation_in_progress` e `referral_message_generation_in_progress` vengono spenti solo dal codice della richiesta; se il processo muore (timeout gunicorn → `SystemExit`, non intercettato da `except Exception`; riavvio) il flag resta acceso e il job resta bloccato per quel tipo di generazione, con la riserva di quota/credito non restituita. Solo la guardia della raccolta manuale ha uno sblocco automatico (2 ore).
+8. **Flag transitori: riserva persa se il processo viene ucciso.** *Risolto in parte nello Sprint 69:* i tre flag hanno un timestamp e diventano stantii dopo 35 minuti (non bloccano più), e il timeout di gunicorn (`SystemExit`) è intercettato con restituzione della riserva. Resta che un processo ucciso senza eccezione (SIGKILL, OOM, riavvio oltre il tempo di grazia) non restituisce quota/credito: servirebbe un registro delle riserve.
 9. **Raccolta notturna fragile.** Un errore su un solo gruppo Apify fa perdere tutta la raccolta dell'utente; un errore durante la creazione dei job lascia job senza punteggio; i job senza punteggio non vengono mai ritentati. Il ciclo è sequenziale su tutti gli utenti in un unico task.
 10. **Nessuna guardia condivisa** tra raccolta manuale e notturna (doppie chiamate Apify possibili). Lo sblocco di una seconda raccolta manuale nello stesso giorno richiede la shell.
 11. **Notifiche.** Non esiste un modo per disattivare le notifiche dall'app né per annullare la sottoscrizione di un dispositivo al logout.
@@ -919,8 +925,8 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 
 **Backend: difetti puntuali**
 
-15. **Stato del job sovrascritto dalla generazione CV.** Il successo imposta sempre `status = cv_generated` e il fallimento sempre `new`, anche per un job già in `application_done` (la PWA permette di rigenerare il CV su questi job).
-16. **`JobSerializer` non espone `referral_message_generation_in_progress`**: il frontend lo legge ma il valore è sempre indefinito, quindi il pulsante "Genera messaggio" si disabilita solo durante la richiesta locale (la guardia server resta attiva).
+15. **Stato del job sovrascritto dalla generazione CV.** *Risolto nello Sprint 69:* `application_done` resta dopo una rigenerazione, il fallimento non cambia lo stato; "candidatura fatta" è annullabile.
+16. **`JobSerializer` non espone `referral_message_generation_in_progress`.** *Risolto nello Sprint 69.*
 17. **`discarded_by_cap` non filtrato.** I job storici marcati dal vecchio cap compaiono in lista e nelle statistiche Home.
 18. **Import da URL.** Non applica il controllo `max_length` della raccolta; il controllo duplicati avviene prima della riserva senza lock, quindi due import simultanei dello stesso URL possono arrivare al vincolo di unicità con un errore non gestito (non verificato).
 19. **Job manuale senza restituzione**: se qualcosa fallisce dopo la riserva la quota resta consumata (lo scoring fallito non fa fallire la richiesta).
@@ -928,18 +934,18 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 21. **Ricerche salvate.** La `PATCH` che cambia il tipo di una ricerca attiva non ricontrolla i limiti di piano; su Free la disattivazione automatica della ricerca precedente non è segnalata dalla UI.
 22. **Profilo.** `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo; le foto e le versioni precedenti dei documenti restano su disco finché non si esegue `secure_media_files --delete-orphans`.
 23. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese.
-24. **Commenti e docstring superati** nel codice: "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft` ("generare un nuovo CV sovrascrive il draft") e di `CoverLetterDraft`; nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md`.
+24. **Commenti e docstring superati** nel codice: nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md` (in parte). *Corretti nello Sprint 69:* "3 livelli di compattamento" per il CV in `generation.py` e `draft.py`, "loop di ripiego" della cover letter, docstring di `CVDraft` e `CoverLetterDraft`.
 
 **Editor e chat**
 
-25. **Bozza non riseminata.** Dopo "Rigenera CV" o una nuova cover letter, "Modifica" riapre la bozza precedente (con la sua chat), perché la PWA chiama il seed solo su 404 e nessun codice aggiorna la bozza alla generazione.
-26. **Finalizzazione e autosave.** "Genera PDF finale" usa la bozza salvata: le modifiche degli ultimi ~1,2 s possono restare fuori.
-27. **Indici posizionali nelle azioni chat.** Le azioni e il puntamento dei bullet usano indici sulla bozza al momento dell'invio: dopo un riordino, o accettando più azioni `add`/`remove` dello stesso turno, gli indici successivi possono puntare all'elemento sbagliato. Il filtro server del CV non valida indici e id; quello della cover letter controlla solo il range.
-28. **Contesto della chat.** Al modello arriva la cronologia senza le azioni proposte né le decisioni; lo stato reale arriva solo dal `content_json` salvato. Una decisione la cui registrazione fallisce non viene ritentata.
-29. **Documenti precedenti non riapribili.** CV precedenti allo Sprint 51 e cover letter precedenti allo Sprint 63 hanno `content_json` vuoto: il pulsante "Modifica" compare ma l'apertura fallisce (409) finché non si rigenera.
-30. **Grassetto** interpretato solo nei bullet delle esperienze: marcatori `**` in altri campi (es. sommario modificato a mano o dalla chat) escono come asterischi.
-31. **Gap filling.** La numerazione dei gap in UI (sull'elenco completo) non coincide con quella del prompt (solo i selezionati, in ordine di clic): un'indicazione "per il gap 2" può riferirsi a un gap diverso.
-32. **Cover letter.** Template non allineato allo stile del CV (font sans-serif di fallback, nessun giustificato); il pannello chat riusa testi che parlano di "CV" e "sommario"; le combinazioni di indicazioni riusate diventano nuove voci nello storico.
+25. **Bozza non riseminata.** *Risolto nello Sprint 69:* `source_document` e dialogo "riparti / continua" (§5.12).
+26. **Finalizzazione e autosave.** *Risolto nello Sprint 69:* il contenuto a schermo viaggia con la finalizzazione.
+27. **Indici posizionali nelle azioni chat.** *Risolto nello Sprint 69 per bullet e paragrafi* (id stabili, filtro server sui riferimenti). Restano per indice aree (protette da `area_text`), istruzione e lingue: la chat non aggiunge né rimuove voci di istruzione o lingue, ma una rimozione manuale tra la proposta e l'accettazione può spostare l'indice.
+28. **Contesto della chat.** *Risolto nello Sprint 69:* azioni e decisioni nella cronologia del prompt, retry della registrazione delle decisioni.
+29. **Documenti precedenti non riapribili.** CV precedenti allo Sprint 51 e cover letter precedenti allo Sprint 63 hanno `content_json` vuoto e restano non modificabili; *dallo Sprint 69* il pulsante "Modifica" non compare e il dettaglio spiega di rigenerarli (`cv_editable`/`cover_letter_editable`).
+30. **Grassetto.** *Risolto nello Sprint 69:* `bold_markup` anche su qualifica, sommario, aree, ruolo e note dell'istruzione, con lo stesso campo a grassetto nell'editor.
+31. **Gap filling.** *Risolto nello Sprint 69:* `gap_numbers` e righe del prompt con lo stesso numero e testo del pannello.
+32. **Cover letter.** Template non allineato allo stile del CV (font sans-serif di fallback, nessun giustificato): **lasciato così per scelta** (Sprint 63, confermato nello Sprint 69). *Risolti nello Sprint 69:* testi propri del pannello chat, combinazioni di indicazioni nello storico.
 
 **Frontend**
 
@@ -986,41 +992,44 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
 | GET | `/api/jobs/` | Lista job (senza paginazione), ordinata per `score` decrescente (nulli in fondo) poi `date_collected` decrescente. Query: `section` (`main` default \| `imported` \| `favorites` \| `archived`), `q` (sottostringa su titolo/azienda/località; se presente ignora gli altri filtri), `date_from`, `date_to` (`YYYY-MM-DD`, fuso utente, estremi inclusi), `location`, `score` (CSV interi), `status` (CSV), `search` (CSV di id `SavedSearch` e/o `none`, in OR), `applicants` (CSV di fasce), `recruiter` (`yes` \| `no` \| `all`) | 200 lista `JobSerializer`; 400 parametro non valido |
-| GET | `/api/jobs/<id>/` | Dettaglio | 200; 404 |
+| GET | `/api/jobs/<id>/` | Dettaglio (`JobDetailSerializer`) | 200; 404 |
 | GET | `/api/jobs/stats/` | Statistiche Home `{jobs:{today, week, total, manual:{…}}, cvs:{…}, applications:{…}}` | 200 |
 | POST | `/api/jobs/collect/` | Raccolta manuale sincrona (§5.6) | 200 `{collected, scored, discarded_scoring, kept}`; 409 in corso o già usata oggi; 502 fallita |
 | POST | `/api/jobs/import/` | Import da link LinkedIn `{url}` (§5.7) | 201 `{job_id, status, score}`; 403 non Pro; 409 URL non valido, offerta non recuperabile, duplicato, quota/credito esauriti |
 | POST | `/api/jobs/manual/` | Creazione manuale (§5.8) | 201 `{job_id, status, score}`; 400 validazione; 409 quota/credito esauriti |
 | POST | `/api/jobs/<id>/archive/`, `/unarchive/` | Archivia / ripristina (non cambia lo stato) | 200 job serializzato; 404 |
 | POST | `/api/jobs/<id>/favorite/`, `/unfavorite/` | Preferito sì/no | 200 job serializzato; 404 |
-| POST | `/api/jobs/<id>/mark-application-done/` | Candidatura fatta (anche senza CV); aggiorna `last_activity_reset` | 200 job serializzato; 409 già fatta |
+| POST | `/api/jobs/<id>/mark-application-done/` | Candidatura fatta (anche senza CV); aggiorna `last_activity_reset` | 200 job serializzato (dettaglio); 409 già fatta |
+| POST | `/api/jobs/<id>/undo-application-done/` | Annulla la candidatura (Sprint 69): `cv_generated` se c'è un CV, altrimenti `new`; `date_application_done` azzerata; `last_activity_reset` invariato | 200 job serializzato (dettaglio); 409 se il job non è `application_done` |
 | GET, POST | `/api/job-filter-presets/` | Elenco e creazione dei filtri preferiti | 200; 201; 400 validazione; 409 oltre 50 |
 | DELETE | `/api/job-filter-presets/<id>/` | Eliminazione | 204; 404 |
 
-Campi di `JobSerializer`: `id, title, company, location, description, apply_url, published_at, salary, matched_search, applicants_count, applicants_bucket, recruiter_name, recruiter_profile_url, origin, is_archived, is_favorite, status, cv_generation_in_progress, cover_letter_generation_in_progress, score, score_match, score_gaps, score_reasoning, date_collected, date_scored, date_cv_generated, date_application_done, cv_pdf_url, cv_download_filename, cover_letter_pdf_url, cover_letter_download_filename`. Dallo Sprint 66 `cv_pdf_url` e `cover_letter_pdf_url` sono URL firmati validi un'ora (`/api/files/…?s=…`, §4.15), non più il path media.
+Campi di `JobSerializer`: `id, title, company, location, description, apply_url, published_at, salary, matched_search, applicants_count, applicants_bucket, recruiter_name, recruiter_profile_url, origin, is_archived, is_favorite, status, cv_generation_in_progress, cover_letter_generation_in_progress, referral_message_generation_in_progress, score, score_match, score_gaps, score_reasoning, date_collected, date_scored, date_cv_generated, date_application_done, cv_pdf_url, cv_download_filename, cover_letter_pdf_url, cover_letter_download_filename`. Dallo Sprint 66 `cv_pdf_url` e `cover_letter_pdf_url` sono URL firmati validi un'ora (`/api/files/…?s=…`, §4.15), non più il path media. Dallo Sprint 69 i tre `*_generation_in_progress` sono falsi se il flag è stantio (§4.4).
+
+`JobDetailSerializer` (Sprint 69; dettaglio, candidatura e annullamento) aggiunge `cv_page_count`, `cv_editable` (ultimo CV con `content_json` non vuoto), `cv_draft_outdated` (esiste una bozza e l'ultimo CV non è il suo `source_document`), `cover_letter_page_count`, `cover_letter_editable`, `cover_letter_draft_outdated`. Non sono nella lista per non aggiungere query per ogni job.
 
 ### 12.3 CV, cover letter, messaggi, editor e chat
 
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
-| POST | `/api/jobs/<id>/generate-cv/` | Genera/rigenera CV `{gaps?: [str], gap_instructions?: str}` (§5.2, §6.2) | 201 `{cv_document_id}`; 400 oltre i limiti di §7.1; 409 già in corso, profilo incompleto, quota/credito esauriti; 502 generazione fallita |
-| GET | `/api/jobs/<id>/cv-draft/` | Bozza CV | 200 `content_json`; 404 |
-| POST | `/api/jobs/<id>/cv-draft/` | Crea o risemina la bozza dall'ultimo CV | 201 `content_json`; 409 nessun CV riapribile |
-| PATCH | `/api/jobs/<id>/cv-draft/` | Sostituisce l'intero `content_json` | 200; 400 struttura o dimensioni non valide (§5.12); 404 |
+| POST | `/api/jobs/<id>/generate-cv/` | Genera/rigenera CV `{gap_numbers?: [int], gap_instructions?: str}` (Sprint 69: numeri 1-based dei gap in `score_gaps`; `gaps?: [str]` ancora accettato) (§5.2, §6.2) | 201 `{cv_document_id, page_count}`; 400 oltre i limiti di §7.1; 409 già in corso, profilo incompleto, quota/credito esauriti; 502 generazione fallita |
+| GET | `/api/jobs/<id>/cv-draft/` | Bozza CV (normalizzata, §5.12) | 200 `content_json`; 404 |
+| POST | `/api/jobs/<id>/cv-draft/` | Crea o risemina la bozza dall'ultimo CV (chat azzerata); con `{"mode": "keep"}` conserva la bozza e prende l'ultimo CV come riferimento (Sprint 69) | 201 `content_json` (seed); 200 (keep); 409 nessun CV riapribile |
+| PATCH | `/api/jobs/<id>/cv-draft/` | Sostituisce l'intero `content_json` (id mancanti assegnati) | 200 contenuto salvato; 400 struttura o dimensioni non valide (§5.12); 404 |
 | POST | `/api/jobs/<id>/cv-draft/preview/` | Anteprima PDF (body facoltativo con il contenuto) | 200 `application/pdf` + `X-Page-Count`; 400 come sopra; 404; 429 |
-| POST | `/api/jobs/<id>/cv-draft/finalize/` | Nuovo `CVDocument` dalla bozza, gratuito | 201 `{cv_document_id}`; 409 nessuna bozza |
-| GET | `/api/jobs/<id>/cv-draft/chat/` | Cronologia chat CV | 200 `{history}`; 404 |
-| POST | `/api/jobs/<id>/cv-draft/chat/` | Messaggio `{message, focus_bullets?: [{profile_experience_id, bullet_index}]}` | 200 `{reply, actions}`; 400 vuoto o oltre 2.000 caratteri; 402 credito insufficiente; 429; 502 AI fallita o bozza assente |
+| POST | `/api/jobs/<id>/cv-draft/finalize/` | Nuovo `CVDocument` dalla bozza, gratuito; `{"content": …}` facoltativo salvato prima del rendering (Sprint 69) | 201 `{cv_document_id, page_count}`; 400 contenuto non valido; 409 nessuna bozza |
+| GET | `/api/jobs/<id>/cv-draft/chat/` | Cronologia chat CV, prezzo del messaggio e saldo | 200 `{history, price, balance}`; 404 |
+| POST | `/api/jobs/<id>/cv-draft/chat/` | Messaggio `{message, focus_bullets?: [{profile_experience_id, bullet_id}]}` | 200 `{reply, actions, balance}`; 400 vuoto o oltre 2.000 caratteri; 402 credito insufficiente; 429; 502 AI fallita o bozza assente |
 | PATCH | `/api/jobs/<id>/cv-draft/chat/` | Decisione `{message_index, action_index, decision}` | 204; 400 |
-| POST | `/api/jobs/<id>/generate-cover-letter/` | Genera cover letter `{instructions?}` (§5.10) | 201 `{cover_letter_document_id}`; 400 indicazioni oltre 2.000 caratteri; 409; 502 |
-| GET | `/api/cover-letter-instructions/` | Ultime 20 indicazioni distinte | 200 `{instructions}` |
-| GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/` | Bozza cover letter (come per il CV) | 200 / 201; 400; 404; 409 |
+| POST | `/api/jobs/<id>/generate-cover-letter/` | Genera cover letter `{instructions?}` (§5.10) | 201 `{cover_letter_document_id, page_count}`; 400 indicazioni oltre 2.000 caratteri; 409; 502 |
+| GET | `/api/cover-letter-instructions/` | Ultime 20 voci distinte (scomposte e deduplicate, §5.10) | 200 `{instructions}` |
+| GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/` | Bozza cover letter (come per il CV, anche `{"mode": "keep"}`) | 200 / 201; 400; 404; 409 |
 | POST | `/api/jobs/<id>/cover-letter-draft/preview/` | Anteprima PDF | 200 `application/pdf` + `X-Page-Count`; 404 |
-| POST | `/api/jobs/<id>/cover-letter-draft/finalize/` | Nuova `CoverLetterDocument` dalla bozza, gratuita | 201 `{cover_letter_document_id}`; 409 |
-| GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/chat/` | Chat cover letter (`POST {message}`, senza `focus_bullets`) | come la chat CV: 200 / 204; 400; 402; 404; 502 |
+| POST | `/api/jobs/<id>/cover-letter-draft/finalize/` | Nuova `CoverLetterDocument` dalla bozza, gratuita; `{"content": …}` facoltativo | 201 `{cover_letter_document_id, page_count}`; 400; 409 |
+| GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/chat/` | Chat cover letter (`POST {message}`, senza `focus_bullets`; azioni per `paragraph_id`) | come la chat CV: 200 / 204; 400; 402; 404; 502 |
 | POST | `/api/jobs/<id>/generate-referral-message/` | Messaggio di networking `{channel, recipient_name?, recipient_linkedin_url?, instructions?}` (§5.11) | 201 messaggio; 400 canale non valido o testi oltre i limiti; 409; 502 |
 | GET | `/api/jobs/<id>/referral-messages/` | Storico messaggi del job, dal più recente | 200 lista |
-| GET | `/api/referral-message-instructions/` | Ultime 20 indicazioni distinte | 200 `{instructions}` |
+| GET | `/api/referral-message-instructions/` | Ultime 20 voci distinte (scomposte e deduplicate, §5.10) | 200 `{instructions}` |
 
 ### 12.4 Altri URL serviti dal backend
 
@@ -1037,13 +1046,14 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 
 ### 13.1 Suite backend
 
-299 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 66)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
+328 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 69)** se lanciati con `DJANGO_DEBUG=true` e `REGISTRATION_INVITE_CODE=` vuoto (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
 
 | File | Test | Cosa copre |
 |---|---|---|
 | `apps/jobs/tests.py` | 105 | Raccolta per utente (campi obbligatori, dedup, scarto oltre `max_length`, assenza di cap), scoring singolo e parallelo (concorrenza, fallimenti, cap lingua e regressione sottostringa), ciclo notturno per utente e orchestratore, assenza di CV automatici, raccolta manuale (guardia, guardia stantia, quota, rimborso, `SystemExit`) e relativa API, schedulazione del ciclo notturno, import da link (servizio e API), job manuale (servizio e API), lista e filtri (sezioni, date nel fuso utente, location, candidati, recruiter, ricerca multipla, ricerca testuale), archivio, preferiti, dettaglio, candidatura fatta (anche senza CV), API dei messaggi di networking, filtri preferiti, comando `seed_e2e_jobs` |
 | `apps/jobs/sources/tests.py` | 26 | Fonte Apify (payload raggruppato, Company con `companyInclude`, normalizzazione, candidati e recruiter, retry) e import via API guest |
-| `apps/cv/tests.py` | 31 | Generazione CV (un blocco per esperienza, 1 pagina su profilo standard, foto on/off, istruzione copiata dal profilo, CV congelato dopo modifiche al profilo, modalità lingua, ripiego per overflow e `RunLog` multi-pagina), generazione manuale (quota nel giorno Europe/Rome, credito, concorrenza, rimborso, ritorno a `new`, uscita dall'archivio), messaggi di networking (8 test: quota, più messaggi per job, concorrenza, credito, rimborso, indicazioni) |
+| `apps/cv/tests.py` | 31 | Generazione CV (un blocco per esperienza, 1 pagina su profilo standard, foto on/off, istruzione copiata dal profilo, CV congelato dopo modifiche al profilo, modalità lingua, ripiego per overflow e `RunLog` multi-pagina), generazione manuale (quota nel giorno Europe/Rome, credito, concorrenza, rimborso, stato invariato se fallisce, uscita dall'archivio), messaggi di networking (8 test: quota, più messaggi per job, concorrenza, credito, rimborso, indicazioni) |
+| `apps/cv/test_sprint69.py` | 29 | Sprint 69: stato del job dopo generazione riuscita/fallita, `SystemExit` con restituzione, flag stantii (guardia e serializer), `referral_message_generation_in_progress`, `page_count` in risposta e nel dettaglio; annullamento della candidatura (stato, `last_activity_reset` invariato, 409); numerazione dei gap nel prompt (anche testi legacy) e via API; bozza superata, risemina con chat azzerata e "continua"; finalizzazione con il contenuto corrente (CV e cover letter) e contenuto non valido; `cv_editable`/`cover_letter_editable`; id stabili (seed da documento legacy, normalizzazione pigra con mappatura delle azioni legacy, PATCH, paragrafi stringa); filtro delle azioni chat su id inesistenti e `area_text`, due rimozioni dello stesso turno; cronologia del prompt con decisioni; `focus_bullets` per id; prezzo e saldo della chat; storico delle indicazioni deduplicato; grassetto in sommario, aree, ruolo e note |
 | `apps/cv/test_selection.py` | 19 | Selezione dell'istruzione, budget bullet, cap esperienze con swap, taglio per rilevanza, rimozione del bullet meno rilevante |
 | `apps/notifications/tests.py` | 18 | Notifica mattutina (ora locale, `last_notified_at`), promemoria di inattività, API sottoscrizione e chiave VAPID; Sprint 66: allowlist degli endpoint, massimo 10 sottoscrizioni, `timeout=10`, 410 → sottoscrizione eliminata, un errore non interrompe il giro (né sulle altre sottoscrizioni né sugli altri utenti) |
 | `apps/common/test_multi_user_isolation.py` | 11 | Isolamento dei dati tra utenti sulle API |
@@ -1072,12 +1082,11 @@ L'esecuzione degli e2e non è documentata negli ultimi sprint. `job-list.spec.js
 ### 13.3 Cosa non è coperto
 
 - `apps/common/ai.py`: tool-use forzato, validazione `jsonschema`, retry, `StructuredOutputError`;
-- **cover letter**: generazione, quota e credito, endpoint, nomi file, bozza, chat (nessun test);
-- **editor CV** (`draft.py`: seed, anteprima, finalizzazione) e **chat** (`draft_chat.py`: azioni, filtro difensivo, `focus_bullets`, credito, `record_action_decision`), e i relativi endpoint;
-- filtro `bold_markup` e componente `RichBulletInput`;
+- **cover letter**: generazione con il modello reale del contenuto, nomi file (bozza, chat, finalizzazione e storico delle indicazioni coperti in parte da `test_sprint69.py`);
+- **editor CV** e **chat**: anteprima, credito insufficiente (402), `record_action_decision` (seed, finalizzazione, filtro, contesto e prezzo coperti da `test_sprint69.py`);
+- componente `RichBulletInput` e dialogo "bozza superata" (solo frontend);
 - statistiche Home (`stats.py`, `/api/jobs/stats/`);
-- gap filling (`gap_filling.py`) e il suo passaggio nel prompt;
-- filtro di grounding su skill/certificazioni del CV (`_filter_grounded_skills`), etichette nelle 5 lingue, grassetto nel PDF;
+- filtro di grounding su skill/certificazioni del CV (`_filter_grounded_skills`), etichette nelle 5 lingue;
 - normalizzazione delle lingue (`profiles/0007`), validazione delle choices di `Language`, `Profile.email`;
 - login Google;
 - renderer solo JSON con `DEBUG=False` (i test girano con `DEBUG=True`), header di Caddy e CSP (verificati solo con `caddy validate` e una prova manuale);

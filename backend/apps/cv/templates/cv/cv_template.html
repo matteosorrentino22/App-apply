@@ -199,7 +199,7 @@
     <div class="header">
         <div class="header-text">
             <h1>{{ full_name }}</h1>
-            {% if qualification %}<p class="qualification">{{ qualification }}</p>{% endif %}
+            {% if qualification %}<p class="qualification">{{ qualification|bold_markup }}</p>{% endif %}
             <p class="contact contact-line">
                 {% for part in contact_parts %}
                 {% if not forloop.first %} | {% endif %}
@@ -214,7 +214,7 @@
 
     {% if summary %}
     <section>
-        <p>{{ summary }}</p>
+        <p>{{ summary|bold_markup }}</p>
     </section>
     {% endif %}
 
@@ -223,7 +223,7 @@
         <h2>{{ labels.areas_of_expertise }}</h2>
         <ul class="areas-list">
             {% for area in areas_of_expertise %}
-            <li>{{ area }}</li>
+            <li>{{ area|bold_markup }}</li>
             {% endfor %}
         </ul>
     </section>
@@ -243,7 +243,7 @@
         <div class="experience">
             {% ifchanged exp.company %}<div class="experience-company">{{ exp.company }}</div>{% endifchanged %}
             <div class="experience-role">
-                <span class="experience-role-title">{{ exp.role }}</span>
+                <span class="experience-role-title">{{ exp.role|bold_markup }}</span>
                 <span class="experience-role-meta">{{ exp.location }}{% if exp.location and exp.dates %} | {% endif %}<strong>{{ exp.dates }}</strong></span>
             </div>
             {% if exp.bullets %}
@@ -270,7 +270,7 @@
                 <span><strong>{{ edu.title }}</strong> — {{ edu.institution }}</span>
                 <span class="education-title-meta">{{ edu.location }}{% if edu.location and edu.dates %} | {% endif %}<strong>{{ edu.dates }}</strong></span>
             </div>
-            {% if edu.notes %}<p>{{ edu.notes }}</p>{% endif %}
+            {% if edu.notes %}<p>{{ edu.notes|bold_markup }}</p>{% endif %}
         </div>
         {% endfor %}
     </section>

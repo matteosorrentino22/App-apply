@@ -220,14 +220,14 @@ Nessuna riformulazione né traduzione.
 
 ### 5.11 Grassetto sulle keyword
 - Il modello può marcare con `**…**`, in ogni bullet di esperienza, **al massimo 1–2 brevi parole o espressioni**: le più rilevanti per l'offerta (tool richiesto, competenza chiave, risultato numerico). Devono essere testo letterale del bullet, mai frasi intere, e il grassetto non va forzato se nessuna parola spicca.
-- Nel PDF i marcatori diventano grassetto reale. Vale **solo nei bullet delle esperienze**: altrove (sommario, aree, note) eventuali asterischi restano testo letterale. Un marcatore senza chiusura resta testo.
-- Nell'editor lo stesso grassetto si mette e si toglie a mano (§15.2).
+- Nel PDF i marcatori diventano grassetto reale. Il modello li usa **solo nei bullet delle esperienze**, ma dallo Sprint 69 sono interpretati in tutti i testi liberi del CV che utente e chat possono modificare: qualifica, sommario, Areas of Expertise, ruolo, note dell'istruzione. Restano testo letterale solo i campi presi così come sono dal profilo (azienda, località, date, titolo e istituto, competenze, lingue). Un marcatore senza chiusura resta testo.
+- Nell'editor lo stesso grassetto si mette e si toglie a mano (§15.2), con lo stesso campo in tutti questi testi: editor, anteprima e PDF mostrano la stessa cosa.
 
 ## 6. Overflow: ripiego e caso multi-pagina
 
 1. **Dimensione fissa.** Il CV si impagina sempre con **un solo set di parametri** (corpo 9 pt, §16). Font e margini non si riducono mai: i 3 livelli di compattamento della v4 sono stati eliminati (Sprint 52, scelta del committente).
 2. **Loop di ripiego.** Se il PDF supera 1 pagina, il sistema toglie il **bullet globalmente meno rilevante** (rank più alto) tra quelli rimasti e reimpagina. Ripete fino a **4 volte** (`MAX_OVERFLOW_ITERATIONS`) o finché il CV entra in una pagina o finiscono i bullet. Il loop può togliere anche bullet del minimo garantito o nati da un gap. Un'esperienza che perde tutti i bullet diventa riga singola.
-3. **Caso residuale.** Se dopo il ripiego il CV supera ancora 1 pagina, si salva **comunque il PDF multi-pagina**, senza errore per l'utente. Il sistema registra l'evento nel `RunLog` per diagnosi. Il multi-pagina è quindi un esito possibile e accettato.
+3. **Caso residuale.** Se dopo il ripiego il CV supera ancora 1 pagina, si salva **comunque il PDF multi-pagina**, senza errore. Il sistema registra l'evento nel `RunLog` per diagnosi e, dallo Sprint 69, il numero di pagine nel documento (`page_count`): l'utente vede un avviso dopo la generazione e nel dettaglio del job, e può accorciare il CV con l'editor. Il multi-pagina è quindi un esito possibile e accettato.
 
 Nell'editor (§15) non c'è alcun ripiego automatico: il numero di pagine si segnala e decide l'utente.
 
@@ -278,23 +278,23 @@ Nell'editor (§15) non c'è alcun ripiego automatico: il numero di pagine si seg
 
 ### 15.1 Accesso e ciclo di vita della bozza
 - Il pulsante **"Modifica CV"** compare nel dettaglio del job quando esiste un CV scaricabile e apre l'editor.
-- **Prima apertura**: si crea una **bozza** (una per job) copiando il contenuto strutturato dell'ultimo CV del job. I CV generati prima dello Sprint 51 non hanno questo contenuto: l'editor risponde "Genera prima un CV per questo job".
-- **Aperture successive**: si riapre la bozza esistente, con modifiche e conversazione. La bozza **non si aggiorna** quando l'utente rigenera il CV (§14).
-- **"Genera PDF finale"** produce un **nuovo CV del job** dalla bozza salvata, che diventa quello scaricato. Non chiama l'AI e **non consuma quota né credito**. Lo stato del job non cambia. La bozza resta.
+- **Prima apertura**: si crea una **bozza** (una per job) copiando il contenuto strutturato dell'ultimo CV del job. I CV generati prima dello Sprint 51 non hanno questo contenuto: il pulsante "Modifica CV" non compare e il dettaglio spiega di rigenerare il CV (Sprint 69).
+- **Aperture successive**: si riapre la bozza esistente, con modifiche e conversazione. Se nel frattempo è stato generato un CV più recente (es. "Rigenera CV"), l'editor chiede prima *"ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?"* (Sprint 69). "Riparti" ricrea la bozza dal nuovo CV e svuota la chat; "Continua" la lascia com'è e la domanda non si ripete per quel CV.
+- **"Genera PDF finale"** produce un **nuovo CV del job** dalla bozza, compresa l'ultima modifica a schermo anche se l'autosave non è ancora partito (Sprint 69); il nuovo CV diventa quello scaricato e non conta come "CV più recente" per la domanda sopra. Non chiama l'AI e **non consuma quota né credito**. Lo stato del job non cambia. La bozza resta.
 
 ### 15.2 Cosa l'utente può cambiare rispetto alle regole automatiche
 
 | Elemento | Regola automatica (§5) | Nell'editor |
 |---|---|---|
-| Qualifica, sommario | Scritti dal modello | Testo libero |
-| Areas of Expertise | 4–6 voci dal modello | Modifica, aggiunta, rimozione, riordino; nessun minimo o massimo |
+| Qualifica, sommario | Scritti dal modello | Testo libero, con grassetto (Sprint 69) |
+| Areas of Expertise | 4–6 voci dal modello | Modifica (con grassetto), aggiunta, rimozione, riordino; nessun minimo o massimo |
 | Esperienze mostrate | Cap 5 + swap singolo | **Tutte** le esperienze del profilo sono in bozza, con la spunta "Mostra nel CV" (le escluse partono spente); nessun cap. L'ordine non si cambia |
-| Ruolo | Dal modello | Modificabile |
+| Ruolo | Dal modello | Modificabile, con grassetto |
 | Azienda, località, date | Dal profilo | Solo lettura |
 | Tecnologie | Dal profilo | Né visibili né modificabili; compaiono comunque nel PDF |
 | Bullet | Taglio a B, minimo garantito, ripiego | **Tutti** i bullet prodotti dall'AI, ciascuno con spunta mostra/nascondi; all'inizio la spunta riflette la selezione automatica (bullet tagliati dal budget o dal ripiego spenti). Testo modificabile, aggiunta, rimozione, riordino. **Nessun taglio automatico al budget** |
 | Grassetto nei bullet | Dal modello, 1–2 keyword | Selezione del testo + pulsante **B** o Ctrl/Cmd+B; nessun limite |
-| Istruzione | Tutte le voci, copiate dal profilo | Tutti i campi modificabili (periodo come testo libero), aggiunta e rimozione. **Solo nel CV** |
+| Istruzione | Tutte le voci, copiate dal profilo | Tutti i campi modificabili (periodo come testo libero; note con grassetto), aggiunta e rimozione. **Solo nel CV** |
 | Certified/Skilled in | Scelte dal modello con filtro di grounding | Caselle di spunta sulle **sole** voci del profilo |
 | Lingue | Tutte dal profilo | Lingua e livello da elenchi fissi, aggiunta e rimozione. Solo nel CV |
 | Una pagina | Ripiego di 4 iterazioni, poi multi-pagina | **Nessun ripiego**: l'anteprima mostra "1 pagina ✓" o "N pagine ⚠" e decide l'utente |
@@ -316,13 +316,14 @@ Nell'editor (§15) non c'è alcun ripiego automatico: il numero di pagine si seg
   - modifica del livello di una lingua.
 
   **Non** previste: riordino, eliminazione di bullet, modifica di titolo/istituto/date dell'istruzione, aggiunta o rimozione di lingue o voci di istruzione.
-- **Riferimento ai bullet**: il pulsante ✦ su ogni bullet lo aggiunge al "Contesto" del messaggio. Si possono puntare più bullet, anche di esperienze diverse. Il modello li usa per risolvere riferimenti generici ("questo punto"), ma se il testo nomina chiaramente altro segue il testo.
+- **Riferimento ai bullet**: il pulsante ✦ su ogni bullet lo aggiunge al "Contesto" del messaggio. Si possono puntare più bullet, anche di esperienze diverse. Il modello li usa per risolvere riferimenti generici ("questo punto"), ma se il testo nomina chiaramente altro segue il testo. Dallo Sprint 69 bullet puntati e proposte si riferiscono al bullet per il suo identificativo, non per la posizione: riordini, eliminazioni o più proposte accettate nello stesso turno non spostano mai una modifica su un altro bullet; una proposta su un elemento che non esiste più non viene applicata.
+- **Memoria delle proposte** (Sprint 69): il modello vede, per i turni precedenti, anche le proposte fatte e la scelta dell'utente (accettata, rifiutata, in sospeso), e non ripropone ciò che è stato rifiutato se l'utente non lo chiede.
 - **Grounding in chat:**
   - per il testo narrativo (sommario, qualifica, ruolo, bullet, note di istruzione) il modello può andare oltre il profilo **solo su richiesta esplicita** dell'utente nella conversazione, e deve segnalarlo nella risposta;
   - le nuove aree devono restare riconducibili al profilo;
   - skills e certificazioni: **nessuna eccezione**, solo nomi esatti del profilo. Il sistema scarta comunque le azioni con nomi non presenti nel profilo e i livelli di lingua non validi.
 - **Persistenza**: conversazione e decisioni (Accetta/Rifiuta) restano salvate con la bozza. Riaprendo l'editor, le card già decise compaiono come "Applicata" o "Rifiutata".
-- **Costo**: **ogni messaggio** costa 0,20 € di credito extra (default di `PRICE_CV_DRAFT_CHAT_MESSAGE`), senza quota gratuita né massimale. Senza credito il messaggio è rifiutato; se l'AI fallisce, il credito torna all'utente.
+- **Costo**: **ogni messaggio** costa 0,20 € di credito extra (default di `PRICE_CV_DRAFT_CHAT_MESSAGE`), senza quota gratuita né massimale; prezzo e saldo sono mostrati sopra il campo di testo prima dell'invio (Sprint 69). Senza credito il messaggio è rifiutato; se l'AI fallisce, il credito torna all'utente.
 
 ---
 
@@ -485,7 +486,7 @@ Un solo file. I parametri `{{ … }}` arrivano dall'unico livello di `COMPACT_LE
 | Tecnologie | base−1 (8pt), corsivo, "Tecnologie: …" |
 | Istruzione | riga flex: "**Titolo** — Istituto" a sinistra, "località \| **date**" a destra; note sotto |
 | Lingue | riga flex `justify-content: space-between`, gap minimo 18pt; "Lingua: Livello" |
-| Grassetto keyword | filtro `bold_markup` (`templatetags/cv_extras.py`): regex non greedy `\*\*(.+?)\*\*` → `<strong>`, resto in escape HTML; applicato solo ai bullet delle esperienze |
+| Grassetto keyword | filtro `bold_markup` (`templatetags/cv_extras.py`): regex non greedy `\*\*(.+?)\*\*` → `<strong>`, resto in escape HTML; applicato ai bullet delle esperienze e, dallo Sprint 69, a qualifica, sommario, aree, ruolo e note dell'istruzione |
 
 Colori: solo `#000` e `#2f4a63`. I grigi precedenti di qualifica, contatti e tecnologie sono stati rimossi nello Sprint 56.
 
@@ -499,7 +500,7 @@ Colori: solo `#000` e `#2f4a63`. I grigi precedenti di qualifica, contatti e tec
   areas_of_expertise: [str],
   experiences: [{profile_experience_id, company, role, location, dates,
                  technologies: [str], shown: bool,
-                 bullets: [{text, shown: bool}]}],   # TUTTE le esperienze del profilo, TUTTI i bullet dell'AI
+                 bullets: [{id, text, shown: bool}]}],   # TUTTE le esperienze del profilo, TUTTI i bullet dell'AI; id stabile (Sprint 69)
   educations: [{institution, title, location, dates, notes}],   # stringhe già formattate
   skills: [str], certifications: [str],   # selezione corrente (filtrata sul profilo)
   languages: [{language: code, level: code}]
@@ -508,26 +509,29 @@ Colori: solo `#000` e `#2f4a63`. I grigi precedenti di qualifica, contatti e tec
 Costruzione (`build_draft_content_json`):
 - `shown` dell'esperienza vale vero se l'esperienza è tra quelle finali, dopo cap, taglio e ripiego;
 - `shown` di un bullet vale vero se il suo testo è tra i bullet finali di quell'esperienza. Per le esperienze escluse dal cap tutti i bullet hanno `shown = true`;
-- i bullet compaiono nell'**ordine restituito dall'AI**, non nell'ordine per rank del PDF generato (§14).
+- i bullet compaiono nell'**ordine restituito dall'AI**, non nell'ordine per rank del PDF generato (§14);
+- ogni bullet riceve un `id` di 12 caratteri esadecimali (`apps/cv/draft_ids.py`, Sprint 69). Gli id mancanti (contenuti precedenti, bullet aggiunti da una scheda non aggiornata) sono assegnati dal server alla lettura della bozza, al seed, in PATCH, anteprima e finalizzazione; la PWA assegna l'id ai bullet che l'utente aggiunge.
 
 ### 17.2 Rendering dalla bozza (`draft.py`)
-- `seed_draft_for_job`: `update_or_create` del `CVDraft` dall'ultimo `CVDocument` (`-generated_at, -id`). Se manca `content_json` solleva `NoCvDocumentToEdit` (409).
+- `seed_draft_for_job`: `update_or_create` del `CVDraft` dall'ultimo `CVDocument` (`-generated_at, -id`), con chat azzerata e `source_document` = quel documento. Se manca `content_json` solleva `NoCvDocumentToEdit` (409).
+- `is_cv_draft_outdated` / `keep_cv_draft` (Sprint 69): la bozza è superata se l'ultimo CV del job non è il suo `source_document`; "continua la bozza" aggiorna solo il riferimento.
 - `render_context_from_draft`:
   - prende solo esperienze e bullet con `shown`, nell'ordine della bozza, **senza cap, budget né ripiego**;
   - etichette da `content_language`, con fallback `en`;
   - intestazione (nome, contatti, foto) **riletta dal profilo e dall'utente al momento del rendering**: le modifiche a telefono, email o foto del profilo si riflettono anche su un CV finalizzato dopo;
   - lingue tradotte dai codici.
 - `render_draft_preview`: un rendering con il contenuto inviato dal client (anche non salvato). Restituisce il PDF con l'header `X-Page-Count`.
-- `finalize_cv_draft`: impagina il **`content_json` salvato** e crea un `CVDocument` (`generation_type=manual`, `content_json` = bozza, senza `extra_instructions_used` né `areas_of_expertise_grounding`). Nessuna chiamata AI, nessun consumo.
+- `finalize_cv_draft`: salva nella bozza il contenuto corrente inviato dalla PWA (se presente, già validato), impagina e crea un `CVDocument` (`generation_type=manual`, `content_json` = bozza, `page_count`, senza `extra_instructions_used` né `areas_of_expertise_grounding`), che diventa il `source_document` della bozza. Nessuna chiamata AI, nessun consumo.
 
 ### 17.3 Chat (`draft_chat.py`)
 - **Endpoint:** `GET/POST/PATCH /api/jobs/<id>/cv-draft/chat/`.
-  - POST `{message, focus_bullets: [{profile_experience_id, bullet_index}]}` → `{reply, actions}`.
+  - GET → `{history, price, balance}` (Sprint 69).
+  - POST `{message, focus_bullets: [{profile_experience_id, bullet_id}]}` → `{reply, actions, balance}`.
   - PATCH `{message_index, action_index, decision: accepted|rejected}` salva la decisione sull'azione.
-- **Input al modello:** la **bozza salvata** (JSON completo, bullet nascosti inclusi), skills e certificazioni del profilo, l'offerta, la cronologia (solo i testi), i "BULLET PUNTATI DALL'UTENTE" (riferimenti non validi ignorati) e il nuovo messaggio.
-- **Schema `CHAT_SCHEMA`:** `{reply: str, actions: [azione]}`. Ogni azione ha **tutti** i campi `type`, `profile_experience_id`, `bullet_index`, `area_index`, `education_index`, `language_index`, `text`, `name`, `level` (nullable), senza `oneOf`. `type` ∈ `CHAT_ACTION_TYPES` (16 tipi, §15.3); `level` ∈ `elementary|intermediate|fluent|mother_tongue|null`. Gli indici partono da 0 e si riferiscono alla bozza inviata.
-- **Filtro `_sanitize_actions`:** scarta i `toggle_skill`/`toggle_certification` con nomi non presenti nel profilo e gli `update_language_level` con livello non valido. Gli altri indici **non** sono validati lato server.
-- **Applicazione:** solo nel frontend (`applyChatAction` in `CvDraftEditorPage.jsx`), con le stesse funzioni dell'editor manuale. Il server non scrive mai un'azione nel `content_json`.
+- **Input al modello:** la **bozza salvata** (JSON completo, bullet nascosti inclusi, con gli id; la PWA salva prima l'eventuale modifica in attesa), skills e certificazioni del profilo, l'offerta, la cronologia degli ultimi 20 turni con, per l'assistente, le azioni proposte in forma compatta e la decisione `accepted`/`rejected`/`pending` (Sprint 69), i "BULLET PUNTATI DALL'UTENTE" (riferimenti non validi ignorati) e il nuovo messaggio.
+- **Schema `CHAT_SCHEMA`:** `{reply: str, actions: [azione]}`. Ogni azione ha **tutti** i campi `type`, `profile_experience_id`, `bullet_id` (Sprint 69, al posto di `bullet_index`), `area_index`, `education_index`, `language_index`, `text`, `name`, `level` (nullable), senza `oneOf`. `type` ∈ `CHAT_ACTION_TYPES` (16 tipi, §15.3); `level` ∈ `elementary|intermediate|fluent|mother_tongue|null`. Gli indici partono da 0 e si riferiscono alla bozza inviata.
+- **Filtro `_sanitize_actions`:** scarta i `toggle_skill`/`toggle_certification` con nomi non presenti nel profilo e gli `update_language_level` con livello non valido; dallo Sprint 69 anche le azioni su esperienze o bullet inesistenti, con indici di aree/istruzione/lingue fuori range o senza il testo richiesto. Allega `area_text` (testo dell'area al momento della proposta) alle azioni sulle aree.
+- **Applicazione:** solo nel frontend (`applyChatAction` in `CvDraftEditorPage.jsx`), con le stesse funzioni dell'editor manuale, ritrovando bullet per `id` e aree per `area_text`; se l'elemento non c'è più l'azione non viene applicata e la decisione registrata è "rifiutata". Il server non scrive mai un'azione nel `content_json`. Le azioni salvate prima dello Sprint 69 ricevono alla prima lettura il `bullet_id` del bullet che occupa la loro posizione.
 - **Persistenza:** `chat_history = [{role:"user", message}, {role:"assistant", message, actions:[{…, decision?}]}]`.
 - **Costo e errori:** addebito di `PRICE_CV_DRAFT_CHAT_MESSAGE` in transazione prima della chiamata. Credito insufficiente → 402. Errore AI → rimborso, `RunLog` `cv_draft_chat` FAILURE e risposta 502.
 
@@ -537,10 +541,10 @@ Costruzione (`build_draft_content_json`):
 
 Osservazioni sul comportamento attuale del codice. Qui sono solo descritte, senza decisioni.
 
-1. **Numerazione dei gap sfasata.** L'interfaccia numera i gap sull'elenco completo, mentre il prompt rinumera i soli gap selezionati, nell'ordine di clic. "Per il gap 2…" può indicare al modello un gap diverso da quello che l'utente vede come n. 2.
-2. **Bozza non riseminata dopo "Rigenera CV".** La rigenerazione crea un nuovo `CVDocument`, ma "Modifica CV" riapre la bozza precedente, con chat e decisioni, perché il frontend crea la bozza solo se non esiste e nessun codice la aggiorna alla generazione. Il docstring di `CVDraft` descrive il contrario. Effetto: modifiche e finalizzazione partono dal contenuto vecchio.
-3. **"Genera PDF finale" non attende il salvataggio automatico.** Il PDF finale usa la bozza salvata sul server: le modifiche dell'ultimo ~1,2 s (salvataggio non ancora partito) possono restare fuori. Allo stesso modo la chat lavora sulla bozza salvata, non sullo stato a schermo.
-4. **Avviso ">5 esperienze" impreciso.** Il testo dice "le più pertinenti per ciascuna offerta"; la regola reale tiene le 5 più recenti con al massimo uno swap (§5.4).
+1. **Numerazione dei gap sfasata.** *Risolto nello Sprint 69: il prompt usa numeri e testo del pannello.* L'interfaccia numera i gap sull'elenco completo, mentre il prompt rinumera i soli gap selezionati, nell'ordine di clic. "Per il gap 2…" può indicare al modello un gap diverso da quello che l'utente vede come n. 2.
+2. **Bozza non riseminata dopo "Rigenera CV".** *Risolto nello Sprint 69 (§15.1); docstring di `CVDraft` corretta.* La rigenerazione crea un nuovo `CVDocument`, ma "Modifica CV" riapre la bozza precedente, con chat e decisioni, perché il frontend crea la bozza solo se non esiste e nessun codice la aggiorna alla generazione. Il docstring di `CVDraft` descrive il contrario. Effetto: modifiche e finalizzazione partono dal contenuto vecchio.
+3. **"Genera PDF finale" non attende il salvataggio automatico.** *Risolto nello Sprint 69, anche per la chat.* Il PDF finale usa la bozza salvata sul server: le modifiche dell'ultimo ~1,2 s (salvataggio non ancora partito) possono restare fuori. Allo stesso modo la chat lavora sulla bozza salvata, non sullo stato a schermo.
+4. **Avviso ">5 esperienze" impreciso.** *Risolto nello Sprint 69.* Il testo dice "le più pertinenti per ciascuna offerta"; la regola reale tiene le 5 più recenti con al massimo uno swap (§5.4).
 5. **Ordine dei bullet tra CV generato e bozza.** Nel PDF generato i bullet di ogni esperienza sono ordinati per rilevanza. In `content_json` restano nell'ordine restituito dall'AI. La prima anteprima dell'editor può quindi mostrare un ordine diverso dal PDF generato.
 6. **`shown` dei bullet calcolato sul testo.** Due bullet con testo identico nella stessa esperienza risultano entrambi accesi o entrambi spenti. Le esperienze escluse dal cap hanno tutti i bullet accesi: accenderle nell'editor le mostra senza alcun taglio.
 7. **Rank univoco solo per esperienza.** Il taglio globale e il ripiego confrontano rank di esperienze diverse come se fossero sulla stessa scala. A pari rank l'ordinamento stabile favorisce le esperienze più recenti nel taglio e toglie per primi i bullet delle più recenti nel ripiego.
@@ -548,13 +552,13 @@ Osservazioni sul comportamento attuale del codice. Qui sono solo descritte, senz
 9. **Swap senza graduatoria.** `highly_relevant` è un sì/no: tra più escluse marcate vince sempre la più recente, non "la più rilevante".
 10. **Allineamento per posizione AI ↔ profilo.** Località, date, tecnologie e `profile_experience_id` si riattaccano per indice. Se il modello restituisse meno esperienze del profilo, le ultime sparirebbero senza errore; se ne restituisse di più, la generazione fallirebbe. Lo schema non impone il numero.
 11. **Vincoli solo nel prompt.** Il numero di aree (4–6), "mai più bullet del profilo", 1–2 keyword in grassetto e la lunghezza del sommario non sono controllati dal sistema. Anche il ruolo dell'esperienza è restituito dal modello, senza un vincolo esplicito di copia letterale.
-12. **Multi-pagina silenzioso.** Dopo 4 iterazioni il PDF può restare su più pagine. Lo segnala solo un `RunLog` con stato SUCCESS: l'utente se ne accorge solo aprendo il PDF o l'editor.
+12. **Multi-pagina silenzioso.** *Risolto nello Sprint 69: `page_count` e avviso all'utente.* Dopo 4 iterazioni il PDF può restare su più pagine. Lo segnala solo un `RunLog` con stato SUCCESS: l'utente se ne accorge solo aprendo il PDF o l'editor.
 13. **Nome di ripiego = email dell'account.** Senza nome e cognome l'intestazione mostra l'email di login, che lo Sprint 41 aveva tolto apposta dalla riga contatti.
 14. **Intestazione riletta dal profilo nella bozza.** Contatti e foto di un PDF finalizzato riflettono il profilo al momento della finalizzazione, non quello della generazione. La città resta quella tradotta salvata in bozza.
 15. **Grounding non salvato per i PDF finalizzati.** `areas_of_expertise_grounding` è vuoto e le aree modificate a mano o via chat non hanno un riferimento di grounding.
-16. **Indici della chat non validati lato server.** Il riferimento ai bullet e gli indici delle azioni sono posizionali: riordinare o rimuovere bullet dopo una proposta può far applicare l'azione a un elemento diverso.
-17. **Commenti e docstring superati nel codice.** "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft`; `GenerationType.AUTOMATIC` mai usato; chiave di traduzione "data di fine obbligatoria" mai usata; `cv_parameters.py` cita ancora la v4 di questo documento.
-18. **Nessun test automatico** su `draft.py`, `draft_chat.py`, `bold_markup` e sugli endpoint `cv-draft*`. I 49 test di `apps.cv` (`tests.py`, `test_selection.py`) coprono generazione e selezione.
+16. **Indici della chat non validati lato server.** *Risolto nello Sprint 69 per i bullet (id stabili) e con validazione lato server di tutti i riferimenti; aree, istruzione e lingue restano per indice (§17.3).* Il riferimento ai bullet e gli indici delle azioni sono posizionali: riordinare o rimuovere bullet dopo una proposta può far applicare l'azione a un elemento diverso.
+17. **Commenti e docstring superati nel codice.** `GenerationType.AUTOMATIC` mai usato; chiave di traduzione "data di fine obbligatoria" mai usata; `cv_parameters.py` cita ancora la v4 di questo documento.
+18. **Test automatici dell'editor parziali.** Dallo Sprint 69 `apps/cv/test_sprint69.py` copre seed, risemina, finalizzazione, id stabili, filtro e contesto della chat, `bold_markup`; restano senza test l'anteprima e `record_action_decision`.
 19. **Variabilità del modello.** A parità di profilo e job, testi, rank, marcature (quindi swap e taglio) possono cambiare tra due generazioni. È accettato.
 20. **Costo e tempi per profili ricchi.** Il modello produce bullet per tutte le esperienze, anche quelle che il cap escluderà. Ogni iterazione di ripiego è un rendering WeasyPrint in più, dentro una richiesta HTTP sincrona. Impatto da monitorare.
 

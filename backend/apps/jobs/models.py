@@ -1,6 +1,22 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
+
+# Dopo quanto tempo un flag `*_generation_in_progress` acceso si considera
+# stantio (Sprint 69): le generazioni girano nella richiesta HTTP e gunicorn
+# uccide il worker dopo 30 minuti (`--timeout 1800`), quindi oltre 35 minuti
+# nessuna richiesta può essere ancora viva. Un flag senza timestamp (acceso
+# prima dello Sprint 69) è considerato stantio, come per la raccolta manuale.
+GENERATION_STALE_AFTER = timedelta(minutes=35)
+
+
+def is_generation_active(flag, started_at, now=None):
+    if not flag or started_at is None:
+        return False
+    return (now or timezone.now()) - started_at <= GENERATION_STALE_AFTER
 
 
 class Job(models.Model):
@@ -78,6 +94,11 @@ class Job(models.Model):
     # messaggio di networking non tocca lo status del job né interferisce
     # con una generazione di CV/cover letter in corso sullo stesso job.
     referral_message_generation_in_progress = models.BooleanField(default=False)
+    # Accensione dei tre flag sopra (Sprint 69): oltre GENERATION_STALE_AFTER
+    # il flag non blocca più (vedi `is_generation_active`).
+    cv_generation_started_at = models.DateTimeField(null=True, blank=True)
+    cover_letter_generation_started_at = models.DateTimeField(null=True, blank=True)
+    referral_message_generation_started_at = models.DateTimeField(null=True, blank=True)
     # Storico: cap di intake giornaliero (15 job/utente/notte), rimosso
     # nello sprint corrente — non più impostato da nessun percorso di
     # raccolta. Campo lasciato sul modello (righe passate già marcate,
@@ -109,6 +130,22 @@ class Job(models.Model):
 
     def __str__(self):
         return f"{self.title} @ {self.company} ({self.user})"
+
+    @property
+    def cv_generation_active(self):
+        return is_generation_active(self.cv_generation_in_progress, self.cv_generation_started_at)
+
+    @property
+    def cover_letter_generation_active(self):
+        return is_generation_active(
+            self.cover_letter_generation_in_progress, self.cover_letter_generation_started_at
+        )
+
+    @property
+    def referral_message_generation_active(self):
+        return is_generation_active(
+            self.referral_message_generation_in_progress, self.referral_message_generation_started_at
+        )
 
 
 class DailyQuota(models.Model):

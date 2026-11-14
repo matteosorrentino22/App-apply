@@ -28,3 +28,26 @@ def mark_application_done(job):
 
     type(locked_job.user).objects.filter(pk=locked_job.user.pk).update(last_activity_reset=now)
     return locked_job
+
+
+class ApplicationUndoRejected(Exception):
+    """Il Job non è marcato come candidatura fatta: niente da annullare."""
+
+
+@transaction.atomic
+def undo_application_done(job):
+    """Annulla "candidatura fatta" (Sprint 69, es. clic per errore): lo stato
+    torna a `cv_generated` se il job ha un CV, altrimenti a `new`, e
+    `date_application_done` si azzera. `User.last_activity_reset` NON si
+    tocca: il timer di inattività resta quello dell'ultima candidatura
+    marcata (riportarlo indietro richiederebbe uno storico che non c'è, e
+    l'unico effetto di lasciarlo è un promemoria che arriva più tardi)."""
+    locked_job = Job.objects.select_for_update().get(pk=job.pk)
+    if locked_job.status != Job.Status.APPLICATION_DONE:
+        raise ApplicationUndoRejected("Questo job non è marcato come candidatura fatta.")
+
+    has_cv = locked_job.cv_documents.exists()
+    locked_job.status = Job.Status.CV_GENERATED if has_cv else Job.Status.NEW
+    locked_job.date_application_done = None
+    locked_job.save(update_fields=["status", "date_application_done"])
+    return locked_job

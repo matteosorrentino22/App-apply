@@ -360,13 +360,14 @@ Sotto i filtri ci sono i **filtri preferiti** salvati, come pillole cliccabili, 
 Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono attributi, non stati.
 
 **Stati stabili (tre):**
-- **nuovo**: stato iniziale di **tutti** i job (raccolti, importati, creati a mano), con qualunque punteggio. Un job torna "nuovo" anche quando una generazione del CV fallisce (§4.7; vedi §8 per i casi limite).
-- **CV generato**: stato di un job dopo una generazione del CV riuscita, compresa la rigenerazione. Non cambiano lo stato: la finalizzazione dall'editor, la cover letter e i messaggi di networking.
-- **candidatura fatta**: impostato a mano dall'utente **in qualunque momento**, anche senza CV (Sprint 46). Non è ripetibile e **non si può annullare** dall'app.
+- **nuovo**: stato iniziale di **tutti** i job (raccolti, importati, creati a mano), con qualunque punteggio. Un job torna "nuovo" solo annullando la candidatura di un job senza CV (§4.10).
+- **CV generato**: stato di un job dopo una generazione del CV riuscita, compresa la rigenerazione, se il job non era già "candidatura fatta" (Sprint 69). Non cambiano lo stato: una generazione fallita, la finalizzazione dall'editor, la cover letter e i messaggi di networking.
+- **candidatura fatta**: impostato a mano dall'utente **in qualunque momento**, anche senza CV (Sprint 46). Non è ripetibile; una rigenerazione del CV non lo toglie. Si può **annullare** (Sprint 69, §4.10).
 
 **Stato transitorio:**
 - **CV in generazione**: mentre il CV viene prodotto, il pulsante "Genera" del job mostra "Generazione…" ed è disabilitato. Una seconda richiesta sullo stesso job viene rifiutata.
-- Cover letter e messaggi di networking hanno **blocchi di concorrenza propri**, indipendenti da quello del CV. **Non** sono stati del job.
+- Cover letter e messaggi di networking hanno **blocchi di concorrenza propri**, indipendenti da quello del CV, visibili anche da altri dispositivi e dopo un ricaricamento (Sprint 69). **Non** sono stati del job.
+- Se una generazione si interrompe senza chiudersi (es. server riavviato), il blocco decade da solo dopo **35 minuti** (Sprint 69).
 
 **Archiviazione e preferito.**
 - Archiviare non cambia lo stato. Rimuovendo un job dall'archivio, questo torna alla sezione d'origine con lo stato che non ha mai perso.
@@ -395,13 +396,13 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 
 **Esito.**
 - **Riuscita:**
-  - il job passa a **CV generato**;
+  - il job passa a **CV generato**, salvo che fosse già **candidatura fatta**: in quel caso resta tale (Sprint 69);
   - esce dall'archivio, se c'era;
   - il nuovo PDF diventa quello scaricabile. I CV precedenti restano nello storico interno, ma l'app mostra solo l'ultimo.
 - **Fallimento:**
   - un avviso "Non siamo riusciti a generare il CV. Riprova.";
-  - il job torna **nuovo**;
-  - massimale o credito vengono **restituiti**;
+  - lo stato del job **non cambia** (Sprint 69): un job con CV resta "CV generato", una candidatura resta tale;
+  - massimale o credito vengono **restituiti** (anche quando il server interrompe una generazione troppo lunga);
   - per riprovare basta premere di nuovo "Genera CV".
 
 **Contenuto del CV** (sintesi; le regole vincolanti sono nel **doc 03**):
@@ -415,7 +416,7 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 - **Certificazioni e competenze:** scelte solo tra quelle del profilo.
 - **Esperienze:**
   - al massimo **5** (`MAX_EXPERIENCES_SHOWN`);
-  - bullet riformulati e selezionati per rilevanza, con 1–2 **parole chiave in grassetto** per bullet (Sprint 58);
+  - bullet riformulati e selezionati per rilevanza, con 1–2 **parole chiave in grassetto** per bullet (Sprint 58). Il grassetto aggiunto a mano o dalla chat in qualifica, sommario, aree, ruolo e note dell'istruzione compare anch'esso come grassetto (Sprint 69);
   - località, date (solo l'anno) e tecnologie prese così come sono nel profilo.
 - **Istruzione:** **tutte** le voci, mai riformulate.
 - **Lingue:** tradotte nella lingua del CV.
@@ -428,7 +429,7 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 **Template e lunghezza.**
 - **Template unico**, non selezionabile: A4, carattere compatibile con Cambria, dimensione fissa (Sprint 52–57).
 - L'obiettivo è **1 pagina**: se il contenuto eccede, l'app toglie i bullet meno rilevanti per qualche tentativo.
-- In casi residuali il PDF può uscire su **più pagine**, senza avviso all'utente (doc 03).
+- In casi residuali il PDF può uscire su **più pagine**: dallo Sprint 69 l'utente lo vede subito (avviso dopo la generazione e nel dettaglio del job: "Il CV occupa N pagine invece di 1…") e può accorciarlo con l'editor (doc 03).
 
 **Foto.** Compare solo se l'opzione è attiva e una foto è caricata.
 
@@ -447,7 +448,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 **Dove si trova.** Nel dettaglio del job c'è il pannello collassabile **"Colma i gap trovati per questa offerta prima di generare"**. Non è un popup: chi non lo apre genera con un clic diretto.
 
 **Cosa fa l'utente.**
-- Seleziona con le checkbox **uno o più gap**, presi dall'elenco numerato dei gap dello scoring. Al modello vengono passate etichetta e motivazione di ciascuno.
+- Seleziona con le checkbox **uno o più gap**, presi dall'elenco numerato dei gap dello scoring; sotto ogni gap compare la sua motivazione. Al modello arrivano **gli stessi numeri e lo stesso testo** (etichetta e motivazione) che l'utente vede, nell'ordine dell'elenco (Sprint 69): "per il gap 2" indica sempre il gap n. 2 del pannello.
 - Se vuole, scrive **indicazioni** su come inserirli (es. "per il gap 2, collegalo alla mia esperienza in …"). Senza indicazioni, il modello sceglie l'esperienza reale più plausibile.
 - Preme **"Genera CV"**.
 - Se il job non ha gap, il pannello lo segnala.
@@ -490,8 +491,8 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 - **"Vai all'annuncio"** apre il link di candidatura originale. Per i job creati a mano senza link compare "Nessun link di candidatura".
 - **"Segna candidatura fatta"**:
   - è disponibile su **qualunque job** non ancora marcato, **anche senza CV** (Sprint 46);
-  - registra la data e azzera il timer della notifica di inattività (§4.12);
-  - non si può annullare.
+  - registra la data e azzera il timer della notifica di inattività (§4.12).
+- **"Annulla candidatura"** (Sprint 69), al posto del pulsante precedente sui job già marcati, chiede conferma e riporta il job a "CV generato" se ha un CV, altrimenti a "nuovo"; la data della candidatura si azzera e il job esce dal conteggio "Candidature fatte" della Home. Il timer di inattività **non** torna indietro: resta quello della candidatura annullata.
 - La candidatura vera e propria si fa sul portale di origine.
 
 ### 4.11 Monetizzazione
@@ -607,14 +608,15 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 **Accesso.**
 - Dal dettaglio di un job con CV, pulsante **"Modifica CV"**.
 - L'editor si apre sulla **bozza** del CV, creata la prima volta a partire dall'ultimo CV generato.
-- I CV generati **prima dello Sprint 51** non sono apribili: "Genera prima un CV per questo job".
+- **Bozza superata** (Sprint 69): se dopo l'apertura della bozza è stato generato un CV più recente, l'editor chiede *"Vuoi ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?"*. "Riparti dal nuovo CV" ricrea la bozza dal documento nuovo e svuota la chat; "Continua la bozza" la riapre com'è e la domanda non si ripete per quel CV. Il PDF prodotto da "Genera PDF finale" non conta come documento più recente.
+- I CV generati **prima dello Sprint 51** non sono modificabili: il pulsante "Modifica CV" non compare e il dettaglio spiega di rigenerare il CV (Sprint 69).
 
 **Cosa si può modificare** (le regole complete sono nel doc 03):
-- **sommario** e **qualifica**;
+- **sommario** e **qualifica**, con grassetto (Sprint 69);
 - **Areas of Expertise**: modifica, aggiunta, rimozione, riordino;
 - **esperienze**:
   - compaiono **tutte** quelle del profilo, comprese quelle escluse dal limite di 5, con la spunta "Mostra nel CV";
-  - il **ruolo** è modificabile;
+  - il **ruolo** è modificabile (con grassetto);
   - azienda, località e date sono in sola lettura;
   - l'ordine delle esperienze non cambia;
 - **bullet**:
@@ -622,7 +624,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
   - testo modificabile, con **grassetto** (pulsante B o Ctrl/Cmd+B);
   - aggiunta, rimozione, riordino;
   - pulsante ✦ per usare il bullet come contesto della chat (§4.17);
-- **istruzione**: tutti i campi, con aggiunta e rimozione;
+- **istruzione**: tutti i campi, con aggiunta e rimozione; le note con grassetto;
 - **lingue**: lingua e livello dalla lista fissa, con aggiunta e rimozione.
 
   Le modifiche a istruzione e lingue valgono **solo per quel CV** e non toccano il profilo.
@@ -634,7 +636,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - **Salvataggio automatico** circa 1 secondo dopo l'ultima modifica, con lo stato "Salvataggio… / Salvato".
 
 **PDF finale.**
-- **"Genera PDF finale"** produce un nuovo CV dalla bozza, **senza AI e senza consumare massimale o credito**. Poi l'app torna al job.
+- **"Genera PDF finale"** produce un nuovo CV dalla bozza, **senza AI e senza consumare massimale o credito**, includendo anche l'ultima modifica non ancora salvata (Sprint 69). Poi l'app torna al job; se il PDF supera una pagina lo segnala.
 - Il nuovo PDF diventa quello scaricabile.
 - Lo stato del job non cambia.
 - La bozza resta disponibile.
@@ -660,15 +662,15 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 
 **Cosa non può proporre:** riordini, eliminazione di bullet, modifiche a titolo, istituto o date dell'istruzione, aggiunta o rimozione di lingue o voci di istruzione.
 
-**Contesto.** Con il pulsante ✦ sotto ogni bullet (cumulabile, anche su esperienze diverse) l'utente indica i bullet a cui si riferisce. Sopra il campo di testo compaiono come chip "Contesto:" e aiutano l'assistente a capire richieste generiche (Sprint 61).
+**Contesto.** Con il pulsante ✦ sotto ogni bullet (cumulabile, anche su esperienze diverse) l'utente indica i bullet a cui si riferisce. Sopra il campo di testo compaiono come chip "Contesto:" e aiutano l'assistente a capire richieste generiche (Sprint 61). Dallo Sprint 69 bullet puntati e proposte si riferiscono al bullet stesso, non alla sua posizione: riordinare o eliminare bullet, o accettare più proposte dello stesso turno, non sposta mai una modifica su un altro bullet. Se l'elemento di una proposta non esiste più, la proposta non viene applicata e il pannello lo dice. L'assistente conosce anche le proposte fatte prima e la scelta dell'utente (accettata, rifiutata, in sospeso). Prima di inviare un messaggio l'app salva l'eventuale modifica in attesa, così l'assistente vede la bozza come è a schermo.
 
 **Grounding.**
 - Il testo narrativo può essere ampliato oltre il profilo **solo su richiesta esplicita** dell'utente, e l'assistente deve dirlo nella risposta.
 - Competenze e certificazioni restano **sempre** quelle del profilo, **senza eccezioni**: le proposte non conformi vengono scartate.
 
-**Costo.** **Ogni messaggio costa 0,20 € di credito**, senza massimale gratuito. Con credito insufficiente compare "Saldo credito insufficiente per inviare un altro messaggio."; se l'assistente non risponde, il credito viene restituito.
+**Costo.** **Ogni messaggio costa 0,20 € di credito**, senza massimale gratuito. Prezzo e saldo sono mostrati sopra il campo di testo prima dell'invio ("Ogni messaggio costa 0,20 € di credito · saldo: X €", Sprint 69). Con credito insufficiente compare "Saldo credito insufficiente per inviare un altro messaggio."; se l'assistente non risponde, il credito viene restituito.
 
-**Persistenza.** La conversazione è conservata nella bozza del CV.
+**Persistenza.** La conversazione è conservata nella bozza del CV (e si azzera se l'utente riparte da un CV più recente, §4.16). Se la registrazione di una scelta Accetta/Rifiuta non riesce, l'app ritenta e, se non ci riesce, lo segnala.
 
 ### 4.18 Cover letter (Sprint 42)
 
@@ -678,7 +680,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
   - un campo libero "Indicazioni per questa cover letter (facoltativo)";
   - un elenco a checkbox **"Oppure riusa indicazioni date in precedenza"**: fino a 20 indicazioni distinte, prese da tutte le cover letter dell'utente, dalla più recente.
 
-  Le indicazioni selezionate si sommano al testo nuovo.
+  Le indicazioni selezionate si sommano al testo nuovo. Dallo Sprint 69 una combinazione di indicazioni riusate non compare nello storico come voce nuova (compare solo l'eventuale testo nuovo), e due indicazioni che differiscono solo per spazi o maiuscole sono una voce sola.
 - Le indicazioni possono orientare tono ed enfasi oppure introdurre **fatti reali non presenti nel profilo**, sotto la responsabilità dell'utente.
 
 **Struttura.**
@@ -694,7 +696,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 
 **Lingua.** Segue la stessa impostazione del CV (§4.7).
 
-**Impaginazione.** **1 pagina** come obiettivo: se serve, il testo si compatta fino a 3 livelli (carattere, interlinea, margini). Altrimenti la lettera esce su più pagine, senza avviso. Lo stile grafico è proprio e **diverso da quello del CV**.
+**Impaginazione.** **1 pagina** come obiettivo: se serve, il testo si compatta fino a 3 livelli (carattere, interlinea, margini). Altrimenti la lettera esce su più pagine, e dallo Sprint 69 l'app lo segnala (dopo la generazione e nel dettaglio del job). Lo stile grafico è proprio e **diverso da quello del CV** (scelta confermata nello Sprint 69).
 
 **Download.** **"Scarica Cover Letter"** scarica l'ultima generata, con nome `Cover letter {Nome Cognome} - {Titolo del job}.pdf`.
 
@@ -719,11 +721,12 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - L'anteprima PDF è live, con il conteggio delle pagine.
 - Il salvataggio è automatico.
 - **"Genera PDF finale"** è gratuito e senza AI. La lettera finalizzata diventa quella scaricabile, ma non entra tra le indicazioni riusabili.
-- Le lettere generate **prima dello Sprint 63** non sono apribili: "Genera prima una cover letter". Bisogna rigenerarle.
+- Le lettere generate **prima dello Sprint 63** non sono modificabili: il pulsante "Modifica Cover Letter" non compare e il dettaglio spiega di rigenerarle (Sprint 69).
+- **Bozza superata** e "Genera PDF finale" con l'ultima modifica non salvata: come nell'editor del CV (§4.16, Sprint 69).
 
 **Chat.**
-- Pannello laterale "Chiedi all'AI", con lo stesso schema proposta → conferma del CV e le decisioni conservate.
-- Azioni possibili: **modificare**, **aggiungere** (in coda) o **rimuovere** un paragrafo.
+- Pannello laterale "Chiedi all'AI" ("Assistente cover letter", con messaggio iniziale e segnaposto propri della lettera, Sprint 69), con lo stesso schema proposta → conferma del CV, le decisioni conservate e il prezzo con il saldo mostrati prima dell'invio.
+- Azioni possibili: **modificare**, **aggiungere** (in coda) o **rimuovere** un paragrafo. Le proposte si riferiscono al paragrafo, non alla sua posizione (Sprint 69): accettare più modifiche o rimozioni dello stesso turno colpisce sempre il paragrafo giusto.
 - Non esiste il puntamento di un singolo paragrafo come contesto.
 - **Grounding:** l'ampliamento oltre il profilo è ammesso solo su richiesta esplicita. Non si inventano mai aziende, ruoli o risultati, e la chat non scrive oggetto, saluto o chiusura.
 - **Costo:** **0,20 € di credito per messaggio**, con un listino separato da quello della chat del CV.
@@ -735,9 +738,9 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - Il popup contiene:
   - **canale**: LinkedIn (default) o Email;
   - nome del destinatario (facoltativo);
-  - link al profilo LinkedIn del destinatario (facoltativo);
+  - link al profilo LinkedIn del destinatario (facoltativo, **solo per riferimento**: l'interfaccia spiega che non viene aperto né letto e non influisce sul testo, Sprint 69);
   - indicazioni libere (relazione con il destinatario, dettagli, tono);
-  - un elenco a checkbox per riusare fino a 20 indicazioni date in passato.
+  - un elenco a checkbox per riusare fino a 20 indicazioni date in passato (stesse regole di deduplica della cover letter, §4.18).
 
 **Contenuto.**
 - **LinkedIn:** un messaggio breve, circa 80–100 parole al massimo, senza oggetto.
@@ -749,16 +752,16 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
   - nessuna menzione di allegati;
   - una richiesta finale chiara.
 - La lingua segue la stessa impostazione del CV.
-- Il **link LinkedIn del destinatario viene salvato ma non usato**: la lettura del profilo del destinatario è in backlog (§5.21).
+- Il **link LinkedIn del destinatario viene salvato ma non usato** (non arriva nemmeno al modello come contesto): la lettura del profilo del destinatario è in backlog (§5.21). Dallo Sprint 69 compare nello storico come link "Profilo LinkedIn".
 
 **Storico.**
-- La scheda "Messaggi di networking generati" mostra **tutti** i messaggi del job, dal più recente, con canale, destinatario, data, oggetto (email) e testo.
+- La scheda "Messaggi di networking generati" mostra **tutti** i messaggi del job, dal più recente, con canale, destinatario, link LinkedIn se indicato, data, oggetto (email) e testo.
 - Ogni generazione **aggiunge** un messaggio: sullo stesso job si può scrivere a più persone.
 - Con **"Copia"** il testo va negli appunti; per l'email il testo copiato include "Oggetto: …".
 - I messaggi non si possono modificare né cancellare. Non c'è un PDF.
 
 **Effetti e limiti.**
-- Il messaggio non cambia lo stato del job.
+- Il messaggio non cambia lo stato del job. Durante la generazione il pulsante "Genera messaggio" resta disabilitato anche su altri dispositivi e dopo un ricaricamento (Sprint 69).
 - Massimale **Free 1 / Pro 10 al giorno**, indipendente da CV e cover letter. Oltre, **1,00 €** a credito.
 
 ### 4.21 Preferiti e filtri salvati (Sprint 46, 64)
@@ -937,8 +940,9 @@ Formato: checklist di condizioni verificabili sull'as-is.
 ### Stati del job e candidatura
 - ☐ Gli stati stabili sono tre (nuovo, CV generato, candidatura fatta). Archiviato e preferito non sono stati.
 - ☐ Ogni job nasce "nuovo", qualunque sia l'origine e il punteggio.
-- ☐ Dopo una generazione riuscita del CV il job è "CV generato". Dopo una generazione fallita torna "nuovo".
+- ☐ Dopo una generazione riuscita del CV il job è "CV generato", salvo che fosse "candidatura fatta" (resta tale). Una generazione fallita non cambia lo stato (Sprint 69).
 - ☐ "Segna candidatura fatta" è disponibile anche senza CV, una sola volta per job, e azzera il timer di inattività.
+- ☐ "Annulla candidatura", dopo conferma, riporta il job a "CV generato" (o "nuovo" senza CV) senza toccare il timer di inattività (Sprint 69).
 - ☐ Durante la generazione del CV il pulsante mostra "Generazione…" ed è disabilitato.
 
 ### Generazione CV e "colma i gap"
@@ -949,18 +953,19 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Competenze e certificazioni del CV sono solo quelle del profilo.
 - ☐ Con lingua "inglese" il CV è in inglese. Con "lingua dell'offerta" segue la lingua dell'annuncio, con le etichette tradotte in it/en/fr/de/es (altrimenti in inglese).
 - ☐ Il CV si scarica in PDF come `CV {Nome Cognome} - {Titolo}.pdf`.
-- ☐ Nel pannello "Colma i gap" l'utente seleziona uno o più gap e, facoltativamente, scrive indicazioni.
+- ☐ Nel pannello "Colma i gap" l'utente seleziona uno o più gap e, facoltativamente, scrive indicazioni. Il modello riceve gli stessi numeri e testi mostrati nel pannello (Sprint 69).
 - ☐ I gap selezionati possono ampliare solo esperienze reali, mai creare aziende, ruoli o periodi né aggiungere competenze o certificazioni.
 - ☐ Il contenuto prodotto per i gap non viene salvato nel profilo e non cambia il punteggio.
 
 ### Editor e chat del CV
 - ☐ "Modifica CV" apre la bozza dell'ultimo CV, con tutte le esperienze e tutti i bullet del pool, ciascuno con mostra/nascondi.
+- ☐ Se esiste un CV più recente della bozza, l'editor chiede se ripartire dal nuovo documento o continuare la bozza; "Genera PDF finale" include l'ultima modifica a schermo (Sprint 69).
 - ☐ Istruzione e lingue modificate nell'editor non cambiano il profilo. Competenze e certificazioni si scelgono solo tra quelle del profilo.
 - ☐ L'anteprima PDF si aggiorna a ogni modifica e indica il numero di pagine. Le modifiche si salvano da sole.
 - ☐ "Genera PDF finale" produce il PDF scaricabile senza consumare massimale o credito e senza cambiare lo stato del job.
 - ☐ La chat propone modifiche come "prima → dopo" e nulla si applica senza "Accetta". Le decisioni restano registrate dopo un ricaricamento.
 - ☐ La chat rifiuta di aggiungere competenze o certificazioni assenti dal profilo e amplia i testi solo su richiesta esplicita.
-- ☐ Ogni messaggio di chat scala 0,20 € di credito. Con saldo insufficiente il messaggio è rifiutato; se la risposta fallisce, il credito viene restituito.
+- ☐ Ogni messaggio di chat scala 0,20 € di credito, mostrato con il saldo prima dell'invio. Con saldo insufficiente il messaggio è rifiutato; se la risposta fallisce, il credito viene restituito.
 
 ### Cover letter
 - ☐ "Genera Cover Letter" è disponibile su qualunque job, anche senza CV, con indicazioni libere e riuso di indicazioni passate (fino a 20).
@@ -1036,26 +1041,26 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 16. **Offerte scartate non tracciate.** Le offerte scartate per campi mancanti o troppo lunghi non vengono registrate: non si sa quante siano.
 
 **Stati e generazione del CV**
-17. **Rigenerare il CV toglie "candidatura fatta".** Una generazione riuscita su un job già marcato "candidatura fatta" lo riporta a "CV generato", e il job esce dal conteggio "Candidature fatte" della Home.
-18. **Una generazione fallita riporta sempre il job a "nuovo"**, anche se aveva già un CV scaricabile o era "candidatura fatta". In questo stato il job resta con un CV, ma con lo stato "nuovo".
-19. **"Candidatura fatta" non annullabile.** Un clic per errore non si può correggere dall'app.
-20. **Numerazione dei gap incoerente.** Nel pannello "Colma i gap" la numerazione mostrata è quella dell'elenco completo, mentre al modello arrivano numerati solo i gap selezionati, nell'ordine di selezione. Un'indicazione come "per il gap 2…" può così riferirsi a un gap diverso da quello che l'utente vede.
-21. **CV su più pagine senza avviso.** In casi residuali il CV generato può uscire su più pagine senza che l'utente lo sappia. Lo stesso vale per la cover letter.
-22. **Avviso sulle esperienze impreciso.** L'avviso "oltre 5 esperienze" dice che il CV mostrerà "le più pertinenti". In realtà il CV mostra le 5 più recenti, con al massimo una sostituzione per pertinenza (doc 03).
+17. **Rigenerare il CV toglie "candidatura fatta".** *Risolto nello Sprint 69: la candidatura resta.* Una generazione riuscita su un job già marcato "candidatura fatta" lo riporta a "CV generato", e il job esce dal conteggio "Candidature fatte" della Home.
+18. **Una generazione fallita riporta sempre il job a "nuovo"**, anche se aveva già un CV scaricabile o era "candidatura fatta". In questo stato il job resta con un CV, ma con lo stato "nuovo". *Risolto nello Sprint 69: una generazione fallita non cambia più lo stato.*
+19. **"Candidatura fatta" non annullabile.** *Risolto nello Sprint 69: "Annulla candidatura" con conferma (§4.10).* Un clic per errore non si può correggere dall'app.
+20. **Numerazione dei gap incoerente.** *Risolto nello Sprint 69: stessi numeri e stesso testo in pannello e prompt (§4.8).* Nel pannello "Colma i gap" la numerazione mostrata è quella dell'elenco completo, mentre al modello arrivano numerati solo i gap selezionati, nell'ordine di selezione. Un'indicazione come "per il gap 2…" può così riferirsi a un gap diverso da quello che l'utente vede.
+21. **CV su più pagine senza avviso.** *Risolto nello Sprint 69: avviso dopo la generazione e nel dettaglio, per CV e cover letter.* In casi residuali il CV generato può uscire su più pagine senza che l'utente lo sappia. Lo stesso vale per la cover letter.
+22. **Avviso sulle esperienze impreciso.** *Risolto nello Sprint 69: il testo descrive la regola reale.* L'avviso "oltre 5 esperienze" dice che il CV mostrerà "le più pertinenti". In realtà il CV mostra le 5 più recenti, con al massimo una sostituzione per pertinenza (doc 03).
 
 **Editor e chat (CV e cover letter)**
-23. **La bozza non viene riseminata dopo una rigenerazione.** Dopo "Rigenera CV" (o una nuova cover letter), "Modifica" riapre la **bozza precedente**, con le vecchie modifiche e la vecchia chat, non il documento appena generato. Il nuovo documento resta scaricabile, ma l'editor non lo mostra.
-24. **Documenti vecchi non modificabili.** I CV generati prima dello Sprint 51 e le cover letter generate prima dello Sprint 63 mostrano il pulsante "Modifica", ma non si aprono ("Genera prima…"): vanno rigenerati, consumando massimale o credito.
-25. **"Genera PDF finale" può perdere le ultime modifiche.** Se si preme il pulsante subito dopo una modifica (entro circa 1 secondo, prima del salvataggio automatico), l'ultima modifica può restare fuori dal PDF.
-26. **Riferimento ai bullet fragile.** Il contesto ✦ della chat CV si basa sulla posizione del bullet: riordinare o eliminare bullet dopo averli indicati può spostare il riferimento su un altro bullet. Allo stesso modo, nella chat della cover letter, accettare più aggiunte o rimozioni dello stesso turno può far puntare le proposte successive al paragrafo sbagliato.
-27. **Testi della chat della cover letter.** Il messaggio iniziale e il segnaposto del campo parlano di "CV" e di "sommario".
-28. **Grassetto solo nei bullet.** I marcatori di grassetto sono riconosciuti solo nei bullet delle esperienze: se finiscono in altri campi (es. un sommario modificato) vengono stampati come asterischi.
-29. **Prezzo della chat non visibile.** Il costo per messaggio non viene mostrato prima dell'invio.
+23. **La bozza non viene riseminata dopo una rigenerazione.** *Risolto nello Sprint 69: l'editor chiede se ripartire dal nuovo documento o continuare la bozza (§4.16).* Dopo "Rigenera CV" (o una nuova cover letter), "Modifica" riapre la **bozza precedente**, con le vecchie modifiche e la vecchia chat, non il documento appena generato. Il nuovo documento resta scaricabile, ma l'editor non lo mostra.
+24. **Documenti vecchi non modificabili.** *Risolto nello Sprint 69 (in parte): restano non modificabili, ma il pulsante non compare più e il dettaglio spiega di rigenerarli.* I CV generati prima dello Sprint 51 e le cover letter generate prima dello Sprint 63 mostrano il pulsante "Modifica", ma non si aprono ("Genera prima…"): vanno rigenerati, consumando massimale o credito.
+25. **"Genera PDF finale" può perdere le ultime modifiche.** *Risolto nello Sprint 69: il contenuto a schermo viaggia con la richiesta.* Se si preme il pulsante subito dopo una modifica (entro circa 1 secondo, prima del salvataggio automatico), l'ultima modifica può restare fuori dal PDF.
+26. **Riferimento ai bullet fragile.** *Risolto nello Sprint 69: bullet e paragrafi hanno un riferimento stabile (§4.17, §4.19).* Il contesto ✦ della chat CV si basa sulla posizione del bullet: riordinare o eliminare bullet dopo averli indicati può spostare il riferimento su un altro bullet. Allo stesso modo, nella chat della cover letter, accettare più aggiunte o rimozioni dello stesso turno può far puntare le proposte successive al paragrafo sbagliato.
+27. **Testi della chat della cover letter.** *Risolto nello Sprint 69.* Il messaggio iniziale e il segnaposto del campo parlano di "CV" e di "sommario".
+28. **Grassetto solo nei bullet.** *Risolto nello Sprint 69: grassetto anche in qualifica, sommario, aree, ruolo e note, nell'editor e nel PDF.* I marcatori di grassetto sono riconosciuti solo nei bullet delle esperienze: se finiscono in altri campi (es. un sommario modificato) vengono stampati come asterischi.
+29. **Prezzo della chat non visibile.** *Risolto nello Sprint 69: prezzo e saldo sopra il campo di testo.* Il costo per messaggio non viene mostrato prima dell'invio.
 
 **Cover letter e networking**
-30. **Pulsante "Genera messaggio" sbloccato.** Il pulsante resta disabilitato solo durante la richiesta della pagina corrente: lo stato "in generazione" non viene mostrato agli altri dispositivi o dopo un ricaricamento. Il blocco lato server resta comunque attivo.
-31. **Combinazioni di indicazioni nello storico.** Le combinazioni di indicazioni riusate compaiono nello storico delle indicazioni come voci nuove, con eliminazione dei soli testi identici.
-32. **Link del destinatario richiesto ma non usato.** Il link al profilo LinkedIn del destinatario viene chiesto e salvato, ma non influisce sul messaggio (§5.21).
+30. **Pulsante "Genera messaggio" sbloccato.** *Risolto nello Sprint 69.* Il pulsante resta disabilitato solo durante la richiesta della pagina corrente: lo stato "in generazione" non viene mostrato agli altri dispositivi o dopo un ricaricamento. Il blocco lato server resta comunque attivo.
+31. **Combinazioni di indicazioni nello storico.** *Risolto nello Sprint 69 (§4.18).* Le combinazioni di indicazioni riusate compaiono nello storico delle indicazioni come voci nuove, con eliminazione dei soli testi identici.
+32. **Link del destinatario richiesto ma non usato.** *Chiarito nello Sprint 69: resta facoltativo e inerte, l'interfaccia dice che è solo un riferimento (§4.20).* Il link al profilo LinkedIn del destinatario viene chiesto e salvato, ma non influisce sul messaggio (§5.21).
 
 **Account, piani e notifiche**
 33. **Login con Google non funzionante.** Il pulsante compare ma, non essendo configurato in produzione, non è utilizzabile.

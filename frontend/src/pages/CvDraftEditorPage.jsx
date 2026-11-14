@@ -6,6 +6,7 @@ import {
   fetchCvDraft,
   fetchJob,
   finalizeCvDraft,
+  keepCvDraft,
   openCvDraft,
   previewCvDraft,
   updateCvDraft,
@@ -16,12 +17,20 @@ import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import RichBulletInput from '@/components/RichBulletInput'
 import CvDraftChatPanel from '@/components/CvDraftChatPanel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
+import { newItemId } from '../utils/itemId'
 import { cn } from '@/lib/utils'
 
 function moveItem(list, index, delta) {
@@ -86,35 +95,36 @@ export default function CvDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  // Sprint 69: c'è un CV più recente della bozza, l'utente sceglie se
+  // riseminare o continuare prima di vedere l'editor.
+  const [outdatedPrompt, setOutdatedPrompt] = useState(false)
+  const [resolvingOutdated, setResolvingOutdated] = useState(false)
   // Bullet "puntati" come contesto per la chat (Sprint 61): clic sul
   // pulsante sotto la spunta mostra/nascondi di ciascun singolo bullet,
   // cumulabile su più bullet anche di esperienze diverse — niente di
-  // persistito, si azzera lasciando la pagina. Passato ad ogni messaggio
-  // così l'AI non deve indovinare a quale bullet si riferiscono pronomi o
-  // frasi generiche nel testo. Chiave: `profile_experience_id` + indice
-  // del bullet in quell'esperienza (stessa logica posizionale già usata
-  // dalle azioni che l'AI propone).
+  // persistito, si azzera lasciando la pagina. Chiave: l'id stabile del
+  // bullet (Sprint 69), che resta giusto anche dopo riordini o eliminazioni.
   const [focusedBullets, setFocusedBullets] = useState([])
 
-  function isBulletFocused(profileExperienceId, bulletIndex) {
-    return focusedBullets.some(
-      (item) => item.profileExperienceId === profileExperienceId && item.bulletIndex === bulletIndex,
-    )
+  function isBulletFocused(bulletId) {
+    return focusedBullets.some((item) => item.bulletId === bulletId)
   }
 
-  function toggleFocusBullet(profileExperienceId, bulletIndex) {
+  function toggleFocusBullet(profileExperienceId, bulletId) {
     setFocusedBullets((current) =>
-      isBulletFocused(profileExperienceId, bulletIndex)
-        ? current.filter(
-            (item) => !(item.profileExperienceId === profileExperienceId && item.bulletIndex === bulletIndex),
-          )
-        : [...current, { profileExperienceId, bulletIndex }],
+      current.some((item) => item.bulletId === bulletId)
+        ? current.filter((item) => item.bulletId !== bulletId)
+        : [...current, { profileExperienceId, bulletId }],
     )
   }
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
   const previewUrlRef = useRef(null)
+  // Contenuto con modifiche non ancora salvate dall'autosave (Sprint 69):
+  // "Genera PDF finale" lo invia al server, la chat lo salva prima di
+  // inviare il messaggio.
+  const unsavedRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -126,19 +136,23 @@ export default function CvDraftEditorPage() {
         if (cancelled) return
         setJob(jobData)
 
-        let draftContent
-        try {
-          draftContent = await fetchCvDraft(id)
-        } catch (err) {
-          if (err instanceof ApiError && err.status === 404) {
-            draftContent = await openCvDraft(id)
-          } else {
-            throw err
+        if (jobData.cv_draft_outdated) {
+          setOutdatedPrompt(true)
+        } else {
+          let draftContent
+          try {
+            draftContent = await fetchCvDraft(id)
+          } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+              draftContent = await openCvDraft(id)
+            } else {
+              throw err
+            }
           }
+          if (cancelled) return
+          firstLoadRef.current = true
+          setContent(draftContent)
         }
-        if (cancelled) return
-        firstLoadRef.current = true
-        setContent(draftContent)
 
         const profileData = await fetchProfile()
         if (cancelled) return
@@ -188,22 +202,64 @@ export default function CvDraftEditorPage() {
       return
     }
     setSaveStatus('saving')
+    unsavedRef.current = content
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      unsavedRef.current = null
       updateCvDraft(id, content)
         .then(() => setSaveStatus('saved'))
-        .catch(() => setSaveStatus('idle'))
+        .catch(() => {
+          unsavedRef.current = unsavedRef.current || content
+          setSaveStatus('idle')
+        })
       runPreview(content)
     }, 1200)
     return () => clearTimeout(debounceRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content])
 
+  // Salva subito l'eventuale modifica in attesa dell'autosave (Sprint 69).
+  async function flushPendingSave() {
+    if (!unsavedRef.current) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const pending = unsavedRef.current
+    unsavedRef.current = null
+    try {
+      await updateCvDraft(id, pending)
+      setSaveStatus('saved')
+    } catch {
+      unsavedRef.current = pending
+    }
+  }
+
+  async function resolveOutdated(restart) {
+    setResolvingOutdated(true)
+    try {
+      const draftContent = restart ? await openCvDraft(id) : await keepCvDraft(id)
+      firstLoadRef.current = true
+      setContent(draftContent)
+      setOutdatedPrompt(false)
+    } catch {
+      setError(t('cvEditor.openError'))
+      setOutdatedPrompt(false)
+    } finally {
+      setResolvingOutdated(false)
+    }
+  }
+
   async function handleFinalize() {
     setFinalizing(true)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     try {
-      await finalizeCvDraft(id)
-      showToast(t('cvEditor.finalizeSuccess'))
+      // Il contenuto a schermo va nella richiesta: il server lo salva nella
+      // bozza prima del rendering, nessuna modifica resta fuori (Sprint 69).
+      const result = await finalizeCvDraft(id, content)
+      unsavedRef.current = null
+      showToast(
+        result?.page_count > 1
+          ? t('cvEditor.finalizeSuccessMultiPage').replace('{count}', result.page_count)
+          : t('cvEditor.finalizeSuccess'),
+      )
       navigate(`/jobs/${id}`)
     } catch {
       showToast(t('cvEditor.finalizeError'))
@@ -214,6 +270,27 @@ export default function CvDraftEditorPage() {
 
   if (loading) {
     return <p className="mt-16 text-center text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
+  }
+
+  if (outdatedPrompt) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && navigate(`/jobs/${id}`)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('cvEditor.outdatedTitle')}</DialogTitle>
+            <DialogDescription>{t('cvEditor.outdatedHint')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="secondary" disabled={resolvingOutdated} onClick={() => resolveOutdated(false)}>
+              {t('cvEditor.outdatedContinue')}
+            </Button>
+            <Button type="button" disabled={resolvingOutdated} onClick={() => resolveOutdated(true)}>
+              {t('cvEditor.outdatedRestart')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   if (error || !content) {
@@ -265,7 +342,7 @@ export default function CvDraftEditorPage() {
   }
   function addBullet(expIndex, text = '') {
     const exp = content.experiences[expIndex]
-    updateExperience(expIndex, { bullets: [...exp.bullets, { text, shown: true }] })
+    updateExperience(expIndex, { bullets: [...exp.bullets, { id: newItemId(), text, shown: true }] })
   }
   function moveBullet(expIndex, bulletIndex, delta) {
     const exp = content.experiences[expIndex]
@@ -320,61 +397,75 @@ export default function CvDraftEditorPage() {
   // --- Chat AI (Sprint 59): applica una singola azione accettata dall'utente
   // richiamando le stesse funzioni di stato di sopra — mai una scrittura
   // diretta nel JSON, così autosave e preview restano quelle già esistenti.
+  // Sprint 69: bullet ritrovati per id, aree per il testo che avevano al
+  // momento della proposta (`area_text`); ritorna false se l'elemento non
+  // c'è più (nessuna modifica applicata a un elemento diverso).
   function applyChatAction(action) {
     const expIndex = content.experiences.findIndex(
       (exp) => exp.profile_experience_id === action.profile_experience_id,
     )
+    const bulletIndex =
+      expIndex === -1 ? -1 : content.experiences[expIndex].bullets.findIndex((b) => b.id === action.bullet_id)
+    const areaIndex =
+      action.area_text != null ? content.areas_of_expertise.indexOf(action.area_text) : (action.area_index ?? -1)
+    const inRange = (index, list) => Number.isInteger(index) && index >= 0 && index < list.length
     switch (action.type) {
       case 'update_summary':
         setField('summary', action.text)
-        break
+        return true
       case 'update_qualification':
         setField('qualification', action.text)
-        break
+        return true
       case 'update_role':
-        if (expIndex !== -1) updateExperience(expIndex, { role: action.text })
-        break
-      case 'update_bullet':
-        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { text: action.text })
-        break
+        if (expIndex === -1) return false
+        updateExperience(expIndex, { role: action.text })
+        return true
       case 'add_bullet':
-        if (expIndex !== -1) addBullet(expIndex, action.text)
-        break
+        if (expIndex === -1) return false
+        addBullet(expIndex, action.text)
+        return true
+      case 'update_bullet':
       case 'hide_bullet':
-        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { shown: false })
-        break
       case 'show_bullet':
-        if (expIndex !== -1) updateBullet(expIndex, action.bullet_index, { shown: true })
-        break
+        if (bulletIndex === -1) return false
+        updateBullet(
+          expIndex,
+          bulletIndex,
+          action.type === 'update_bullet' ? { text: action.text } : { shown: action.type === 'show_bullet' },
+        )
+        return true
       case 'hide_experience':
-        if (expIndex !== -1) updateExperience(expIndex, { shown: false })
-        break
       case 'show_experience':
-        if (expIndex !== -1) updateExperience(expIndex, { shown: true })
-        break
+        if (expIndex === -1) return false
+        updateExperience(expIndex, { shown: action.type === 'show_experience' })
+        return true
       case 'update_area':
-        updateArea(action.area_index, action.text)
-        break
+        if (!inRange(areaIndex, content.areas_of_expertise)) return false
+        updateArea(areaIndex, action.text)
+        return true
       case 'add_area':
         addArea(action.text)
-        break
+        return true
       case 'remove_area':
-        removeArea(action.area_index)
-        break
+        if (!inRange(areaIndex, content.areas_of_expertise)) return false
+        removeArea(areaIndex)
+        return true
       case 'toggle_skill':
         toggleSkill(action.name)
-        break
+        return true
       case 'toggle_certification':
         toggleCertification(action.name)
-        break
+        return true
       case 'update_education_notes':
+        if (!inRange(action.education_index, content.educations)) return false
         updateEducation(action.education_index, { notes: action.text })
-        break
+        return true
       case 'update_language_level':
+        if (!inRange(action.language_index, content.languages)) return false
         updateLanguage(action.language_index, { level: action.level })
-        break
+        return true
       default:
-        break
+        return false
     }
   }
 
@@ -417,21 +508,18 @@ export default function CvDraftEditorPage() {
         content={content}
         focusedBullets={focusedBullets}
         onApplyAction={applyChatAction}
+        onBeforeSend={flushPendingSave}
         onClose={() => setChatOpen(false)}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-5">
           <SectionCard title={t('cvEditor.summaryLabel')}>
-            <Textarea
-              value={content.summary}
-              onChange={(event) => setField('summary', event.target.value)}
-              className="min-h-28"
-            />
+            <RichBulletInput value={content.summary} onChange={(text) => setField('summary', text)} />
           </SectionCard>
 
           <SectionCard title={t('cvEditor.qualificationLabel')}>
-            <Input value={content.qualification} onChange={(event) => setField('qualification', event.target.value)} />
+            <RichBulletInput value={content.qualification} onChange={(text) => setField('qualification', text)} />
           </SectionCard>
 
           <SectionCard title={t('cvEditor.areasLabel')}>
@@ -439,7 +527,7 @@ export default function CvDraftEditorPage() {
               {content.areas_of_expertise.map((area, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <ReorderButtons index={index} length={content.areas_of_expertise.length} onMove={moveArea} t={t} />
-                  <Input value={area} onChange={(event) => updateArea(index, event.target.value)} className="flex-1" />
+                  <RichBulletInput value={area} onChange={(text) => updateArea(index, text)} />
                   <button type="button" onClick={() => removeArea(index)} className="text-muted-foreground hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -474,18 +562,14 @@ export default function CvDraftEditorPage() {
                   </div>
 
                   <div className="mb-3 flex flex-col gap-1.5">
-                    <Label htmlFor={`role-${expIndex}`}>{t('cvEditor.roleLabel')}</Label>
-                    <Input
-                      id={`role-${expIndex}`}
-                      value={exp.role}
-                      onChange={(event) => updateExperience(expIndex, { role: event.target.value })}
-                    />
+                    <Label>{t('cvEditor.roleLabel')}</Label>
+                    <RichBulletInput value={exp.role} onChange={(text) => updateExperience(expIndex, { role: text })} />
                   </div>
 
                   <Label className="mb-1.5 block">{t('cvEditor.bulletsLabel')}</Label>
                   <div className="flex flex-col gap-2">
                     {exp.bullets.map((bullet, bulletIndex) => (
-                      <div key={bulletIndex} className="flex items-start gap-2">
+                      <div key={bullet.id || bulletIndex} className="flex items-start gap-2">
                         <ReorderButtons
                           index={bulletIndex}
                           length={exp.bullets.length}
@@ -501,12 +585,12 @@ export default function CvDraftEditorPage() {
                           />
                           <button
                             type="button"
-                            onClick={() => toggleFocusBullet(exp.profile_experience_id, bulletIndex)}
+                            onClick={() => toggleFocusBullet(exp.profile_experience_id, bullet.id)}
                             aria-label={t('cvEditor.chatFocusToggle')}
                             title={t('cvEditor.chatFocusToggle')}
                             className={cn(
                               'rounded-full p-1',
-                              isBulletFocused(exp.profile_experience_id, bulletIndex)
+                              isBulletFocused(bullet.id)
                                 ? 'bg-primary text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                             )}
@@ -574,11 +658,8 @@ export default function CvDraftEditorPage() {
                       className="min-w-32 flex-1"
                     />
                   </div>
-                  <Textarea
-                    value={edu.notes}
-                    placeholder={t('cvEditor.educationNotesLabel')}
-                    onChange={(event) => updateEducation(index, { notes: event.target.value })}
-                  />
+                  <Label className="text-xs text-muted-foreground">{t('cvEditor.educationNotesLabel')}</Label>
+                  <RichBulletInput value={edu.notes} onChange={(text) => updateEducation(index, { notes: text })} />
                   <Button
                     type="button"
                     variant="ghost"

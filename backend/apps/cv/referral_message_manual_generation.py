@@ -2,8 +2,9 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.jobs.models import DailyQuota, Job, RunLog
+from apps.jobs.models import DailyQuota, Job, RunLog, is_generation_active
 
+from .instructions_history import recent_instruction_entries
 from .models import ReferralMessageDocument
 from .referral_message_generation import generate_referral_message
 
@@ -78,13 +79,18 @@ def _guard_and_reserve(job):
     messaggi sullo stesso job, ma non blocca né è bloccato da una
     generazione di CV/cover letter in corso."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
-    if locked_job.referral_message_generation_in_progress:
+    if is_generation_active(
+        locked_job.referral_message_generation_in_progress, locked_job.referral_message_generation_started_at
+    ):
         raise ReferralMessageGenerationRejected("Generazione già in corso per questo job.")
 
     charge_mode = _reserve_quota_or_credit(locked_job.user)
 
     locked_job.referral_message_generation_in_progress = True
-    locked_job.save(update_fields=["referral_message_generation_in_progress"])
+    locked_job.referral_message_generation_started_at = timezone.now()
+    locked_job.save(
+        update_fields=["referral_message_generation_in_progress", "referral_message_generation_started_at"]
+    )
     return charge_mode
 
 
@@ -111,23 +117,29 @@ def request_referral_message_generation(
             recipient_linkedin_url=recipient_linkedin_url,
             instructions=instructions,
         )
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         _refund(job.user, charge_mode)
         RunLog.objects.create(
             user=job.user,
             job=job,
             task_type=RunLog.TaskType.REFERRAL_MESSAGE_GENERATION,
             status=RunLog.Status.FAILURE,
-            message=str(exc),
+            message=str(exc) or exc.__class__.__name__,
             started_at=started_at,
             finished_at=timezone.now(),
         )
-        Job.objects.filter(pk=job.pk).update(referral_message_generation_in_progress=False)
+        Job.objects.filter(pk=job.pk).update(
+            referral_message_generation_in_progress=False, referral_message_generation_started_at=None
+        )
+        if isinstance(exc, SystemExit):
+            raise
         raise ReferralMessageGenerationFailed(
             "Impossibile creare il messaggio per questo job."
         ) from exc
 
-    Job.objects.filter(pk=job.pk).update(referral_message_generation_in_progress=False)
+    Job.objects.filter(pk=job.pk).update(
+        referral_message_generation_in_progress=False, referral_message_generation_started_at=None
+    )
     return document
 
 
@@ -136,22 +148,14 @@ def get_recent_instructions(user, limit=20):
     messaggi di networking dell'utente, su qualunque job, più recenti in
     cima (Sprint 50) — alimenta il menu "indicazioni precedenti" nel popup
     di generazione, stesso principio della cover letter."""
-    seen = set()
-    recent = []
     queryset = (
         ReferralMessageDocument.objects.filter(user=user)
         .exclude(instructions_used="")
         .order_by("-generated_at", "-id")
         .values_list("instructions_used", flat=True)
     )
-    for text in queryset:
-        if text in seen:
-            continue
-        seen.add(text)
-        recent.append(text)
-        if len(recent) >= limit:
-            break
-    return recent
+    # Sprint 69: voci scomposte e deduplicate, vedi apps.cv.instructions_history.
+    return recent_instruction_entries(queryset.iterator(), limit=limit)
 
 
 def get_messages_for_job(job):

@@ -12,6 +12,10 @@ register = template.Library()
 # l'utente seleziona testo e preme il pulsante/Ctrl+B — un solo filtro di
 # rendering per entrambe le origini. Non greedy: marcatori non bilanciati
 # (un solo "**" senza chiusura) restano semplicemente testo letterale.
+# Sprint 69: applicato anche a qualifica, sommario, aree, ruolo e note
+# dell'istruzione (i campi di testo libero che chat e utente possono
+# modificare), con lo stesso campo a grassetto nell'editor: prima i
+# marcatori finiti lì uscivano come asterischi nel PDF.
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
 
 

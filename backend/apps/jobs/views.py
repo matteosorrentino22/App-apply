@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.conf import settings
 from django.http import HttpResponse
 from rest_framework import permissions, status
 from rest_framework.generics import get_object_or_404
@@ -16,6 +17,8 @@ from apps.cv.draft import (
     NoCvDocumentToEdit,
     NoDraftToFinalize,
     finalize_cv_draft,
+    keep_cv_draft,
+    load_cv_draft,
     render_draft_preview,
     seed_draft_for_job,
 )
@@ -30,6 +33,8 @@ from apps.cv.cover_letter_draft import (
     NoCoverLetterDocumentToEdit,
     NoCoverLetterDraftToFinalize,
     finalize_cover_letter_draft,
+    keep_cover_letter_draft,
+    load_cover_letter_draft,
     render_cover_letter_draft_preview,
     seed_cover_letter_draft_for_job,
 )
@@ -43,10 +48,10 @@ from apps.cv.cover_letter_draft_chat import (
 from apps.accounts.throttling import PostOnlyScopeMixin
 from apps.cv.draft_validation import (
     InvalidDraftContent,
-    validate_cover_letter_draft_content,
-    validate_cv_draft_content,
+    clean_cover_letter_draft_content,
+    clean_cv_draft_content,
 )
-from apps.cv.gap_filling import build_extra_instructions
+from apps.cv.gap_filling import build_extra_instructions, resolve_selected_gaps
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
     ManualGenerationRejected,
@@ -61,7 +66,12 @@ from apps.cv.referral_message_manual_generation import (
     request_referral_message_generation,
 )
 
-from .application import ApplicationMarkRejected, mark_application_done
+from .application import (
+    ApplicationMarkRejected,
+    ApplicationUndoRejected,
+    mark_application_done,
+    undo_application_done,
+)
 from .import_service import (
     ImportDuplicate,
     ImportNotAllowed,
@@ -84,6 +94,7 @@ from .serializers import (
     ChatMessageInputSerializer,
     GenerateCvInputSerializer,
     InstructionsInputSerializer,
+    JobDetailSerializer,
     JobFilterPresetSerializer,
     JobSerializer,
     ManualJobCreateSerializer,
@@ -112,8 +123,11 @@ class GenerateCvView(APIView):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         params = GenerateCvInputSerializer(data=request.data)
         params.is_valid(raise_exception=True)
+        gap_lines = resolve_selected_gaps(
+            job.score_gaps, params.validated_data["gap_numbers"], params.validated_data["gaps"]
+        )
         extra_instructions = build_extra_instructions(
-            params.validated_data["gaps"], params.validated_data["gap_instructions"]
+            gap_lines, params.validated_data["gap_instructions"]
         )
 
         try:
@@ -123,28 +137,46 @@ class GenerateCvView(APIView):
         except ManualGenerationFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"cv_document_id": cv_document.pk, "page_count": getattr(cv_document, "page_count", None)},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+def _wants_keep(request):
+    return isinstance(request.data, dict) and request.data.get("mode") == "keep"
+
+
+def _finalize_content(request, cleaner):
+    """Contenuto corrente dell'editor inviato con "Genera PDF finale"
+    (Sprint 69); None se il body è vuoto (si usa la bozza salvata)."""
+    if isinstance(request.data, dict) and request.data.get("content"):
+        return cleaner(request.data["content"])
+    return None
 
 
 class CvDraftView(APIView):
     """Bozza modificabile del CV in corso (Sprint 51, editor interattivo):
-    GET la recupera, POST la apre/riapre a partire dall'ultimo CVDocument
-    (sovrascrivendo una bozza già in corso — mai duplicata), PATCH salva le
-    modifiche (autosave lato frontend, intero `content_json` sostituito a
-    ogni chiamata: più semplice di operazioni granulari, e sufficiente dato
-    che il frontend tiene comunque l'intero stato in memoria)."""
+    GET la recupera; POST la apre o la risemina dall'ultimo CVDocument
+    (contenuto e chat sovrascritti, mai duplicata), oppure con
+    `{"mode": "keep"}` (Sprint 69) la conserva com'è prendendo l'ultimo CV
+    come nuovo riferimento ("continua la bozza"); PATCH salva le modifiche
+    (autosave lato frontend, intero `content_json` sostituito a ogni
+    chiamata)."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            return Response(job.cv_draft.content_json)
+            return Response(load_cv_draft(job).content_json)
         except CVDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
+        if _wants_keep(request) and CVDraft.objects.filter(job=job).exists():
+            return Response(keep_cv_draft(job).content_json)
         try:
             draft = seed_draft_for_job(job)
         except NoCvDocumentToEdit as exc:
@@ -156,14 +188,14 @@ class CvDraftView(APIView):
         if not isinstance(request.data, dict):
             return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            draft = job.cv_draft
+            draft = load_cv_draft(job)
         except CVDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
         try:
-            validate_cv_draft_content(request.data)
+            content = clean_cv_draft_content(request.data)
         except InvalidDraftContent as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        draft.content_json = request.data
+        draft.content_json = content
         draft.save(update_fields=["content_json", "updated_at"])
         return Response(draft.content_json)
 
@@ -182,13 +214,13 @@ class CvDraftPreviewView(APIView):
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            draft = job.cv_draft
+            draft = load_cv_draft(job)
         except CVDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
         try:
-            validate_cv_draft_content(draft_content)
+            draft_content = clean_cv_draft_content(draft_content)
         except InvalidDraftContent as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         pdf_bytes, page_count = render_draft_preview(request.user, request.user.profile, draft_content)
@@ -198,18 +230,32 @@ class CvDraftPreviewView(APIView):
 
 
 class FinalizeCvDraftView(APIView):
-    """Genera il PDF finale dalla bozza corrente (Sprint 51): nessun
-    consumo di quota/credito, non è una nuova generazione AI."""
+    """Genera il PDF finale dalla bozza (Sprint 51): nessun consumo di
+    quota/credito, non è una nuova generazione AI. Body facoltativo
+    `{"content": …}` (Sprint 69): il contenuto corrente dell'editor, validato
+    e salvato nella bozza prima del rendering."""
 
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            cv_document = finalize_cv_draft(job)
+            content = _finalize_content(request, clean_cv_draft_content)
+            cv_document = finalize_cv_draft(job, content=content)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except NoDraftToFinalize as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"cv_document_id": cv_document.pk, "page_count": cv_document.page_count},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+def _chat_pricing(request, price):
+    """Prezzo del messaggio e saldo, mostrati nel pannello prima dell'invio
+    (Sprint 69)."""
+    return {"price": str(price), "balance": str(request.user.extra_credit)}
 
 
 class CvDraftChatView(PostOnlyScopeMixin, APIView):
@@ -224,9 +270,10 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            return Response({"history": job.cv_draft.chat_history})
+            history = load_cv_draft(job).chat_history
         except CVDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"history": history, **_chat_pricing(request, settings.PRICE_CV_DRAFT_CHAT_MESSAGE)})
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -236,22 +283,29 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
         if not message:
             return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
         raw_focus_bullets = params.validated_data["focus_bullets"]
+        # Sprint 69: riferimento per `bullet_id`; `bullet_index` resta
+        # accettato dalle schede aperte prima dell'aggiornamento.
         focus_bullets = [
             item
             for item in raw_focus_bullets
             if isinstance(item, dict)
-            and isinstance(item.get("profile_experience_id"), int)
-            and isinstance(item.get("bullet_index"), int)
+            and (
+                isinstance(item.get("bullet_id"), str)
+                or (
+                    isinstance(item.get("profile_experience_id"), int)
+                    and isinstance(item.get("bullet_index"), int)
+                )
+            )
         ]
 
         try:
-            reply, actions = send_chat_message(job, message, focus_bullets=focus_bullets)
+            reply, actions, balance = send_chat_message(job, message, focus_bullets=focus_bullets)
         except ChatMessageRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
         except ChatMessageFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        return Response({"reply": reply, "actions": actions})
+        return Response({"reply": reply, "actions": actions, "balance": str(balance)})
 
     def patch(self, request, pk):
         """Registra la scelta (accetta/rifiuta) di una singola azione già
@@ -295,7 +349,10 @@ class GenerateCoverLetterView(APIView):
         except CoverLetterGenerationFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"cover_letter_document_id": document.pk, "page_count": getattr(document, "page_count", None)},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class CoverLetterDraftView(APIView):
@@ -307,12 +364,14 @@ class CoverLetterDraftView(APIView):
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            return Response(job.cover_letter_draft.content_json)
+            return Response(load_cover_letter_draft(job).content_json)
         except CoverLetterDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
+        if _wants_keep(request) and CoverLetterDraft.objects.filter(job=job).exists():
+            return Response(keep_cover_letter_draft(job).content_json)
         try:
             draft = seed_cover_letter_draft_for_job(job)
         except NoCoverLetterDocumentToEdit as exc:
@@ -324,14 +383,14 @@ class CoverLetterDraftView(APIView):
         if not isinstance(request.data, dict):
             return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            draft = job.cover_letter_draft
+            draft = load_cover_letter_draft(job)
         except CoverLetterDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
         try:
-            validate_cover_letter_draft_content(request.data)
+            content = clean_cover_letter_draft_content(request.data)
         except InvalidDraftContent as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        draft.content_json = request.data
+        draft.content_json = content
         draft.save(update_fields=["content_json", "updated_at"])
         return Response(draft.content_json)
 
@@ -346,13 +405,13 @@ class CoverLetterDraftPreviewView(APIView):
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            draft = job.cover_letter_draft
+            draft = load_cover_letter_draft(job)
         except CoverLetterDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
         try:
-            validate_cover_letter_draft_content(draft_content)
+            draft_content = clean_cover_letter_draft_content(draft_content)
         except InvalidDraftContent as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         pdf_bytes, page_count = render_cover_letter_draft_preview(request.user, request.user.profile, job, draft_content)
@@ -370,10 +429,16 @@ class FinalizeCoverLetterDraftView(APIView):
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            document = finalize_cover_letter_draft(job)
+            content = _finalize_content(request, clean_cover_letter_draft_content)
+            document = finalize_cover_letter_draft(job, content=content)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except NoCoverLetterDraftToFinalize as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"cover_letter_document_id": document.pk, "page_count": document.page_count},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
@@ -387,9 +452,12 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         try:
-            return Response({"history": job.cover_letter_draft.chat_history})
+            history = load_cover_letter_draft(job).chat_history
         except CoverLetterDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"history": history, **_chat_pricing(request, settings.PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE)}
+        )
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -400,13 +468,13 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
             return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            reply, actions = send_cover_letter_chat_message(job, message)
+            reply, actions, balance = send_cover_letter_chat_message(job, message)
         except CoverLetterChatMessageRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
         except CoverLetterChatMessageFailed as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-        return Response({"reply": reply, "actions": actions})
+        return Response({"reply": reply, "actions": actions, "balance": str(balance)})
 
     def patch(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -581,7 +649,7 @@ class JobDetailView(APIView):
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        return Response(JobSerializer(job).data)
+        return Response(JobDetailSerializer(job).data)
 
 
 class JobListView(APIView):
@@ -802,7 +870,21 @@ class MarkApplicationDoneView(APIView):
         except ApplicationMarkRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
-        return Response(JobSerializer(job).data)
+        return Response(JobDetailSerializer(job).data)
+
+
+class UndoApplicationDoneView(APIView):
+    """Annulla "candidatura fatta" (Sprint 69): vedi
+    `apps.jobs.application.undo_application_done`. Permessi di default
+    (nessun `permission_classes` esplicito)."""
+
+    def post(self, request, pk):
+        job = get_object_or_404(Job, pk=pk, user=request.user)
+        try:
+            job = undo_application_done(job)
+        except ApplicationUndoRejected as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(JobDetailSerializer(job).data)
 
 
 class HomeStatsView(APIView):
