@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -254,7 +254,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - Le ricerche si gestiscono dalla pagina **Impostazioni**: si creano, si modificano, si eliminano, si attivano e si disattivano. La prima si crea in onboarding.
 - Una ricerca nuova creata da Impostazioni **nasce disattivata**. Solo le ricerche **attive** producono job, sia nella raccolta notturna sia in quella manuale.
 - **Limiti per piano:**
-  - **Free:** fino a **10 ricerche salvate**, di cui al massimo **1 attiva per tipo** (quindi fino a 2 in totale: 1 Job role e 1 Company). Se si attiva una ricerca di un tipo che ne ha già una attiva, la precedente viene **disattivata automaticamente**; la ricerca dell'altro tipo non cambia. Oggi l'interfaccia aggiorna gli interruttori ma **non mostra un avviso esplicito** del cambio (§8).
+  - **Free:** fino a **10 ricerche salvate**, di cui al massimo **1 attiva per tipo** (quindi fino a 2 in totale: 1 Job role e 1 Company). Se si attiva una ricerca di un tipo che ne ha già una attiva, la precedente viene **disattivata automaticamente**; la ricerca dell'altro tipo non cambia. Un avviso indica il nome della ricerca disattivata (Sprint 68). Lo stesso vale se si **cambia il tipo** di una ricerca attiva (Job role ↔ Company): conta come un'attivazione nel nuovo tipo e spegne l'eventuale altra ricerca attiva di quel tipo, con lo stesso avviso.
   - **Pro:** fino a **100 ricerche salvate**, di cui fino a **50 attive** in totale, divisibili liberamente tra i due tipi. Oltre i limiti l'operazione è rifiutata con un messaggio.
 - **Downgrade Pro→Free:** tutte le ricerche vengono **disattivate** e nessuna viene riattivata in automatico.
   - Le ricerche salvate restano tutte, anche se sono più di 10. In questo caso non se ne possono creare di nuove finché, eliminandone, non si scende sotto le 10.
@@ -268,7 +268,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
   - La fonte è un componente sostituibile.
 - **Campi obbligatori** perché un'offerta raccolta venga mostrata: *titolo, azienda, località, descrizione, link di candidatura*. Se ne manca uno, l'offerta viene scartata.
 - È scartata anche un'offerta con un campo testuale **più lungo del consentito** (es. un link di candidatura lunghissimo): mai troncata, perché un link troncato non funzionerebbe (Sprint 49).
-- Gli scarti sono **silenziosi**: l'utente non li vede.
+- Gli scarti sono **silenziosi** per l'utente; dallo Sprint 68 il diario tecnico della raccolta conta le offerte scartate per campi mancanti, campi troppo lunghi e duplicati.
 - La **data di pubblicazione non è obbligatoria**.
 - **Dati facoltativi** mostrati se presenti:
   - retribuzione;
@@ -277,7 +277,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
   - **ricerca di provenienza**.
 
   Candidati e recruiter esistono **solo** per i job raccolti, non per quelli importati o creati a mano.
-- **Deduplica per utente.** Un'offerta LinkedIn già presente tra i job dell'utente non viene ricreata, anche se nel frattempo è stata archiviata o importata. Se più ricerche restituiscono la stessa offerta nella stessa raccolta, compare una volta sola e porta la provenienza di una sola delle ricerche.
+- **Deduplica per utente.** Un'offerta LinkedIn già presente tra i job dell'utente non viene ricreata, anche se nel frattempo è stata archiviata o importata. Se più ricerche restituiscono la stessa offerta nella stessa raccolta, compare una volta sola e porta la provenienza di una sola delle ricerche. Dallo Sprint 68 il job conserva anche un riferimento stabile alla ricerca di provenienza: modificarne keywords o località non lo scollega dal filtro "Ricerca" (§4.5).
 
 ### 4.4 Ciclo quotidiano
 
@@ -295,14 +295,16 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
     - 3–4: mancano più requisiti;
     - 1–2: profilo non pertinente.
   - Con una descrizione vuota o non valutabile, match e gap sono vuoti e il punteggio non supera 6.
-  - Lo scoring non inventa competenze e non segnala come gap ciò che è già nel profilo. La località del job non entra nella valutazione.
+  - Lo scoring non inventa competenze e non segnala come gap ciò che è già nel profilo. Al modello arrivano titolo, azienda, **località** (dallo Sprint 68) e descrizione dell'offerta.
 - **Limite per lingua richiesta** (Sprint 48). Se l'offerta richiede una lingua (dichiarata necessaria, oppure annuncio scritto interamente in una lingua diversa dall'inglese) che **non è nel profilo a nessun livello**, il punteggio è limitato a **3** (`LANGUAGE_MISMATCH_SCORE_CAP`).
   - La motivazione si apre con "Punteggio limitato a 3/10: lingua richiesta (…) assente dal profilo."
   - Fanno eccezione le offerte che dichiarano un ambiente internazionale o di lavoro in inglese.
 - **Nessuna generazione automatica di CV** (Sprint 45): il ciclo notturno è solo raccolta più scoring. Tutti i job nascono in stato "nuovo" (§4.6).
 - **Fallimenti:**
-  - se una richiesta alla fonte fallisce, quella notte si perde **l'intera raccolta dell'utente**, senza messaggi d'errore (§6);
-  - se lo scoring di una singola offerta fallisce, il job **resta in lista senza punteggio**, in fondo all'ordinamento, e non viene ritentato (§8).
+  - se la richiesta alla fonte di un gruppo di ricerche (tipo × località) fallisce, si perdono solo le offerte di quel gruppo: gli altri gruppi dell'utente vengono raccolti normalmente (Sprint 68). Nessun messaggio d'errore per l'utente (§6);
+  - se lo scoring di una singola offerta fallisce (o la raccolta si interrompe prima dello scoring), il job **resta in lista senza punteggio**, in fondo all'ordinamento, e viene **ritentato al ciclo notturno successivo**, fino a **3 tentativi falliti** per job (Sprint 68);
+  - se è in corso una raccolta manuale dello stesso utente, il ciclo notturno lo salta per quella notte (e viceversa la raccolta manuale è rifiutata mentre gira il ciclo notturno dell'utente).
+- **Storico dei punteggi:** i punteggi dati sulla vecchia scala 1–5 (prima del 24/09/2026) sono stati **riscalati ×2** (1→2 … 5→10) nello Sprint 68. Il limite per lingua non è stato applicato retroattivamente a quei job (richiederebbe una nuova valutazione AI per ciascuno).
 - **Notifica** alle 10:00 locali **solo se** ci sono nuovi job (§4.12).
 - In aggiunta, l'utente può avviare **una raccolta manuale al giorno** (§4.14).
 
@@ -319,7 +321,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 | **Preferiti** | job segnati come preferiti, non archiviati, di qualunque origine (§4.21) |
 | **Archiviati** | tutti i job archiviati, di qualunque origine (anche se preferiti) |
 
-La sezione dipende da origine, preferito e archiviazione, **non** dallo stato del job. All'apertura la lista mostra sempre **Raccolti**.
+La sezione dipende da origine, preferito e archiviazione, **non** dallo stato del job. All'apertura dal menu la lista mostra **Raccolti**. Sezione e filtri sono scritti nell'indirizzo della pagina (Sprint 68): tornando dal dettaglio di un job (link "Torna alla lista" o tasto indietro del browser) la lista riparte dalla stessa sezione con gli stessi filtri, e l'indirizzo si può condividere.
 
 Nella sezione **Importati** c'è un riquadro con:
 - il form di import da link per il Pro, oppure il messaggio "L'import manuale di job è riservato al piano Pro" per il Free;
@@ -333,7 +335,7 @@ Nella sezione **Importati** c'è un riquadro con:
   - Il link "Tutte le date" toglie il limite e mostra tutto lo storico.
   - Sostituisce i vecchi periodi preimpostati (Sprint 46).
 - **Location:** testo libero, cercato come sottostringa nella località del job.
-- **Ricerca** (di provenienza): scelta multipla tra tutte le ricerche salvate, attive e non, più "Nessuna ricerca" (Sprint 40, multi-selezione dallo Sprint 63). È **nascosto e ignorato nella sezione Importati**.
+- **Ricerca** (di provenienza): scelta multipla tra tutte le ricerche salvate, attive e non, più "Nessuna ricerca" (Sprint 40, multi-selezione dallo Sprint 63). È **nascosto e ignorato nella sezione Importati**. Dallo Sprint 68 un job resta associato alla sua ricerca anche se questa viene modificata; per i job raccolti prima e non attribuibili con certezza vale ancora il confronto con i valori attuali della ricerca.
 - **Punteggio:** scelta multipla sui valori **1–10**.
 - **Stato:** scelta multipla tra **nuovo**, **CV generato**, **candidatura fatta**. Lo stato transitorio non è selezionabile.
 - **Candidati:** scelta multipla tra le fasce **<25**, **25–50**, **51–100**, **101–200**, **>200**. I job senza questo dato (importati, manuali) non rientrano in nessuna fascia.
@@ -613,7 +615,9 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - Al termine l'app mostra **"Job trovati"** e **"Tenuti dopo scoring"**, con l'avviso "Raccolta completata.".
 - **Limite:** **1 al giorno** (azzeramento a mezzanotte Europe/Rome), uguale per tutti i piani, **senza estensione a credito**. Oltre: "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
 - **Una sola raccolta per volta.** Se ne è già in corso una: "Raccolta già in corso per questo account." Un blocco rimasto appeso si considera scaduto dopo **2 ore**.
-- **Fallimento:** "Raccolta non riuscita. Riprova più tardi.", con il tentativo giornaliero restituito.
+- **Fallimento:** "Raccolta non riuscita. Riprova più tardi.", con il tentativo giornaliero restituito. Se fallisce solo una parte dei gruppi di ricerche, la raccolta conta come riuscita con le offerte degli altri gruppi.
+- **Testo della card** (Sprint 68): spiega che la raccolta manuale cerca subito le offerte delle ultime 24 ore senza aspettare la notte, e che la raccolta notturna gira comunque.
+- Per concedere una seconda raccolta lo stesso giorno l'amministratore usa un'azione dedicata in Django Admin (Sprint 68).
 - **Attesa:** la raccolta avviene mentre l'utente aspetta sulla pagina e può durare minuti.
 - La raccolta manuale **non sostituisce** quella notturna, che gira comunque per tutte le ricerche attive.
 
@@ -626,6 +630,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 
   Gli errori di validazione sono mostrati campo per campo.
 - Il job viene **valutato subito**, compare in **Importati** in stato "nuovo" e da lì si comporta come gli altri. Non ha dati su candidati e recruiter.
+- Se la creazione fallisce, il massimale o il credito vengono restituiti. Se fallisce solo la valutazione, il job resta (senza punteggio) e la valutazione viene ritentata di notte come per i job raccolti, senza restituzione (Sprint 68).
 - **Limite:** **3 al giorno**, con contatore separato da quello dell'import. Oltre, **0,50 €** a credito (`PRICE_MANUAL_JOB_EXTRA`).
 - Non c'è controllo di duplicati: lo stesso job inserito due volte crea due job.
 
@@ -801,12 +806,12 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - I preferiti non hanno limiti.
 
 **Filtri preferiti** (Sprint 64).
-- **Salvataggio:** **"Salva filtri attuali"** chiede un **nome** e salva **punteggio, stato, ricerca di provenienza, location, candidati e recruiter**. **Non salva mai le date** né la sezione.
+- **Salvataggio:** **"Salva filtri attuali"** chiede un **nome** e salva **punteggio, stato, ricerca di provenienza, location, candidati e recruiter**. **Non salva mai le date** né la sezione. Salvato dalla sezione **Importati**, non contiene il filtro "Ricerca" (lì nascosto, Sprint 68).
 - **Uso:**
   - ogni filtro salvato è una **pillola**;
   - un clic **copia** i valori nei filtri correnti, che restano modificabili senza toccare il filtro salvato;
   - il filtro si applica nella sezione in cui ci si trova;
-  - la × elimina il filtro.
+  - la × elimina il filtro; se l'eliminazione non riesce, la pillola ricompare con il messaggio "Non siamo riusciti a eliminare il filtro. Riprova." (Sprint 68).
 - **Limiti:**
   - **nessuna rinomina**: per cambiare nome si ricrea il filtro;
   - massimo **50 filtri per utente** (`MAX_JOB_FILTER_PRESETS`), indipendente dal piano.
@@ -1070,31 +1075,31 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 ### 8.A Comportamenti anomali e limiti rilevati
 
 **Lista, scoring e dati storici**
-1. **Job scartati dal vecchio cap ancora visibili.** Prima dello Sprint 46 il cap dei 15 job al giorno marcava come scartati i job in eccesso. Il marcatore è rimasto sui job storici, ma né la lista né le statistiche lo considerano. I job scartati in passato (circa un migliaio, mai reintegrati) compaiono quindi in lista e nei conteggi della Home come job normali.
-2. **Scoring fallito, job senza punteggio.** Se lo scoring di un job fallisce, il job resta in lista senza punteggio, in fondo all'ordinamento, e **non viene mai ritentato**. Non esiste un comando per rivalutarlo.
+1. **Job scartati dal vecchio cap ancora visibili.** *(Risolto nello Sprint 68.)* I job marcati (988 al 2026-11-14, nessuno con documenti o bozze) vengono eliminati e il marcatore rimosso. Prima dello Sprint 46 il cap dei 15 job al giorno marcava come scartati i job in eccesso. Il marcatore è rimasto sui job storici, ma né la lista né le statistiche lo considerano. I job scartati in passato (circa un migliaio, mai reintegrati) compaiono quindi in lista e nei conteggi della Home come job normali.
+2. **Scoring fallito, job senza punteggio.** *(Risolto nello Sprint 68.)* I job senza punteggio sono ritentati al ciclo notturno successivo (massimo 3 fallimenti per job) e con un comando manuale; per il job creato a mano la valutazione viene ritentata, il massimale non è restituito (il job esiste). Se lo scoring di un job fallisce, il job resta in lista senza punteggio, in fondo all'ordinamento, e **non viene mai ritentato**. Non esiste un comando per rivalutarlo.
    - Lo stesso succede quando una raccolta si interrompe a metà: i job già creati restano senza punteggio.
    - Per un job creato a mano, il massimale è comunque consumato anche se la valutazione fallisce.
-3. **Storico dei punteggi su scala 1–5 non riscalato.** I job valutati prima dello Sprint 47 conservano il punteggio su 1–5:
+3. **Storico dei punteggi su scala 1–5 non riscalato.** *(Risolto nello Sprint 68.)* I punteggi storici sono riscalati ×2. Resta aperto: il limite per lingua dello Sprint 48 non è stato applicato ai job valutati prima (servirebbe una nuova valutazione AI per ognuno). I job valutati prima dello Sprint 47 conservano il punteggio su 1–5:
    - un vecchio "5" (il massimo) appare con il colore della fascia 5–6;
    - nel filtro rientra tra i "5" della nuova scala;
    - l'ordinamento mescola le due scale.
 
    Neanche il limite per lingua dello Sprint 48 è stato applicato ai job valutati in precedenza.
 4. **Match e gap dei job vecchi.** I job valutati prima del 09/09/2026 hanno match e gap senza motivazione: per loro il pulsante "Espandi motivazioni" non compare.
-5. **Filtro "Ricerca" dopo la modifica di una ricerca.** L'associazione tra job e ricerca di provenienza si ricostruisce dai valori **attuali** della ricerca salvata. Se si cambiano keywords o località di una ricerca, i job raccolti prima non risultano più associati a lei nel filtro, anche se il badge mostra ancora la provenienza originale. Lo stesso vale per i job di ricerche eliminate.
+5. **Filtro "Ricerca" dopo la modifica di una ricerca.** *(Risolto nello Sprint 68.)* Il job conserva il riferimento alla ricerca di provenienza. Restano associati per testo (comportamento precedente) solo i job storici non attribuibili con certezza; i job di ricerche eliminate non risultano associati a nessuna ricerca. L'associazione tra job e ricerca di provenienza si ricostruisce dai valori **attuali** della ricerca salvata. Se si cambiano keywords o località di una ricerca, i job raccolti prima non risultano più associati a lei nel filtro, anche se il badge mostra ancora la provenienza originale. Lo stesso vale per i job di ricerche eliminate.
 6. **Provenienza di un job trovato da più ricerche.** Il job compare una sola volta e porta la provenienza di una sola ricerca. Non si può sapere quali altre ricerche lo avrebbero trovato.
-7. **Filtri e sezione non conservati.** Tornando alla lista dal dettaglio di un job, sezione e filtri ripartono dai valori di default (Raccolti, oggi–oggi).
-8. **Filtro salvato creato in Importati.** Salva anche il filtro "Ricerca", che in quella sezione è nascosto e ignorato. Applicato da un'altra sezione, il filtro torna attivo.
-9. **Eliminazione di un filtro salvato non confermata.** Se l'eliminazione fallisce lato server, la pillola sparisce comunque fino al ricaricamento della pagina.
-10. **Disattivazione automatica senza avviso (Free).** Attivando una seconda ricerca dello stesso tipo, la precedente si spegne senza un messaggio esplicito, contrariamente a quanto previsto in origine.
-11. **Modifica del tipo di una ricerca attiva.** Cambiare il tipo (Job role ↔ Company) di una ricerca già attiva non ripassa dai limiti di piano: un utente Free può così trovarsi con 2 ricerche attive dello stesso tipo.
+7. **Filtri e sezione non conservati.** *(Risolto nello Sprint 68.)* Sezione e filtri sono nell'indirizzo della pagina. Tornando alla lista dal dettaglio di un job, sezione e filtri ripartono dai valori di default (Raccolti, oggi–oggi).
+8. **Filtro salvato creato in Importati.** *(Risolto nello Sprint 68.)* Salva anche il filtro "Ricerca", che in quella sezione è nascosto e ignorato. Applicato da un'altra sezione, il filtro torna attivo.
+9. **Eliminazione di un filtro salvato non confermata.** *(Risolto nello Sprint 68.)* Se l'eliminazione fallisce lato server, la pillola sparisce comunque fino al ricaricamento della pagina.
+10. **Disattivazione automatica senza avviso (Free).** *(Risolto nello Sprint 68.)* Attivando una seconda ricerca dello stesso tipo, la precedente si spegne senza un messaggio esplicito, contrariamente a quanto previsto in origine.
+11. **Modifica del tipo di una ricerca attiva.** *(Risolto nello Sprint 68.)* Cambiare il tipo (Job role ↔ Company) di una ricerca già attiva non ripassa dai limiti di piano: un utente Free può così trovarsi con 2 ricerche attive dello stesso tipo.
 
 **Raccolta**
-12. **Un errore alla fonte fa perdere tutta la raccolta notturna dell'utente**, non solo quella della ricerca coinvolta. Dal lato utente non si distingue da "nessun job nuovo".
-13. **Raccolta manuale e raccolta notturna possono sovrapporsi**: non c'è un blocco comune.
-14. **Seconda raccolta manuale nello stesso giorno.** Quando serve, l'amministratore deve azzerare a mano il contatore: non esiste uno strumento dedicato.
-15. **Testo fuorviante della raccolta manuale.** Il testo della card dice che la raccolta manuale serve a "evitare di consumare chiamate nei giorni in cui non guarderesti i risultati". In realtà la raccolta notturna gira comunque per tutte le ricerche attive.
-16. **Offerte scartate non tracciate.** Le offerte scartate per campi mancanti o troppo lunghi non vengono registrate: non si sa quante siano.
+12. *(Risolto nello Sprint 68.)* **Un errore alla fonte faceva perdere tutta la raccolta notturna dell'utente**, non solo quella della ricerca coinvolta. Dal lato utente non si distingue da "nessun job nuovo".
+13. *(Risolto nello Sprint 68.)* **Raccolta manuale e raccolta notturna potevano sovrapporsi**: non c'è un blocco comune.
+14. **Seconda raccolta manuale nello stesso giorno.** *(Risolto nello Sprint 68.)* Azione dedicata in Django Admin. Quando serve, l'amministratore deve azzerare a mano il contatore: non esiste uno strumento dedicato.
+15. **Testo fuorviante della raccolta manuale.** *(Risolto nello Sprint 68.)* Il testo della card dice che la raccolta manuale serve a "evitare di consumare chiamate nei giorni in cui non guarderesti i risultati". In realtà la raccolta notturna gira comunque per tutte le ricerche attive.
+16. **Offerte scartate non tracciate.** *(Risolto nello Sprint 68.)* Contate nel diario tecnico della raccolta. Le offerte scartate per campi mancanti o troppo lunghi non vengono registrate: non si sa quante siano.
 
 **Stati e generazione del CV**
 17. **Rigenerare il CV toglie "candidatura fatta".** Una generazione riuscita su un job già marcato "candidatura fatta" lo riporta a "CV generato", e il job esce dal conteggio "Candidature fatte" della Home.

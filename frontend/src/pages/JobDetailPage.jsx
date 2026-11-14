@@ -36,6 +36,7 @@ import { scoreItemLabel, scoreItemReason } from '../utils/scoreItems'
 import { scoreStyle } from '../utils/scoreStyle'
 import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
+import { jobListHref } from '../utils/jobListUrl'
 
 const SIGNED_URL_REFRESH_MS = 20 * 60 * 1000
 
@@ -267,7 +268,7 @@ export default function JobDetailPage() {
         <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-sm text-destructive">
           {error || t('jobs.notFound')}
         </p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate('/list')}>
+        <Button variant="secondary" className="mt-4" onClick={() => navigate(jobListHref())}>
           {t('jobs.backToList')}
         </Button>
       </div>
@@ -283,7 +284,7 @@ export default function JobDetailPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
-      <Link to="/list" className="text-sm font-medium text-primary hover:underline">
+      <Link to={jobListHref()} className="text-sm font-medium text-primary hover:underline">
         ← {t('jobs.backToList')}
       </Link>
 

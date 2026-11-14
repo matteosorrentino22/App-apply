@@ -49,7 +49,8 @@ SCORE_JSON_SCHEMA = {
 
 SCORING_SYSTEM_PROMPT = (
     "Valuti l'affinità tra il profilo master di un candidato e un'offerta di "
-    "lavoro. Assegni un punteggio intero da 1 a 10 (10 = massima affinità), "
+    "lavoro (titolo, azienda, località e descrizione). Assegni un punteggio "
+    "intero da 1 a 10 (10 = massima affinità), "
     "elenchi i punti di affinità (score_match) e le lacune principali "
     "(score_gaps) rispetto ai requisiti dell'offerta, con una breve "
     "motivazione (score_reasoning).\n"
@@ -168,7 +169,12 @@ def score_job_with_claude(job, profile):
     scartato per la notte, traccia in RunLog) è responsabilità di
     `apps.jobs.scoring.score_job` (02-specifiche-tecniche-v3.md §5.1)."""
     profile_summary = _build_profile_summary(profile)
-    job_summary = f"Titolo: {job.title}\nAzienda: {job.company}\nDescrizione: {job.description}"
+    # Località passata al modello dallo Sprint 68: aiuta a riconoscere la
+    # lingua di lavoro probabile e i requisiti legati alla sede.
+    job_summary = (
+        f"Titolo: {job.title}\nAzienda: {job.company}\n"
+        f"Località: {job.location or 'non indicata'}\nDescrizione: {job.description}"
+    )
 
     return call_claude_structured(
         model=settings.BEDROCK_SCORING_MODEL,

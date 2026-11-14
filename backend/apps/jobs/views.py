@@ -68,7 +68,7 @@ from .import_service import (
     ImportRejected,
     import_job_from_url,
 )
-from .manual_job_service import ManualJobRejected, create_manual_job
+from .manual_job_service import ManualJobFailed, ManualJobRejected, create_manual_job
 from .list_service import (
     APPLICANTS_RANGES,
     FILTERABLE_STATUSES,
@@ -530,6 +530,8 @@ class CreateManualJobView(APIView):
             job = create_manual_job(request.user, serializer.validated_data)
         except ManualJobRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ManualJobFailed as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
             {"job_id": job.pk, "status": job.status, "score": job.score},
@@ -539,9 +541,9 @@ class CreateManualJobView(APIView):
 
 class CollectJobsView(APIView):
     """Raccolta manuale per il solo utente autenticato (sezione Home): stessa
-    pipeline raccolta→scoring→cap del ciclo notturno, innescata a richiesta
-    per non sprecare chiamate Apify nei giorni in cui i risultati non
-    verrebbero comunque controllati."""
+    pipeline raccolta→scoring del ciclo notturno, innescata a richiesta per
+    avere subito le offerte delle ultime 24 ore; la raccolta notturna gira
+    comunque."""
 
 
     def post(self, request):

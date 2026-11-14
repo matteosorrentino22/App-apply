@@ -98,6 +98,23 @@ export default function AccountPage() {
     }
   }
 
+  // Free: attivare (o spostare di tipo) una ricerca spegne l'altra attiva
+  // dello stesso tipo; il backend la restituisce in `deactivated_previous`
+  // (Sprint 68: avviso esplicito con il nome della ricerca spenta).
+  function applySearchUpdate(result) {
+    const previous = result.deactivated_previous
+    setSearches((current) =>
+      current.map((s) => {
+        if (s.id === result.id) return result
+        if (previous && s.id === previous.id) return previous
+        return s
+      }),
+    )
+    if (previous) {
+      showToast(t('account.searchDeactivatedToast').replace('{name}', previous.keywords))
+    }
+  }
+
   async function handleToggleActive(search) {
     setBusySearchId(search.id)
     setSearchError('')
@@ -106,16 +123,7 @@ export default function AccountPage() {
         const updated = await deactivateSearch(search.id)
         setSearches((current) => current.map((s) => (s.id === updated.id ? updated : s)))
       } else {
-        const result = await activateSearch(search.id)
-        setSearches((current) =>
-          current.map((s) => {
-            if (s.id === result.id) return result
-            if (result.deactivated_previous && s.id === result.deactivated_previous.id) {
-              return result.deactivated_previous
-            }
-            return s
-          }),
-        )
+        applySearchUpdate(await activateSearch(search.id))
       }
     } catch (err) {
       setSearchError(
@@ -147,8 +155,7 @@ export default function AccountPage() {
     setBusySearchId(editingSearchId)
     setSearchError('')
     try {
-      const updated = await updateSearch(editingSearchId, editedSearch)
-      setSearches((current) => current.map((s) => (s.id === updated.id ? updated : s)))
+      applySearchUpdate(await updateSearch(editingSearchId, editedSearch))
       setEditingSearchId(null)
     } catch (err) {
       setSearchError(

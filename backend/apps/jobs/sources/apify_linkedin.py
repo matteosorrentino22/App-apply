@@ -62,30 +62,79 @@ class ApifyLinkedInSource:
     """
 
     def fetch(self, searches, window_hours, limit):
-        items = []
+        """Tutte le offerte di tutti i gruppi; solleva l'errore del primo
+        gruppo fallito. La raccolta usa `fetch_groups`, che invece isola gli
+        errori per gruppo."""
+        offers = []
+        for group in self.fetch_groups(searches, window_hours):
+            if group["error"] is not None:
+                raise group["error"]
+            offers.extend(group["offers"])
+        return offers
+
+    def fetch_groups(self, searches, window_hours):
+        """Una chiamata per gruppo (tipo × città × paese). Un errore su un
+        gruppo non fa perdere gli altri (Sprint 68): ogni elemento del
+        risultato è `{"label", "offers", "error"}`, con `error` = eccezione
+        del gruppo fallito (dopo i retry) e `offers` vuota in quel caso.
+        Ogni offerta porta `saved_search_id`, la ricerca del gruppo che l'ha
+        prodotta quando è individuabile (None altrimenti)."""
+        results = []
         for group in self._group_by_type_and_location(searches):
-            company_names = [search.keywords for search in group["searches"]]
-            is_company = group["search_type"] == "company"
-            payload = {
-                "keyword": COMPANY_SEARCH_KEYWORDS if is_company else company_names,
-                "location": f"{group['city']}, {group['country']}",
-                "publishedAt": self._published_at_filter(window_hours),
-                "maxItems": MAX_ITEMS_PER_CALL,
-                "saveOnlyUniqueItems": True,
-            }
-            if is_company:
-                payload["companyInclude"] = company_names
-            response = self._post_with_retry(payload)
-            raw_items = response.json()
-            if is_company:
-                # `searchString` varrebbe qui "jobs"/"hiring" (il keyword
-                # neutro), non il nome azienda: sovrascritto con l'azienda
-                # reale del job (già garantita da `companyInclude`) prima
-                # della normalizzazione, così `matched_search` resta utile.
-                for item in raw_items:
-                    item["searchString"] = item.get("companyName") or item.get("company") or ""
-            items.extend(raw_items)
-        return [self._normalize_item(item) for item in items]
+            label = f"{group['search_type']} · {group['city']}, {group['country']}"
+            try:
+                offers = self._fetch_group(group, window_hours)
+            except Exception as exc:
+                results.append({"label": label, "offers": [], "error": exc})
+                continue
+            results.append({"label": label, "offers": offers, "error": None})
+        return results
+
+    def _fetch_group(self, group, window_hours):
+        company_names = [search.keywords for search in group["searches"]]
+        is_company = group["search_type"] == "company"
+        payload = {
+            "keyword": COMPANY_SEARCH_KEYWORDS if is_company else company_names,
+            "location": f"{group['city']}, {group['country']}",
+            "publishedAt": self._published_at_filter(window_hours),
+            "maxItems": MAX_ITEMS_PER_CALL,
+            "saveOnlyUniqueItems": True,
+        }
+        if is_company:
+            payload["companyInclude"] = company_names
+        response = self._post_with_retry(payload)
+        raw_items = response.json()
+        if is_company:
+            # `searchString` varrebbe qui "jobs"/"hiring" (il keyword
+            # neutro), non il nome azienda: sovrascritto con l'azienda
+            # reale del job (già garantita da `companyInclude`) prima
+            # della normalizzazione, così `matched_search` resta utile.
+            for item in raw_items:
+                item["searchString"] = item.get("companyName") or item.get("company") or ""
+        offers = []
+        for item in raw_items:
+            offer = self._normalize_item(item)
+            offer["saved_search_id"] = self._attribute_to_search(group, offer["matched_search"])
+            offers.append(offer)
+        return offers
+
+    def _attribute_to_search(self, group, matched_search):
+        """Ricerca del gruppo che ha prodotto l'offerta: confronto con
+        l'etichetta restituita dall'actor (Company: nome azienda; Job role:
+        "<keywords> - <città>, <paese>"), senza distinzione di maiuscole; con
+        una sola ricerca nel gruppo è per forza quella."""
+        searches = group["searches"]
+        label = (matched_search or "").casefold()
+        for search in searches:
+            if group["search_type"] == "company":
+                expected = search.keywords
+            else:
+                expected = f"{search.keywords} - {search.city}, {search.country}"
+            if expected.casefold() == label:
+                return search.pk
+        if len(searches) == 1:
+            return searches[0].pk
+        return None
 
     def _group_by_type_and_location(self, searches):
         """Raggruppa le ricerche per (tipo, città, paese): una chiamata per

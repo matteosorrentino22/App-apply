@@ -98,7 +98,11 @@ Tutti i container `app-apply-*` devono riportare `.../docker-compose.prod.yml`. 
 
 ```
 docker compose -f docker-compose.prod.yml build web
+<<<<<<< HEAD
 docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (345 test, OK al 2026-11-14, Sprint 67)
+=======
+docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (340 test, OK al 2026-11-14, Sprint 68)
+>>>>>>> worktree-agent-a997742a70b328090
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py makemigrations --check --dry-run
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py check --deploy                     # con DEBUG=false: nessun problema atteso
 cd frontend && npm run test:e2e                                                     # Playwright (e2e/*.spec.js)
@@ -107,6 +111,8 @@ cd frontend && npm run test:e2e                                                 
 `run --rm --no-deps` usa l'immagine appena ricostruita senza toccare i container in esecuzione (si collega al `db` di produzione solo per creare/distruggere il database di test). Nei test la cache è una `DummyCache`: niente contatori su Redis. Dallo Sprint 67 i test ignorano le credenziali SMTP e il codice di invito del `.env` (email in memoria, task Celery eseguiti in linea) e il gate delle accettazioni legali è spento salvo nei test dedicati. Frontend senza toccare la PWA in produzione: `docker compose -f docker-compose.prod.yml build frontend-build` e poi `docker run --rm --entrypoint sh app-apply-frontend-build -c "npm run build && npx oxlint src"` (mai `run`/`up` del servizio `frontend-build`, che sovrascrive il volume servito da Caddy). Caddyfile: `docker run --rm -v $PWD/docker/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro -e DOMAIN=example.com -e CADDY_EMAIL=a@example.com caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile`.
 
 `-e DJANGO_DEBUG=true` è necessario: con la configurazione di produzione (`DEBUG=false` → redirect HTTPS) il test client riceve 301 su tutte le chiamate API e circa 60 test falliscono senza che ci sia una regressione. Il database di test è separato (`test_<db>`), i dati di produzione non vengono toccati.
+
+Con `REGISTRATION_INVITE_CODE` valorizzato in `.env` due test di registrazione (`accounts/test_security.py`) rispondono 400: aggiungere `-e REGISTRATION_INVITE_CODE=` al comando dei test. Per non condividere il server PostgreSQL di produzione (e il nome `test_<db>`) con altre esecuzioni in parallelo, si può usare un PostgreSQL usa e getta su una rete Docker dedicata, passando `POSTGRES_HOST`/`POSTGRES_PASSWORD` di quel container (procedura usata nello Sprint 68, `sprints/sprint-68.md`).
 
 I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova. Dallo Sprint 66 il login è limitato a 10 tentativi al minuto per IP: una suite e2e lunga lanciata contro lo stesso ambiente può ricevere 429.
 
@@ -133,6 +139,7 @@ Da eseguire a mano sul VPS, nella cartella del repository. Effetti visibili: **t
    Il comando è idempotente: rilanciato, non rinomina di nuovo i file già sistemati.
 8. **Verifiche**: coerenza dello stack (§4.3); `docker compose -f docker-compose.prod.yml exec web id` → `uid=1000(app)`; `curl -sI https://<dominio>/` mostra `strict-transport-security`, `content-security-policy`, `x-frame-options` e nessun header `server`; un vecchio URL `/media/...` risponde 404; dalla PWA: login, download di CV e cover letter, anteprima PDF negli editor (CSP), foto nel profilo; login all'admin sul path configurato; access log presente in `docker compose -f docker-compose.prod.yml exec caddy ls -la /var/log/caddy`.
 
+<<<<<<< HEAD
 ### 4.6 Rilascio dello Sprint 67 (privacy e GDPR) — passi una tantum, in ordine
 
 Effetti visibili: al prossimo accesso **tutti gli utenti esistenti vedono la schermata di accettazione** di informativa, termini ed età minima (gli utenti esistenti risultano già con email verificata); con l'email configurata i nuovi iscritti devono confermare l'indirizzo prima di accedere.
@@ -156,6 +163,31 @@ Effetti visibili: al prossimo accesso **tutti gli utenti esistenti vedono la sch
    - log del worker senza warning "Email non configurata".
 7. **Comunicare ai tester** che al prossimo accesso dovranno accettare informativa e termini.
 8. **Dopo 7 giorni**: eliminare dal VPS i dump manuali più vecchi in `backups/` del repository (es. `pre_*.dump`, `pre_sprint66_media.tgz`): contengono dati personali, non rientrano nella rotazione e l'informativa dichiara una conservazione dei backup di 7 giorni.
+=======
+### 4.7 Rilascio dello Sprint 68 (lista job, scoring, raccolta) — passi una tantum, in ordine
+
+Lo sprint contiene tre migrazioni `jobs/0017` (nuovi campi), `jobs/0018` (backfill della ricerca di provenienza) e `jobs/0019` (rimozione di `discarded_by_cap`). La **0019 si rifiuta di partire finché esistono job con `discarded_by_cap=True`**: per questo, prima di `up -d`, si applicano le migrazioni fino alla 0018 e si lanciano i comandi con un container usa e getta. Se si facesse subito `up -d`, `web` non partirebbe (errore esplicito della 0019 nei log): basta eseguire i passi 5–6 e rilanciare `up -d`.
+
+1. **Backup locale** del database (§6, "Backup manuale locale"): i passi 6 e 7 eliminano e modificano dati.
+2. **Build**: `docker compose -f docker-compose.prod.yml build web worker beat frontend-build`.
+3. **Fermare** i servizi applicativi: `docker compose -f docker-compose.prod.yml stop web worker beat`.
+4. **Migrazioni fino alla 0018**: `docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py migrate jobs 0018`.
+5. **Job del vecchio cap di intake** (decisione del committente: eliminarli con documenti e bozze):
+   ```
+   docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py delete_discarded_by_cap_jobs            # dry-run: conteggi per stato e documenti collegati
+   docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py delete_discarded_by_cap_jobs --confirm
+   ```
+   Al 2026-11-14 (dump di prima dello Sprint 66) erano 988 job, nessuno con CV, cover letter, messaggi o bozze; uno era marcato "candidatura fatta". Un job da conservare va smarcato prima del `--confirm` (il campo non è più nel modello Django, quindi non da Admin): `docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py dbshell -- -c "UPDATE jobs_job SET discarded_by_cap = false WHERE id = <id>;"`.
+6. **Punteggi storici su scala 1–5** (×2, marcati con `score_rescaled_from_legacy`; idempotente):
+   ```
+   docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py rescale_legacy_scores            # dry-run: quanti per valore
+   docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py rescale_legacy_scores --confirm
+   ```
+   Taglio di default 2026-09-24 21:00 UTC (passaggio reale alla scala 1–10, verificato sui dati: vedi `sprints/sprint-68.md`). Il dry-run segnala eventuali punteggi > 5 prima del taglio, che non vengono toccati.
+7. **Avvio**: `docker compose -f docker-compose.prod.yml up -d` (`web` applica la `jobs/0019` e le migrazioni non ancora applicate; `frontend-build` ricompila la PWA).
+8. **Facoltativo — job senza punteggio**: il ciclo notturno li ritenta da solo (al massimo 3 fallimenti per job). Per farlo subito: `docker compose -f docker-compose.prod.yml exec web python manage.py retry_unscored_jobs --dry-run`, poi senza `--dry-run` (una chiamata AI per job).
+9. **Verifiche**: coerenza dello stack (§4.3); in Admin la lista Job non ha più il filtro "discarded by cap", i job riscalati hanno `score_rescaled_from_legacy`; la mattina dopo, `RunLog` `collection` con le righe per gruppo e i contatori degli scarti.
+>>>>>>> worktree-agent-a997742a70b328090
 
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 
@@ -221,13 +253,9 @@ Sintomo: raccolta notturna e "Collect now" falliscono per **tutti** gli utenti, 
 Le chiamate AI passano tutte da `apps/common/ai.py`. Per ruotare le chiavi AWS o cambiare modello: aggiornare `AWS_*` / `BEDROCK_*` in `.env` e ricreare i container (§4.2). Errori di quota/credenziali compaiono nei `RunLog` (scoring, generazioni, chat).
 
 ### 7.3 Utente bloccato dalla quota "Collect now" (409)
-Il limite è `COLLECTION_DAILY_LIMIT = 1` raccolta manuale al giorno per utente, uguale per Free e Pro (`apps/jobs/tasks.py`). Per concederne un'altra oggi:
-```
-$SHELL_DJANGO "
-from apps.accounts.models import User; from apps.jobs.models import DailyQuota; from apps.jobs.tasks import _today_europe_rome
-q = DailyQuota.objects.get(user=User.objects.get(pk=<id>), date=_today_europe_rome()); q.collection_count = 0; q.save(update_fields=['collection_count']); print('ok')"
-```
-Stesso schema per gli altri contatori di `DailyQuota` (`manual_cv_count`, `import_count`, `cover_letter_count`, `manual_job_count`, `referral_message_count`). Il 409 può anche indicare una raccolta già in corso (`User.collection_in_progress`): il lock scade da solo dopo 2 ore (`COLLECTION_STALE_AFTER`).
+Il limite è `COLLECTION_DAILY_LIMIT = 1` raccolta manuale al giorno per utente, uguale per Free e Pro (`apps/jobs/tasks.py`). Per concederne un'altra oggi (Sprint 68): Django Admin → **Users**, selezionare l'utente e scegliere l'azione **"Azzera la quota di raccolta manuale di oggi"**. L'azione **"Azzera tutti i contatori giornalieri di oggi"** azzera anche gli altri contatori (`manual_cv_count`, `cover_letter_count`, `referral_message_count`, `import_count`, `manual_job_count`, `collection_count`, `cv_import_count`); dalla lista **Daily quotas** l'azione "Azzera tutti i contatori delle righe selezionate" vale per righe di qualunque giorno. Il "giorno" è quello di Europe/Rome.
+
+Il 409 può anche indicare una raccolta già in corso (`User.collection_in_progress`, visibile e modificabile nella scheda utente in Admin, sezione "Raccolta e inattività"): dallo Sprint 68 la guardia è condivisa con il ciclo notturno, quindi una raccolta manuale è respinta anche mentre gira il ciclo notturno di quell'utente. Il lock scade da solo dopo 2 ore (`COLLECTION_STALE_AFTER`).
 
 ### 7.4 Rilanciare la raccolta notturna per un solo utente
 Non esiste un task Celery per singolo utente: si chiama la funzione da shell.
@@ -236,7 +264,7 @@ $SHELL_DJANGO "
 from apps.accounts.models import User; from apps.jobs.tasks import run_nightly_cycle_for_user
 print(run_nightly_cycle_for_user(User.objects.get(pk=<id>)))"
 ```
-Attenzione: nessuna guardia di quota/lock su questo percorso e **ogni gruppo ricerca×location è una chiamata Apify a pagamento** (≥150 risultati fatturati). I job già presenti non vengono duplicati (dedup su `external_id`).
+Dallo Sprint 68 questo percorso usa la stessa guardia della raccolta manuale (se è in corso una raccolta l'utente viene saltato con un `RunLog` `skipped`), non consuma la quota giornaliera e ritenta anche i job senza punteggio. **Ogni gruppo ricerca×location è una chiamata Apify a pagamento** (≥150 risultati fatturati). I job già presenti non vengono duplicati (dedup su `external_id`).
 
 ### 7.5 Cambiare piano o credito di un utente
 Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da shell (`u.plan = User.Plan.PRO; u.save(update_fields=['plan'])`). Il passaggio Pro→Free disattiva tutte le ricerche (regola di downgrade, specifiche funzionali §4.2).
@@ -250,10 +278,15 @@ Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da sh
 - Vulnerabilità note delle dipendenze (controllo manuale periodico): `docker compose -f docker-compose.prod.yml run --rm --no-deps --user root web sh -c "pip install -q pip-audit && pip-audit"` e, in `frontend/`, `npm audit --omit=dev`.
 - Esiti di raccolta, scoring, generazioni e chat: modello `RunLog` (Django Admin), con `task_type`, `status`, `message`.
 - PDF generato ma "pagina bianca" al download: quasi sempre stack misto dev/prod (§4.3).
+<<<<<<< HEAD
 - Email di servizio (Sprint 67) non arrivate: log del worker (`docker compose -f docker-compose.prod.yml logs --tail 200 worker`): "Email non configurata" = credenziali mancanti nel `.env`; errori SMTP di autenticazione = password per le app errata o revocata. I task ritentano 3 volte sugli errori di rete. Un utente che non trova l'email di verifica può chiederne un'altra dal login (3 all'ora per indirizzo); in alternativa, da Django Admin → Users, spuntare `email_verified`.
 - Utente che non vuole accettare la nuova versione di informativa/termini: dalla schermata di accettazione può comunque esportare i dati o eliminare l'account. Il registro delle accettazioni è in Django Admin → Legal acceptances (sola lettura).
 - Richieste sui dati da parte di un utente (accesso, cancellazione): l'utente le fa da solo da Impostazioni ("Esporta i miei dati", "Elimina account"). Anche eliminare un utente da Django Admin (o da shell con `user.delete()`) cancella tutte le sue righe, i suoi file su disco e il testo dei suoi `RunLog` (segnali di `apps/accounts/signals.py`); solo l'email di conferma parte esclusivamente dalla cancellazione fatta dall'utente.
 - Copie delle email inviate: Gmail conserva ogni messaggio nella cartella "Posta inviata" dell'account mittente (indirizzo del destinatario e testo, nessun dato del profilo); vanno ripulite periodicamente a mano.
+=======
+- Job senza punteggio (Sprint 68): il ciclo notturno li ritenta finché `Job.scoring_failures` non arriva a 3; a mano `python manage.py retry_unscored_jobs [--dry-run] [--user-id <id>] [--ignore-limit]` (`--ignore-limit` include quelli già arrivati a 3).
+- Raccolta parziale: il `RunLog` `collection` riporta una riga per gruppo (`gruppo <tipo> · <città>, <paese>: ok, offerte=N` oppure `ERRORE …`) e gli scarti (`scartati_campi_mancanti`, `scartati_troppo_lunghi`, `scartati_duplicati`); con almeno un gruppo fallito lo stato è `failure` anche se gli altri gruppi sono stati raccolti.
+>>>>>>> worktree-agent-a997742a70b328090
 
 ## 8. Sicurezza HTTP, log e conservazione (Sprint 66)
 

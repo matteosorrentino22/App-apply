@@ -66,7 +66,7 @@ def _apply_status_filter(queryset, statuses):
     return queryset.filter(status__in=statuses) if statuses else queryset
 
 
-def _saved_search_match_q(saved_search):
+def _saved_search_label_q(saved_search):
     if saved_search.search_type == SavedSearch.SearchType.COMPANY:
         # Il nome azienda restituito da LinkedIn (risolto per ID tramite
         # `companyInclude`) può differire per maiuscole/minuscole da come
@@ -79,32 +79,32 @@ def _saved_search_match_q(saved_search):
 
 def _apply_matched_search_filter(queryset, user, search_ids):
     """Filtra per le SavedSearch che hanno prodotto il job (multi-selezione,
-    sprint corrente — prima un solo valore).
+    in OR).
 
-    `Job.matched_search` è testo libero, non una FK (vedi commento sul
-    campo in models.py): qui si ricostruisce la stringa che l'actor Apify
-    avrebbe restituito per ogni SavedSearch scelta e si combinano tutte in
-    OR (stessa logica di score/stato quando ne sono selezionati più d'uno).
-    Il token `"none"` isola i job senza ricerca di provenienza (import
-    manuale, o item Apify malformati — sprint-40) e può combinarsi con gli
-    altri come una voce qualunque. Un id che non corrisponde a nessuna
-    SavedSearch dell'utente (rimossa nel frattempo, o di un altro utente)
-    non contribuisce nulla all'OR invece di annullare l'intero filtro come
-    nella versione a singola selezione: se è selezionato insieme ad altri id
-    validi, questi ultimi continuano a valere; se è l'unico selezionato, il
-    risultato resta vuoto (nessuna condizione reale da soddisfare)."""
+    Dallo Sprint 68 il criterio è la FK `Job.matched_saved_search`, che
+    resta valida anche dopo una modifica di keywords o località della
+    ricerca. Per i job senza FK (storici non attribuibili in modo univoco
+    dal backfill, o di ricerche eliminate) si ripiega sul vecchio confronto
+    tra l'etichetta `matched_search` e i valori *attuali* della ricerca.
+    Il token `"none"` isola i job senza ricerca di provenienza (import e job
+    manuali). Un id che non corrisponde a nessuna SavedSearch dell'utente
+    non contribuisce nulla all'OR."""
     if not search_ids:
         return queryset
 
     combined = Q(pk__in=[])
     if "none" in search_ids:
-        combined |= Q(matched_search="")
+        combined |= Q(matched_search="", matched_saved_search__isnull=True)
 
     numeric_ids = [value for value in search_ids if value != "none"]
     if numeric_ids:
-        saved_searches = SavedSearch.objects.filter(user=user, pk__in=numeric_ids)
-        for saved_search in saved_searches:
-            combined |= _saved_search_match_q(saved_search)
+        saved_searches = list(SavedSearch.objects.filter(user=user, pk__in=numeric_ids))
+        if saved_searches:
+            combined |= Q(matched_saved_search__in=saved_searches)
+            legacy = Q(pk__in=[])
+            for saved_search in saved_searches:
+                legacy |= _saved_search_label_q(saved_search)
+            combined |= Q(matched_saved_search__isnull=True) & legacy
 
     return queryset.filter(combined)
 

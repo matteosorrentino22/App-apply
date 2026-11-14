@@ -1,11 +1,12 @@
 import re
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
 
+from .collection import offer_rejection_reason
 from .models import DailyQuota, Job
 from .scoring import score_job
 from .sources import get_job_source
@@ -19,7 +20,6 @@ LINKEDIN_JOB_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-REQUIRED_FIELDS = ("title", "company", "location", "description", "apply_url")
 IMPORT_DAILY_LIMIT = 3
 
 
@@ -109,26 +109,41 @@ def import_job_from_url(user, url):
     except Exception:
         offer = None
 
-    if not offer or not all(offer.get(field) for field in REQUIRED_FIELDS):
+    # Stessi controlli della raccolta (campi obbligatori e max_length, Sprint
+    # 68): un campo troppo lungo farebbe fallire l'INSERT con un DataError.
+    if not offer or offer_rejection_reason(offer) is not None:
         _refund_import(user, charge_mode)
         raise ImportRejected("Impossibile importare quel job.")
 
-    job = Job.objects.create(
-        user=user,
-        source=Job.Source.LINKEDIN,
-        external_id=offer.get("external_id") or external_id,
-        title=offer["title"],
-        company=offer["company"],
-        location=offer["location"],
-        description=offer["description"],
-        apply_url=offer["apply_url"],
-        published_at=offer.get("published_at"),
-        salary=offer.get("salary", ""),
-        applicants_count=offer.get("applicants_count"),
-        applicants_bucket=offer.get("applicants_bucket", ""),
-        recruiter_name=offer.get("recruiter_name", ""),
-        recruiter_profile_url=offer.get("recruiter_profile_url", ""),
-        origin=Job.Origin.IMPORTED,
-    )
+    try:
+        # Savepoint: due import simultanei dello stesso link passano entrambi
+        # il controllo duplicati sopra (senza lock); il secondo arriva al
+        # vincolo di unicità e va trattato come "già importato".
+        with transaction.atomic():
+            job = Job.objects.create(
+                user=user,
+                source=Job.Source.LINKEDIN,
+                external_id=offer.get("external_id") or external_id,
+                title=offer["title"],
+                company=offer["company"],
+                location=offer["location"],
+                description=offer["description"],
+                apply_url=offer["apply_url"],
+                published_at=offer.get("published_at"),
+                salary=offer.get("salary", ""),
+                applicants_count=offer.get("applicants_count"),
+                applicants_bucket=offer.get("applicants_bucket", ""),
+                recruiter_name=offer.get("recruiter_name", ""),
+                recruiter_profile_url=offer.get("recruiter_profile_url", ""),
+                origin=Job.Origin.IMPORTED,
+            )
+    except IntegrityError:
+        _refund_import(user, charge_mode)
+        raise ImportDuplicate("Questo job è già nella tua lista.")
+    except Exception:
+        _refund_import(user, charge_mode)
+        raise
+    # Uno scoring fallito non fa fallire l'import né restituisce la quota: il
+    # job c'è, e il ciclo notturno ritenta lo scoring (Sprint 68).
     score_job(job)
     return job

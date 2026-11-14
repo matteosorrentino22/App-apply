@@ -25,13 +25,24 @@ class Job(models.Model):
     company = models.CharField(max_length=255)
     location = models.CharField(max_length=255)
     description = models.TextField()
-    # Testo libero che identifica la ricerca salvata che ha prodotto questo
-    # job (dal campo `searchString` restituito da Apify per la raccolta
-    # notturna; per l'import manuale non c'è una ricerca associata, resta
-    # vuoto). Non un FK a SavedSearch: la ricerca può essere modificata o
-    # eliminata in seguito, mentre l'attribuzione del job resta uno storico
-    # immutabile di ciò che l'ha prodotto quella notte.
+    # Etichetta testuale della ricerca che ha prodotto il job (dal campo
+    # `searchString` restituito da Apify; per le ricerche Company il nome
+    # azienda; vuota per import e job manuali): è il badge mostrato in UI,
+    # uno storico di ciò che l'ha prodotto quella notte, mai riscritto.
     matched_search = models.CharField(max_length=255, blank=True, default="")
+    # Riferimento stabile alla ricerca di provenienza (Sprint 68), usato dal
+    # filtro "Ricerca" della lista: a differenza dell'etichetta sopra non
+    # cambia significato se keywords/località della ricerca vengono
+    # modificate in seguito. Null per import/job manuali, per i job storici
+    # non attribuibili in modo univoco dal backfill (il filtro ripiega allora
+    # sul confronto testuale) e per i job di ricerche eliminate.
+    matched_saved_search = models.ForeignKey(
+        "searches.SavedSearch",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="jobs",
+    )
     # Opzionale (Sprint 43): per un job inserito manualmente l'utente può non
     # avere ancora un link di candidatura (es. si candida di persona/via
     # email) — per LinkedIn/raccolta notturna resta sempre popolato.
@@ -78,19 +89,18 @@ class Job(models.Model):
     # messaggio di networking non tocca lo status del job né interferisce
     # con una generazione di CV/cover letter in corso sullo stesso job.
     referral_message_generation_in_progress = models.BooleanField(default=False)
-    # Storico: cap di intake giornaliero (15 job/utente/notte), rimosso
-    # nello sprint corrente — non più impostato da nessun percorso di
-    # raccolta. Campo lasciato sul modello (righe passate già marcate,
-    # nessuna migrazione di pulizia necessaria), ma sempre `False` per i job
-    # creati da qui in avanti.
-    discarded_by_cap = models.BooleanField(default=False)
-
-    # Scala 1-10 da Sprint 46 (prima 1-5): i punteggi storici precedenti a
-    # questo sprint restano nel vecchio range 1-5, mai retroattivamente
-    # riscalati (nessuna migrazione dati — vedi ai_scoring.py).
+    # Scala 1-10 dallo Sprint 47 (prima 1-5). I punteggi storici su 1-5 sono
+    # stati riscalati x2 dal comando `rescale_legacy_scores` (Sprint 68), che
+    # marca le righe toccate con `score_rescaled_from_legacy`.
     score = models.PositiveSmallIntegerField(
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(10)]
     )
+    score_rescaled_from_legacy = models.BooleanField(default=False)
+    # Scoring falliti per questo job (Sprint 68): un job senza punteggio viene
+    # ritentato dal ciclo notturno finché non arriva a MAX_SCORING_FAILURES
+    # (apps.jobs.scoring), per non spendere chiamate AI all'infinito su
+    # un'offerta che il modello non riesce a valutare.
+    scoring_failures = models.PositiveSmallIntegerField(default=0)
     score_match = models.JSONField(default=list, blank=True)
     score_gaps = models.JSONField(default=list, blank=True)
     score_reasoning = models.TextField(blank=True, default="")
@@ -159,6 +169,9 @@ class RunLog(models.Model):
     class Status(models.TextChoices):
         SUCCESS = "success", "Successo"
         FAILURE = "failure", "Fallimento"
+        # Ciclo notturno non eseguito per un utente con una raccolta manuale
+        # in corso (guardia condivisa, Sprint 68).
+        SKIPPED = "skipped", "Saltato"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="run_logs"
