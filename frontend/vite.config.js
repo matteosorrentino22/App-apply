@@ -10,7 +10,6 @@ const backendProxy = {
   '/api': { target: backendTarget, changeOrigin: true },
   '/accounts': { target: backendTarget, changeOrigin: true },
   '/admin': { target: backendTarget, changeOrigin: true },
-  '/media': { target: backendTarget, changeOrigin: true },
   '/static': { target: backendTarget, changeOrigin: true },
 }
 

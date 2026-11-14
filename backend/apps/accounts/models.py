@@ -62,3 +62,21 @@ class User(AbstractUser):
             self.last_activity_reset = self.last_activity_reset or self.created_at
             self.last_notified_at = self.last_notified_at or self.created_at
             super().save(update_fields=["last_activity_reset", "last_notified_at"])
+
+
+class AuthToken(models.Model):
+    """Token di accesso dell'API (Sprint 66), sostituisce il Token di DRF:
+    uno per login/dispositivo, revocabile singolarmente (logout) o tutti
+    insieme (`revoke_all_tokens`), scade per inattività
+    (`settings.AUTH_TOKEN_IDLE_DAYS`). Nel DB c'è solo lo SHA-256 del token:
+    un dump del database non basta a entrare negli account. SHA-256 senza
+    salt è sufficiente perché il token è casuale a 256 bit, non una password."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="auth_tokens")
+    key_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(default=django_timezone.now)
+    user_agent = models.CharField(max_length=200, blank=True, default="")
+
+    def __str__(self):
+        return f"AuthToken({self.user}, {self.created_at:%Y-%m-%d})"

@@ -36,6 +36,8 @@ import { scoreStyle } from '../utils/scoreStyle'
 import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
 
+const SIGNED_URL_REFRESH_MS = 20 * 60 * 1000
+
 export default function JobDetailPage() {
   const { id } = useParams()
   const { t, lang } = useLanguage()
@@ -93,6 +95,22 @@ export default function JobDetailPage() {
       cancelled = true
     }
   }, [id, t])
+
+  // Gli URL di download di CV e cover letter sono firmati e scadono dopo
+  // un'ora (Sprint 66): con la pagina aperta a lungo, o ripresa dopo ore
+  // dallo sfondo, il job si ricarica così i pulsanti non portano a un 404.
+  useEffect(() => {
+    const refresh = () => fetchJob(id).then(setJob).catch(() => {})
+    const timer = setInterval(refresh, SIGNED_URL_REFRESH_MS)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [id])
 
   function toggleGap(text) {
     setSelectedGaps((current) =>

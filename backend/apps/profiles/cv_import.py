@@ -1,3 +1,5 @@
+import zipfile
+
 import docx
 import pdfplumber
 from django.conf import settings
@@ -6,14 +8,17 @@ from apps.common.ai import call_claude_structured
 
 from .language_options import LANGUAGE_CHOICES, LANGUAGE_LEVEL_CHOICES
 
-DOCX_CONTENT_TYPES = {
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
-
 # Sotto questa soglia il testo estratto è considerato "vuoto o irrisorio"
 # (tipico dei PDF scansione/immagine) — si interrompe senza chiamare Claude
 # (02-specifiche-tecniche-v3.md §3.5, §5.4).
 MIN_TEXT_LENGTH = 40
+
+# Limiti dell'import (Sprint 66): il parsing gira nel worker gunicorn della
+# richiesta e il testo finisce intero nel prompt di Claude.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_PDF_PAGES = 10
+MAX_DOCX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024
+MAX_TEXT_LENGTH = 30_000
 
 _LANGUAGE_CODES = [code for code, _ in LANGUAGE_CHOICES]
 _LEVEL_CODES = [code for code, _ in LANGUAGE_LEVEL_CHOICES]
@@ -146,29 +151,53 @@ class CVUnreadableError(Exception):
 
 
 def extract_text(uploaded_file):
-    """Estrae il testo grezzo da un CV PDF o .docx (nessun invio del file a Claude)."""
-    name = (uploaded_file.name or "").lower()
-    content_type = getattr(uploaded_file, "content_type", "") or ""
+    """Estrae il testo grezzo da un CV PDF o .docx (nessun invio del file a
+    Claude), troncato a MAX_TEXT_LENGTH. Il formato si decide dai primi byte
+    del file, non dal nome o dal content-type dichiarati dal client. Solleva
+    ValueError per file non ammessi (formato, dimensione, pagine)."""
+    if uploaded_file.size is not None and uploaded_file.size > MAX_UPLOAD_BYTES:
+        raise ValueError("Il file non può superare i 5 MB.")
+    uploaded_file.seek(0)
+    header = uploaded_file.read(5)
+    uploaded_file.seek(0)
 
-    if content_type == "application/pdf" or name.endswith(".pdf"):
-        return _extract_pdf_text(uploaded_file)
-    if content_type in DOCX_CONTENT_TYPES or name.endswith(".docx"):
-        return _extract_docx_text(uploaded_file)
-    raise ValueError("Formato non supportato: solo PDF e Word (.docx) sono accettati.")
+    if header.startswith(b"%PDF-"):
+        text = _extract_pdf_text(uploaded_file)
+    elif header.startswith(b"PK\x03\x04"):
+        text = _extract_docx_text(uploaded_file)
+    else:
+        raise ValueError("Formato non supportato: solo PDF e Word (.docx) sono accettati.")
+    return text[:MAX_TEXT_LENGTH]
+
+
+class _TooManyPages(Exception):
+    pass
 
 
 def _extract_pdf_text(uploaded_file):
     try:
         text_parts = []
         with pdfplumber.open(uploaded_file) as pdf:
+            if len(pdf.pages) > MAX_PDF_PAGES:
+                raise _TooManyPages
             for page in pdf.pages:
                 text_parts.append(page.extract_text() or "")
         return "\n".join(text_parts)
+    except _TooManyPages as exc:
+        raise ValueError(f"Il CV non può superare le {MAX_PDF_PAGES} pagine.") from exc
     except Exception as exc:
         raise CVUnreadableError(str(exc)) from exc
 
 
 def _extract_docx_text(uploaded_file):
+    try:
+        with zipfile.ZipFile(uploaded_file) as archive:
+            uncompressed = sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile as exc:
+        raise CVUnreadableError(str(exc)) from exc
+    if uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
+        raise ValueError("Il file Word è troppo grande.")
+    uploaded_file.seek(0)
     try:
         document = docx.Document(uploaded_file)
         return "\n".join(paragraph.text for paragraph in document.paragraphs)

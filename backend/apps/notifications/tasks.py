@@ -1,3 +1,4 @@
+import logging
 import zoneinfo
 from datetime import timedelta
 
@@ -10,6 +11,7 @@ from apps.jobs.models import Job
 from .services import send_web_push
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 # Soglia di inattività (01-specifiche-funzionali-v4.md §4.12): 7 giorni senza
 # alcuna "candidatura fatta" (User.last_activity_reset).
@@ -23,6 +25,25 @@ INACTIVITY_NOTIFICATION_PAYLOAD = {
     "title": "Non ti candidi da un po'",
     "body": "Entra nell'app e valuta le offerte in attesa.",
 }
+
+
+def _send_to_all_subscriptions(user, payload):
+    """Un errore su una sottoscrizione (push service lento o in errore) non
+    deve fermare l'invio alle altre né il giro degli altri utenti
+    (Sprint 66). Nel log solo l'id, mai l'endpoint completo."""
+    for subscription in list(user.push_subscriptions.all()):
+        try:
+            send_web_push(subscription, payload)
+        except Exception as exc:
+            logger.warning("Push fallito per la sottoscrizione %s: %s", subscription.pk, type(exc).__name__)
+
+
+def _for_each_user(task_name, function):
+    for user in User.objects.all():
+        try:
+            function(user)
+        except Exception:
+            logger.exception("%s: errore per l'utente %s, si prosegue", task_name, user.pk)
 
 
 def _local_now(user):
@@ -54,8 +75,7 @@ def send_morning_notification_for_user(user):
         return False
 
     now = dj_timezone.now()
-    for subscription in user.push_subscriptions.all():
-        send_web_push(subscription, MORNING_NOTIFICATION_PAYLOAD)
+    _send_to_all_subscriptions(user, MORNING_NOTIFICATION_PAYLOAD)
 
     User.objects.filter(pk=user.pk).update(last_notified_at=now)
     return True
@@ -63,8 +83,7 @@ def send_morning_notification_for_user(user):
 
 @shared_task
 def send_morning_notifications():
-    for user in User.objects.all():
-        send_morning_notification_for_user(user)
+    _for_each_user("send_morning_notifications", send_morning_notification_for_user)
 
 
 def send_inactivity_notification_for_user(user):
@@ -82,8 +101,7 @@ def send_inactivity_notification_for_user(user):
     ):
         return False
 
-    for subscription in user.push_subscriptions.all():
-        send_web_push(subscription, INACTIVITY_NOTIFICATION_PAYLOAD)
+    _send_to_all_subscriptions(user, INACTIVITY_NOTIFICATION_PAYLOAD)
 
     User.objects.filter(pk=user.pk).update(last_inactivity_notified_at=dj_timezone.now())
     return True
@@ -91,5 +109,4 @@ def send_inactivity_notification_for_user(user):
 
 @shared_task
 def send_inactivity_notifications():
-    for user in User.objects.all():
-        send_inactivity_notification_for_user(user)
+    _for_each_user("send_inactivity_notifications", send_inactivity_notification_for_user)

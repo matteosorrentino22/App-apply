@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from apps.common.files import profile_photo_upload_to
+
 from .language_options import LANGUAGE_CHOICES, LANGUAGE_LEVEL_CHOICES
 
 
@@ -9,7 +11,7 @@ class Profile(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
     )
     summary = models.TextField(blank=True, default="")
-    photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
+    photo = models.ImageField(upload_to=profile_photo_upload_to, blank=True, null=True)
     # Dati di contatto per l'intestazione del CV generato (Sprint 10): non
     # coperti dai campi esistenti di Profile/User, ma richiesti esplicitamente
     # da 02-specifiche-tecniche-v3.md §6.3 ("nome, contatti, città, link

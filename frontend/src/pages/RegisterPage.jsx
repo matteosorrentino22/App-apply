@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -22,10 +23,12 @@ export default function RegisterPage() {
     setError('')
     setSubmitting(true)
     try {
-      await register(email, password)
+      await register(email, password, inviteCode.trim())
       navigate('/onboarding')
     } catch (err) {
-      if (err instanceof ApiError && err.data) {
+      if (err instanceof ApiError && err.status === 429) {
+        setError(t('common.tooManyRequests'))
+      } else if (err instanceof ApiError && err.data) {
         const firstError = Object.values(err.data).flat()[0]
         setError(typeof firstError === 'string' ? firstError : t('common.genericError'))
       } else {
@@ -65,6 +68,17 @@ export default function RegisterPage() {
                 required
                 autoComplete="new-password"
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="invite-code">{t('register.inviteCode')}</Label>
+              <Input
+                id="invite-code"
+                type="text"
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">{t('register.inviteCodeHint')}</p>
             </div>
             {error && (
               <p role="alert" className="text-sm text-destructive">

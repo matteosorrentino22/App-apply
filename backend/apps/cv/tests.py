@@ -143,6 +143,15 @@ class GenerateCvTests(TestCase):
         with pdfplumber.open(cv_document.pdf_file.path) as pdf:
             self.assertEqual(len(pdf.pages), 1)
 
+    def test_pdf_file_name_is_random_not_derived_from_ids(self):
+        self._add_experiences(1)
+        with patch(
+            "apps.cv.generation.generate_cv_content", return_value=_fake_content(1)
+        ):
+            cv_document = generate_cv(self.job, CVDocument.GenerationType.MANUAL)
+
+        self.assertRegex(cv_document.pdf_file.name, r"^cv_documents/[0-9a-f]{32}\.pdf$")
+
     def test_photo_included_when_option_is_on_and_photo_uploaded(self):
         self._add_experiences(1)
         self.profile.photo = _make_image_file()

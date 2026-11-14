@@ -53,11 +53,13 @@ class ProfileApiTests(APITestCase):
             "/api/profiles/me/", {"photo": _make_image_file()}, format="multipart"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["photo"])
+        self.assertTrue(response.data["has_photo"])
+        self.assertNotIn("photo", response.data)
 
         reread = self.client.get("/api/profiles/me/")
         self.assertEqual(reread.status_code, status.HTTP_200_OK)
-        self.assertEqual(reread.data["photo"], response.data["photo"])
+        self.assertTrue(reread.data["has_photo"])
+        self.assertTrue(reread.data["photo_url"].startswith("/api/files/photo/?s="))
 
     def test_user_cannot_read_another_users_profile(self):
         self.client.force_authenticate(self.user)

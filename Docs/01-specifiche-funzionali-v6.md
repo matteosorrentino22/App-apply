@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 64, HEAD `a181e90`)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66, sicurezza)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -174,9 +174,12 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 
 **Registrazione e accesso.**
 - **Registrazione** con email e password (l'email è l'identificativo). Non c'è verifica dell'email. Al termine l'utente entra nell'onboarding.
-- **Login** con email e password. Dopo il login l'utente arriva sempre alla lista job, anche se l'onboarding non è stato completato.
+- **Registrazione su invito** (Sprint 66): durante la fase di test il modulo chiede anche un **codice di invito**, comunicato dall'amministratore. Senza il codice corretto la registrazione è rifiutata con un messaggio generico. Se l'amministratore non imposta un codice la registrazione è aperta e il campo può restare vuoto.
+- **Login** con email e password. Dopo il login l'utente arriva sempre alla lista job, anche se l'onboarding non è stato completato. Con credenziali errate il messaggio è sempre lo stesso ("Credenziali non valide."), sia che l'email esista sia che non esista.
+- **Sessione** (Sprint 66): ogni accesso vale per quel dispositivo; si può essere collegati da più dispositivi contemporaneamente. La sessione **scade dopo 30 giorni senza utilizzo** su quel dispositivo (usare l'app la rinnova): a quel punto, o se la sessione viene revocata, l'app torna alla pagina di login. Con il rilascio dello Sprint 66 tutti gli utenti hanno dovuto rifare il login una volta.
+- **Tentativi limitati** (Sprint 66): troppi tentativi di login o di registrazione ravvicinati vengono bloccati per qualche minuto con il messaggio "Troppi tentativi. Attendi qualche minuto e riprova.".
 - **Login con Google.** È implementato e il pulsante compare nella pagina di login, ma **oggi non è configurato in produzione**: in pratica l'unico accesso funzionante è email e password.
-- **Logout:** il pulsante "Esci" si trova solo nell'intestazione della lista job.
+- **Logout:** il pulsante "Esci" si trova solo nell'intestazione della lista job. Chiude la sessione di quel dispositivo anche sul server (gli altri dispositivi restano collegati).
 - **Non esistono** recupero password, cambio password, cancellazione dell'account né export dei dati (§5).
 
 **Onboarding (3 passi).**
@@ -510,7 +513,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 
 **Senza costo e senza contatore:**
 - raccolta notturna e scoring;
-- import del CV in onboarding;
+- import del CV in onboarding (al massimo **5 al giorno**, senza estensione a credito; un import non riuscito per un errore del servizio AI non viene conteggiato);
 - modifica, anteprima e **PDF finale** degli editor di CV e cover letter;
 - preferiti, archiviazione, filtri salvati (massimo 50 per utente, §4.21);
 - "candidatura fatta".
@@ -787,7 +790,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 
 Si salva con il pulsante "Salva". Limiti della pagina:
 - **non** si può importare un CV (solo in onboarding);
-- **non** si vede la foto attuale e non la si può rimuovere;
+- la foto attuale si vede in anteprima (Sprint 66) ma non la si può rimuovere;
 - le tecnologie delle esperienze non sono modificabili;
 - la "situazione / obiettivo" si imposta solo in onboarding.
 
@@ -839,6 +842,12 @@ Si salva con il pulsante "Salva". Limiti della pagina:
 
 - **Multi-utenza con isolamento dei dati.**
   - Ogni utente vede solo il proprio profilo, le proprie ricerche, i propri job, documenti, bozze, messaggi e filtri salvati.
+  - **Documenti e foto privati** (Sprint 66): CV, cover letter e foto si scaricano solo dall'app, con link personali che **scadono dopo un'ora** (la pagina del job li rinnova da sola); un link copiato e inoltrato smette di funzionare. La foto caricata viene ripulita dai metadati (per esempio posizione GPS e modello del telefono) e salvata con l'orientamento corretto; formati ammessi JPEG, PNG e WebP, fino a 5 MB.
+- **Limiti di dimensione** (Sprint 66), con messaggio d'errore oltre il limite:
+  - descrizione di un job creato a mano: 20.000 caratteri;
+  - indicazioni per cover letter, messaggi di networking e "colma i gap", messaggi nelle chat degli editor: 2.000 caratteri;
+  - CV da importare: 5 MB e 10 pagine (viene letto solo il testo, fino a 30.000 caratteri);
+  - contenuto delle bozze negli editor: numero massimo di voci e lunghezza dei testi ampiamente sopra l'uso normale (dettaglio nelle specifiche tecniche §5.12).
 - **Fuso orario.**
   - Il "giorno" della lista e della Home e l'orario delle notifiche seguono il fuso dell'utente. Il fuso però non è impostabile da interfaccia, quindi di fatto vale **Europe/Rome** per tutti.
   - Raccolta notturna e azzeramento dei massimali seguono sempre Europe/Rome.
@@ -872,6 +881,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 
 ### Account, onboarding e profilo
 - ☐ Ci si registra e si accede con email e password. Dopo la registrazione si entra nell'onboarding, dopo il login nella lista.
+- ☐ Con un codice di invito configurato, la registrazione senza il codice corretto è rifiutata; il logout chiude la sessione del dispositivo; dopo 30 giorni senza utilizzo l'app chiede di nuovo il login (Sprint 66).
+- ☐ I link di download di CV, cover letter e foto funzionano solo per il proprietario e scadono dopo un'ora (Sprint 66).
 - ☐ In onboarding l'utente inserisce nome e cognome, obiettivo (inerte), lingua dei documenti, opzione foto; compila il profilo; crea e attiva la prima ricerca.
 - ☐ Il profilo ha sommario, esperienze, istruzione, competenze, certificazioni e lingue, più telefono, email del CV, città/paese, LinkedIn e foto. Non c'è una sezione "risultati chiave".
 - ☐ Lingue e livelli si scelgono solo da una lista fissa (36 lingue, 4 livelli).
@@ -1047,14 +1058,14 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 32. **Link del destinatario richiesto ma non usato.** Il link al profilo LinkedIn del destinatario viene chiesto e salvato, ma non influisce sul messaggio (§5.21).
 
 **Account, piani e notifiche**
-33. **Login con Google non funzionante.** Il pulsante compare ma, non essendo configurato in produzione, non è utilizzabile. Per chi accedesse con Google il logout non chiuderebbe la sessione.
+33. **Login con Google non funzionante.** Il pulsante compare ma, non essendo configurato in produzione, non è utilizzabile.
 34. **Mancano le funzioni di base dell'account:** recupero e cambio password, cancellazione dell'account, export dei dati.
 35. **Contatori e prezzi non visibili.** L'utente non vede i massimali residui né i prezzi. Scopre il passaggio a credito solo dal saldo che cala, e il blocco solo dal messaggio d'errore.
 36. **Fuso orario fisso.** Il fuso orario per utente esiste ma non si imposta da interfaccia: le "10:00 locali" e il "giorno" della lista sono di fatto quelli italiani. La data predefinita del filtro usa invece la data del dispositivo.
-37. **Notifiche non disattivabili.** Non si possono disattivare dall'app. Inoltre l'invio verso un dispositivo non più valido può interrompere l'invio agli altri utenti in quel giro.
+37. **Notifiche non disattivabili.** Non si possono disattivare dall'app, e il logout non disattiva le notifiche su quel dispositivo.
 38. **Lingua di messaggi e notifiche.** Messaggi d'errore del server, notifiche e prefisso del limite per lingua sono solo in italiano, anche con l'interfaccia in inglese.
-39. **Import CV in errore.** Se il servizio AI fallisce durante l'import del CV in onboarding, l'utente vede solo un errore generico.
-40. **Limiti della pagina Profilo:** non mostra la foto attuale e non permette di rimuoverla; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
+39. **Import CV in errore.** Se il servizio AI fallisce durante l'import del CV in onboarding, l'utente vede solo un errore generico (l'import non viene però conteggiato nel limite giornaliero).
+40. **Limiti della pagina Profilo:** non permette di rimuovere la foto; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
 41. **Onboarding saltabile.** Dopo il login non c'è alcun rimando all'onboarding se il profilo è incompleto: l'utente se ne accorge solo quando la generazione del CV viene rifiutata.
 42. **Titolo della pagina Impostazioni.** Il titolo è ancora "Il tuo account".
 43. **Logout solo dalla lista.** Il logout si trova solo nella pagina della lista job.

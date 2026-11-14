@@ -135,11 +135,18 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 
+# Solo gli ultimi turni della cronologia vanno nel prompt (Sprint 66): la
+# cronologia completa resta salvata, ma il costo di ogni messaggio non
+# cresce senza limite con la lunghezza della conversazione.
+MAX_HISTORY_TURNS_IN_PROMPT = 20
+
+
 def _build_user_content(draft, job, profile, chat_history, user_message, focus_bullets):
     profile_skill_names = [skill.name for skill in profile.skills.all()]
     profile_certification_names = [cert.name for cert in profile.certifications.all()]
     history_lines = [
-        {"role": turn["role"], "message": turn["message"]} for turn in chat_history
+        {"role": turn["role"], "message": turn["message"]}
+        for turn in chat_history[-MAX_HISTORY_TURNS_IN_PROMPT:]
     ]
     experiences_by_id = {
         exp["profile_experience_id"]: exp for exp in draft.content_json.get("experiences", [])

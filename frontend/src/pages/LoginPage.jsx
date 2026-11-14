@@ -26,11 +26,13 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/list')
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 400
-          ? t('login.invalidCredentials')
-          : t('common.genericError'),
-      )
+      if (err instanceof ApiError && err.status === 400) {
+        setError(t('login.invalidCredentials'))
+      } else if (err instanceof ApiError && err.status === 429) {
+        setError(t('common.tooManyRequests'))
+      } else {
+        setError(t('common.genericError'))
+      }
     } finally {
       setSubmitting(false)
     }

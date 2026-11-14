@@ -2,13 +2,15 @@ import re
 
 from rest_framework import serializers
 
+from apps.common.files import signed_document_url
+
 from .list_service import APPLICANTS_RANGES, FILTERABLE_STATUSES
 from .models import Job, JobFilterPreset
 
 # Caratteri non ammessi nei nomi file sui filesystem/browser più comuni:
 # tolti dal nome suggerito per il download (Sprint 42), non dal nome reale
-# su disco (che resta quello interno, `cv_documents/cv_<job>_<doc>.pdf` —
-# vedi apps.cv.generation/cover_letter_generation — mai esposto lato UI).
+# su disco (casuale, `cv_documents/<uuid>.pdf` — vedi apps.common.files —
+# mai esposto lato UI).
 _FILENAME_UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|]')
 
 
@@ -21,6 +23,64 @@ def _build_full_name_for_filename(user):
     return full_name or user.email
 
 
+def cv_download_filename(job):
+    name = _build_full_name_for_filename(job.user)
+    return f"{_sanitize_filename_part(f'CV {name} - {job.title}')}.pdf"
+
+
+def cover_letter_download_filename(job):
+    name = _build_full_name_for_filename(job.user)
+    return f"{_sanitize_filename_part(f'Cover letter {name} - {job.title}')}.pdf"
+
+
+# Limiti dei testi liberi che finiscono nei prompt AI o nei PDF (Sprint 66):
+# senza, un singolo messaggio da qualche MB costerebbe centinaia di migliaia
+# di token. Valori ampi rispetto all'uso reale.
+MAX_DESCRIPTION_LENGTH = 20_000
+MAX_INSTRUCTIONS_LENGTH = 2_000
+MAX_CHAT_MESSAGE_LENGTH = 2_000
+MAX_GAPS = 30
+MAX_GAP_LENGTH = 500
+
+
+class GenerateCvInputSerializer(serializers.Serializer):
+    gaps = serializers.ListField(
+        child=serializers.CharField(max_length=MAX_GAP_LENGTH, allow_blank=True),
+        max_length=MAX_GAPS,
+        required=False,
+        default=list,
+    )
+    gap_instructions = serializers.CharField(
+        max_length=MAX_INSTRUCTIONS_LENGTH, required=False, allow_blank=True, default=""
+    )
+
+
+class InstructionsInputSerializer(serializers.Serializer):
+    instructions = serializers.CharField(
+        max_length=MAX_INSTRUCTIONS_LENGTH, required=False, allow_blank=True, default=""
+    )
+
+
+class ReferralMessageInputSerializer(InstructionsInputSerializer):
+    recipient_name = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, default=""
+    )
+    # CharField e non URLField: oggi il frontend accetta anche link senza
+    # schema ("linkedin.com/in/..."), il campo non è mai usato come link nei PDF.
+    recipient_linkedin_url = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
+
+
+class ChatMessageInputSerializer(serializers.Serializer):
+    message = serializers.CharField(
+        max_length=MAX_CHAT_MESSAGE_LENGTH, required=False, allow_blank=True, allow_null=True, default=""
+    )
+    focus_bullets = serializers.ListField(
+        child=serializers.DictField(), max_length=50, required=False, default=list
+    )
+
+
 class ManualJobCreateSerializer(serializers.Serializer):
     """Input della creazione manuale di un job (Sprint 43): stessi campi
     obbligatori di un job raccolto/importato (titolo, azienda, località,
@@ -31,7 +91,7 @@ class ManualJobCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
     company = serializers.CharField(max_length=255)
     location = serializers.CharField(max_length=255)
-    description = serializers.CharField()
+    description = serializers.CharField(max_length=MAX_DESCRIPTION_LENGTH)
     published_at = serializers.DateTimeField()
     apply_url = serializers.URLField(max_length=1000, required=False, allow_blank=True, default="")
 
@@ -89,24 +149,19 @@ class JobSerializer(serializers.ModelSerializer):
         # avere lo stesso `generated_at` (auto_now_add, risoluzione al
         # secondo), l'id come spareggio garantisce che sia sempre l'ultimo
         # generato a vincere, non uno arbitrario tra i due.
+        # URL firmato valido un'ora (apps.common.files), mai il path media.
         latest = job.cv_documents.order_by("-generated_at", "-id").first()
-        return latest.pdf_file.url if latest else None
+        return signed_document_url("cv", latest) if latest else None
 
     def get_cv_download_filename(self, job):
-        if not job.cv_documents.exists():
-            return None
-        name = _build_full_name_for_filename(job.user)
-        return f"{_sanitize_filename_part(f'CV {name} - {job.title}')}.pdf"
+        return cv_download_filename(job) if job.cv_documents.exists() else None
 
     def get_cover_letter_pdf_url(self, job):
         latest = job.cover_letter_documents.order_by("-generated_at", "-id").first()
-        return latest.pdf_file.url if latest else None
+        return signed_document_url("cover-letter", latest) if latest else None
 
     def get_cover_letter_download_filename(self, job):
-        if not job.cover_letter_documents.exists():
-            return None
-        name = _build_full_name_for_filename(job.user)
-        return f"{_sanitize_filename_part(f'Cover letter {name} - {job.title}')}.pdf"
+        return cover_letter_download_filename(job) if job.cover_letter_documents.exists() else None
 
 
 class JobFilterPresetSerializer(serializers.ModelSerializer):

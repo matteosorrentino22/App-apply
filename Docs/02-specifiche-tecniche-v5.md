@@ -1,7 +1,7 @@
 # Specifiche Tecniche — App di ricerca lavoro e generazione CV
 
 > **Documento:** 02 — Specifiche tecniche
-> **Versione:** 5 — descrizione **as-is al 2026-11-14** (HEAD `a181e90`, Sprint 64)
+> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66, sicurezza)
 > **Stato:** documento vivo, va aggiornato nello stesso commit di ogni sprint che cambia il comportamento (regola in `CLAUDE.md`, "Workflow sprint")
 > **Ambito:** *come* è costruita l'applicazione: architettura, stack, modello dati, flussi, generazione dei documenti, deploy, amministrazione, API, test, limiti tecnici. Il *cosa* è in `Docs/01-specifiche-funzionali-v6.md`. Le regole di contenuto e impaginazione del CV sono in `Docs/03-specifiche-funzionali-contenuto-cv-v5.md`, che per quei temi prevale su questo documento. Procedure operative, variabili d'ambiente e runbook: `DEPLOY.md`.
 >
@@ -38,6 +38,7 @@ Novità principali rispetto alle versioni precedenti, per sprint:
 | 59–62 | Chat AI dell'editor CV (proposta → conferma, puntamento dei bullet, decisioni persistite) | §5.13 |
 | 63 | Editor e chat della cover letter (`CoverLetterDraft`) | §4.11, §5.12, §5.13 |
 | 64 | Filtri preferiti salvabili (`JobFilterPreset`) | §4.13 |
+| 66 | Sicurezza: download con URL firmati e nomi file casuali, token con scadenza per inattività e logout, throttling, registrazione su invito, limiti di input, header HTTP, push in allowlist, container non-root, log | §3.7, §4.15, §7.1, §8, §12 |
 
 Decisioni delle versioni precedenti **superate dal codice** e quindi tolte da questo documento: limite di raccolta 50/100 job per utente per notte; cap di intake di 15 job/giorno con tie-break; generazione automatica dei CV per i job 4–5; una sola chiamata Apify per utente; scoring fallito = offerta scartata; scala 1–5; "riserva all'accodamento" con task Celery per le generazioni manuali; 3 livelli di compattamento del CV; selezione delle 3 voci di istruzione più recenti; budget bullet 12/10/9 distribuito per peso; arricchimento del profilo salvabile; `Education.end_date` obbligatoria; voucher.
 
@@ -66,7 +67,7 @@ Le versioni superate sono conservate in `Docs/archivio/` solo come storico (vedi
 | Usi dell'AI | Scoring, parsing del CV caricato, contenuti del CV, cover letter, messaggi di networking, chat degli editor | Sette punti di chiamata, tutti dallo stesso helper. |
 | Documenti | Template HTML/CSS → PDF con WeasyPrint (CV in Caladea a dimensione fissa; cover letter a 3 livelli di compattamento) | Solo PDF; editor in-app con bozza e chat AI. |
 | Credito | Saldo in € (`Decimal`) + listino prezzi unitari da env | Oltre il massimale giornaliero si paga a credito; le chat sono sempre a credito. |
-| Autenticazione | Email/password (token DRF) + login Google (django-allauth) | Google è implementato ma **non configurato in produzione**. |
+| Autenticazione | Email/password con token propri (`AuthToken`, scadenza dopo 30 giorni di inattività) + login Google (django-allauth) | Google è implementato ma **non configurato in produzione**; registrazione su invito opzionale. |
 | Notifiche | Web Push (VAPID, `pywebpush`) | Notifica mattutina alle 10 locali e promemoria di inattività a 7 giorni. |
 | Hosting | VPS singolo economico | Tutto lo stack su un server con Docker. |
 | Deploy | Docker Compose (`docker-compose.prod.yml`) + Caddy | HTTPS automatico; un solo file compose in produzione. |
@@ -84,7 +85,7 @@ L'app deriva dal **prototipo n8n** del committente (workflow *01 Job Collection*
 L'applicazione è un **unico progetto Django** che espone:
 
 - un'**API REST** (`/api/...`) consumata dalla PWA (§12);
-- il **Django Admin** (`/admin/`) per l'amministrazione (§9);
+- il **Django Admin** (path da `DJANGO_ADMIN_PATH`, default `/admin/`) per l'amministrazione (§9);
 - gli URL di **django-allauth** (`/accounts/...`) per il login Google;
 - alcuni **lavori programmati** eseguiti dal worker Celery (ciclo notturno, notifiche, backup).
 
@@ -114,8 +115,8 @@ Tutti i processi condividono lo stesso codice (un'unica immagine `backend/Docker
                                        ▼
                  ┌──────────────────────────────────────────┐
                  │  Caddy: TLS automatico, file statici PWA, │
-                 │  /static/*, /media/* (PDF, foto) diretti  │
-                 │  /api/*, /admin/*, /accounts/* → web      │
+                 │  /static/* diretti; /media/* → 404        │
+                 │  /api/*, admin, /accounts/* → web         │
                  └─────────────────────┬────────────────────┘
                                        ▼
  ┌──────────────────────────────────────────────────────────────────────┐
@@ -163,8 +164,8 @@ App Django in `backend/apps/` (una per dominio):
 
 | App | Contenuto principale |
 |---|---|
-| `accounts` | `User` custom, registrazione/login a token, `/me`, comando `set_e2e_account` |
-| `common` | `ai.py` (helper Bedrock), task di backup, comando `restore_backup`, test di isolamento multi-utente |
+| `accounts` | `User` custom, `AuthToken` e autenticazione a token con scadenza, registrazione (su invito)/login/logout, throttle del login, limite dei login all'admin, `/me`, comando `set_e2e_account` |
+| `common` | `ai.py` (helper Bedrock), `files.py` (nomi casuali, URL firmati, ricodifica foto) e view `/api/files/…`, task di backup, comandi `restore_backup` e `secure_media_files`, test di isolamento multi-utente |
 | `profiles` | `Profile` e sezioni, opzioni lingua/livello (`language_options.py`), import CV (`cv_import.py`) |
 | `searches` | `SavedSearch`, limiti di piano (`services.py`), downgrade (`signals.py`), proxy Nominatim (`geo.py`) |
 | `jobs` | `Job`, `DailyQuota`, `RunLog`, `JobFilterPreset`; fonte offerte (`sources/`), raccolta, scoring, import, job manuale, lista/filtri, statistiche, ciclo notturno (`tasks.py`); **tutte** le view dei job, incluse quelle di CV, cover letter, messaggi ed editor |
@@ -203,7 +204,7 @@ React 19 + React Router 7, build con Vite 7, Tailwind CSS 4, componenti in stile
 
 **PWA.** `vite-plugin-pwa` in modalità `injectManifest` con service worker proprio (`src/sw.js`): precache con Workbox dei soli asset di build (installabilità), `skipWaiting` + `clients.claim`, gestione di `push` e `notificationclick` (apre `/`). **Nessuna runtime cache per `/api`**: le chiamate API vanno sempre in rete. "Apertura lista immediata" resta un requisito di reattività dell'API, non di cache locale.
 
-**Client API** (`src/api/client.js`): `fetch` su percorsi relativi `/api/...`, header `Authorization: Token <token>` se presente nel `localStorage` (chiave `app_apply_token`), `credentials: 'include'` per il cookie di sessione (fallback del login Google). Gli errori diventano `ApiError` con `status` e `detail`. Le anteprime PDF degli editor usano un `fetch` diretto per leggere blob e header `X-Page-Count`.
+**Client API** (`src/api/client.js`): `fetch` su percorsi relativi `/api/...`, header `Authorization: Token <token>` se presente nel `localStorage` (chiave `app_apply_token`). Gli errori diventano `ApiError` con `status` e `detail`; un 401 con token presente (sessione scaduta o revocata) cancella il token locale ed emette l'evento `app-apply:auth-expired`, che `AuthContext` usa per tornare al login (Sprint 66). Le anteprime PDF degli editor usano un `fetch` diretto per leggere blob e header `X-Page-Count`.
 
 **i18n.** Dizionario proprio in `src/i18n/translations.js`, lingue `it` ed `en`; lingua iniziale da `localStorage` o dal dispositivo, poi `User.interface_language` dopo il login. I messaggi d'errore del backend e i testi delle notifiche push sono solo in italiano.
 
@@ -258,14 +259,18 @@ PostgreSQL 16 (`postgres:16-alpine`), volume `postgres_data`. Tutti i dati appli
 
 ### 3.7 Autenticazione
 
-- **Email + password.** `User` custom (`AbstractUser`, `email` unica; `username` = email alla registrazione). `POST /api/accounts/register/` e `/login/` restituiscono un **token DRF** (`rest_framework.authtoken`), che la PWA salva nel `localStorage` e invia come `Authorization: Token …`. I token non scadono; il logout della PWA cancella solo il token locale.
-- **Login Google.** django-allauth (`allauth.account`, `allauth.socialaccount`, provider Google, `SITE_ID = 1`), URL sotto `/accounts/` proxati da Caddy; la PWA apre `/accounts/google/login/?process=login` a piena pagina e al ritorno si autentica con il cookie di sessione (`SessionAuthentication`). Login solo via email, verifica email disattivata (`ACCOUNT_EMAIL_VERIFICATION = "none"`). Credenziali da `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`: **oggi vuote in produzione**, quindi il login Google non è attivo. `LOGIN_REDIRECT_URL` non è impostato (vale il default Django) e il ritorno da Google non è stato verificato.
-- Password solo come hash (default Django), validatori standard.
+- **Email + password.** `User` custom (`AbstractUser`, `email` unica; `username` = email alla registrazione). `POST /api/accounts/register/` e `/login/` creano ogni volta un **nuovo token** (`AuthToken`, §4.15: uno per login/dispositivo, 256 bit casuali da `secrets.token_urlsafe(32)`), che la PWA salva nel `localStorage` e invia come `Authorization: Token …`. Nel DB c'è solo lo SHA-256 del token.
+- **Scadenza per inattività (Sprint 66).** L'autenticazione DRF è solo `apps.accounts.authentication.ExpiringTokenAuthentication` (niente `TokenAuthentication` né `SessionAuthentication` di DRF): un token non usato da più di `AUTH_TOKEN_IDLE_DAYS = 30` giorni viene cancellato e la richiesta riceve 401; a ogni uso `last_used_at` viene aggiornato, al massimo una volta l'ora. `POST /api/accounts/logout/` cancella il solo token della richiesta (gli altri dispositivi restano collegati); `apps.accounts.tokens.revoke_all_tokens(user)` li cancella tutti (per cambio password e cancellazione account, non ancora esistenti). I token DRF esistenti sono stati cancellati dalla migrazione `accounts/0008` (tutti gli utenti hanno rifatto il login); l'app `rest_framework.authtoken` non è più installata (la sua tabella resta, vuota).
+- **Registrazione su invito.** Se `REGISTRATION_INVITE_CODE` è valorizzato, la registrazione richiede `invite_code` uguale (confronto a tempo costante con `hmac.compare_digest`); il controllo precede quello sull'email già registrata, quindi senza codice valido non si scopre se un'email esiste. Vuoto = registrazione aperta.
+- **Login.** Messaggio d'errore unico ("Credenziali non valide.") per email inesistente e password errata; anche con email inesistente si passa da `authenticate()` (che calcola comunque un hash), così i tempi non rivelano se l'account esiste. Limiti di frequenza in §7.1.
+- **Django Admin.** Usa la propria sessione Django (non l'API). Path configurabile con `DJANGO_ADMIN_PATH`; i tentativi di login falliti sono limitati per IP (§7.1).
+- **Login Google.** django-allauth (`allauth.account`, `allauth.socialaccount`, provider Google, `SITE_ID = 1`), URL sotto `/accounts/` proxati da Caddy; la PWA apre `/accounts/google/login/?process=login` a piena pagina. Dallo Sprint 66 l'API non accetta più la sessione Django: al ritorno da Google l'utente avrebbe una sessione ma nessun token, quindi il percorso va completato (sessione → token) prima di attivare il login Google. Login solo via email, verifica email disattivata (`ACCOUNT_EMAIL_VERIFICATION = "none"`). Credenziali da `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`: **oggi vuote in produzione**, quindi il login Google non è attivo. `LOGIN_REDIRECT_URL` non è impostato (vale il default Django) e il ritorno da Google non è stato verificato.
+- Password solo come hash (default Django), validatori standard; lunghezza massima 128 caratteri in registrazione/login.
 - **Non esistono**: recupero o cambio password, cancellazione account, export dati.
 
 ### 3.8 Notifiche — Web Push
 
-Standard Web Push con chiavi VAPID (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CLAIMS_EMAIL`), invio con `pywebpush.webpush` (`apps/notifications/services.py`). La PWA legge la chiave pubblica da `GET /api/notifications/vapid-public-key/`, fa `PushManager.subscribe` e registra la sottoscrizione con `POST /api/notifications/push-subscriptions/` (`update_or_create` per utente + endpoint). Nessun servizio esterno a pagamento. Meccanismo di invio in §5.5. Non esiste un endpoint per annullare la sottoscrizione.
+Standard Web Push con chiavi VAPID (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_CLAIMS_EMAIL`), invio con `pywebpush.webpush` (`apps/notifications/services.py`). La PWA legge la chiave pubblica da `GET /api/notifications/vapid-public-key/`, fa `PushManager.subscribe` e registra la sottoscrizione con `POST /api/notifications/push-subscriptions/` (`update_or_create` per utente + endpoint). Nessun servizio esterno a pagamento. Meccanismo di invio in §5.5. Non esiste un endpoint per annullare la sottoscrizione. Dallo Sprint 66 l'endpoint della sottoscrizione è accettato solo se `https`, senza porta esplicita né credenziali, con host di un push service noto (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.push.apple.com`, `*.notify.windows.com`); al massimo 10 sottoscrizioni per utente (oltre si eliminano le più vecchie).
 
 ---
 
@@ -282,11 +287,11 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 | `email` | Email, unica | Identificativo di login (lo `username` è valorizzato uguale) |
 | `first_name`, `last_name` | testo | Nome mostrato su CV, cover letter, firma dei messaggi e nei nomi file; se mancano si usa l'email di login |
 | `plan` | `free` \| `pro` (default `free`) | Piano; modificabile solo da Admin. Il passaggio Pro→Free disattiva tutte le ricerche (segnale in `apps/searches/signals.py`) |
-| `timezone` | testo, default `Europe/Rome` | Fuso per la notifica delle 10:00, per "oggi" della lista e delle statistiche. Nessuna UI per impostarlo (è scrivibile via `PATCH /api/accounts/me/`) |
+| `timezone` | testo, default `Europe/Rome` | Fuso per la notifica delle 10:00, per "oggi" della lista e delle statistiche. Nessuna UI per impostarlo (è scrivibile via `PATCH /api/accounts/me/`, solo con un nome IANA valido) |
 | `interface_language` | `it` \| `en` (default `it`) | Lingua dell'interfaccia; non usata dal backend |
 | `cv_language_mode` | `english` \| `job_language` (default `job_language`) | Lingua di CV, cover letter e messaggi |
 | `cv_include_photo` | bool (default false) | Foto nel CV on/off |
-| `objective_statement` | testo | Situazione/obiettivo raccolto in onboarding; **inerte** (non usato da nessun prompt) |
+| `objective_statement` | testo (max 2.000 via API) | Situazione/obiettivo raccolto in onboarding; **inerte** (non usato da nessun prompt) |
 | `created_at` | datetime | Creazione; valore iniziale dei due timestamp sotto |
 | `last_activity_reset` | datetime | Inizio del periodo di inattività: inizializzato a `created_at` in `save()`, aggiornato a ogni "candidatura fatta" |
 | `last_notified_at` | datetime | Ultima notifica mattutina inviata; "nuovi job" = `date_collected > last_notified_at` |
@@ -299,9 +304,9 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 
 Un solo profilo master per utente. Non esiste un campo `key_achievements`: le Areas of Expertise sono calcolate dal modello a ogni generazione.
 
-- **`Profile`**: `user` (OneToOne, `related_name="profile"`), `summary`, `photo` (ImageField in `profile_photos/`), contatti per l'intestazione dei documenti: `phone`, `email` (email da mostrare sul CV, separata da quella di login; se vuota nessuna email sul CV — Sprint 41), `city`, `country_code` (ISO 3166-1 alpha-2), `linkedin_url`. La property `is_complete` è vera se esiste **almeno una voce di istruzione**; è verificata solo al momento della generazione del CV, non al salvataggio.
-- **`Experience`**: `profile`, `company`, `role`, `location`, `location_country_code`, `start_date` (null), `end_date` (null = in corso), `bullets` (JSON, lista di stringhe), `technologies` (JSON, lista; nessuna UI la modifica, solo API/Admin). Nessun limite applicato al numero di esperienze, di bullet o alla loro lunghezza.
-- **`Education`**: `profile`, `institution`, `title`, `location`, `location_country_code`, `start_date` (null), `end_date` (**null ammesso** = in corso, Sprint 34), `notes`. Mai riscritta dall'AI.
+- **`Profile`**: `user` (OneToOne, `related_name="profile"`), `summary` (max 5.000 via API), `photo` (ImageField in `profile_photos/`, nome casuale `<uuid4>.<ext>`; vedi §4.15 per la ricodifica e il download), contatti per l'intestazione dei documenti: `phone`, `email` (email da mostrare sul CV, separata da quella di login; se vuota nessuna email sul CV — Sprint 41), `city`, `country_code` (ISO 3166-1 alpha-2), `linkedin_url`. La property `is_complete` è vera se esiste **almeno una voce di istruzione**; è verificata solo al momento della generazione del CV, non al salvataggio.
+- **`Experience`**: `profile`, `company`, `role`, `location`, `location_country_code`, `start_date` (null), `end_date` (null = in corso), `bullets` (JSON, lista di stringhe), `technologies` (JSON, lista; nessuna UI la modifica, solo API/Admin). Via API (Sprint 66): al massimo 30 bullet da 2.000 caratteri e 50 tecnologie da 200; nessun limite al numero di esperienze.
+- **`Education`**: `profile`, `institution`, `title`, `location`, `location_country_code`, `start_date` (null), `end_date` (**null ammesso** = in corso, Sprint 34), `notes` (max 3.000 via API). Mai riscritta dall'AI.
 - **`Skill`**, **`Certification`**: solo `name`.
 - **`Language`**: `language` (choices `LANGUAGE_CHOICES`: 36 codici ISO a 2 lettere), `level` (choices `LANGUAGE_LEVEL_CHOICES`: `elementary`, `intermediate`, `fluent`, `mother_tongue`; può essere vuoto). Le etichette tradotte in it/en/fr/de/es (`LANGUAGE_NAME_LABELS`, `LANGUAGE_LEVEL_LABELS` in `language_options.py`) servono al rendering del CV e al cap lingua dello scoring. I dati preesistenti sono stati normalizzati da `profiles/0007_normalize_language_data` (best-effort, i valori non riconosciuti restano).
 
@@ -334,7 +339,7 @@ Un record per ogni PDF di CV prodotto (generazione AI o finalizzazione dall'edit
 
 - `job` (FK, `related_name="cv_documents"`), `user`;
 - `html_source`: HTML usato per il PDF;
-- `pdf_file`: file nella cartella media `cv_documents/`;
+- `pdf_file`: file nella cartella media `cv_documents/`, nome casuale `<uuid4>.pdf` (Sprint 66, `apps.common.files.cv_document_upload_to`; prima `cv_<job>_<doc>.pdf`); scaricabile solo con URL firmato (§4.15);
 - `generated_at`;
 - `generation_type`: `automatic` | `manual`. Oggi si scrive sempre `manual`; `automatic` resta solo per i record storici;
 - `extra_instructions_used`: testo "gap da colmare + indicazioni" usato nella generazione (Sprint 44, ex `enrichment_used`); vuoto per i documenti finalizzati dall'editor;
@@ -366,7 +371,7 @@ Struttura di `content_json` (uguale in `CVDraft`):
 
 ### 4.6 `DailyQuota` (contatori giornalieri) e listino prezzi
 
-Un record per (`user`, `date`), unico; `date` è il giorno **Europe/Rome** (`timezone.localtime(now).date()` con `TIME_ZONE = Europe/Rome`), quindi i contatori ripartono da zero alla mezzanotte di Roma. Sei contatori indipendenti:
+Un record per (`user`, `date`), unico; `date` è il giorno **Europe/Rome** (`timezone.localtime(now).date()` con `TIME_ZONE = Europe/Rome`), quindi i contatori ripartono da zero alla mezzanotte di Roma. Sette contatori indipendenti:
 
 | Contatore | Azione | Free | Pro | Oltre il massimale | Prezzo (env, default) |
 |---|---|---|---|---|---|
@@ -376,6 +381,7 @@ Un record per (`user`, `date`), unico; `date` è il giorno **Europe/Rome** (`tim
 | `import_count` | Import job da link LinkedIn | **non consentito** | 3/g | credito | `PRICE_IMPORT_EXTRA` = 0,50 € |
 | `manual_job_count` | Creazione manuale di un job | 3/g | 3/g | credito | `PRICE_MANUAL_JOB_EXTRA` = 0,50 € |
 | `collection_count` | Raccolta manuale "Collect now" | 1/g | 1/g | **nessuna estensione** | — |
+| `cv_import_count` | Import/parsing del CV caricato (Sprint 66) | 5/g | 5/g | **nessuna estensione** (409) | — |
 
 Azioni **sempre a credito**, senza contatore né massimale:
 
@@ -384,9 +390,9 @@ Azioni **sempre a credito**, senza contatore né massimale:
 | Messaggio nella chat dell'editor CV | `PRICE_CV_DRAFT_CHAT_MESSAGE` = 0,20 € |
 | Messaggio nella chat dell'editor cover letter | `PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE` = 0,20 € |
 
-Gratuite: import/parsing del CV in onboarding, ciclo notturno, anteprime e finalizzazione delle bozze, archivio/preferiti/candidatura, filtri preferiti.
+Gratuite: import/parsing del CV in onboarding (entro `CV_IMPORT_DAILY_LIMIT = 5` al giorno, senza credito; restituito se la chiamata AI fallisce), ciclo notturno, anteprime e finalizzazione delle bozze, archivio/preferiti/candidatura, filtri preferiti.
 
-I massimali sono costanti nel codice (`MANUAL_CV_PLAN_LIMITS`, `COVER_LETTER_PLAN_LIMITS`, `REFERRAL_MESSAGE_PLAN_LIMITS`, `IMPORT_DAILY_LIMIT`, `MANUAL_JOB_DAILY_LIMIT`, `COLLECTION_DAILY_LIMIT`); i prezzi sono `Decimal` letti dall'ambiente (`config/settings.py`). Con saldo insufficiente l'azione è rifiutata (409, o 402 per le chat). Il controllo di piano dell'import precede quello di quota/credito.
+I massimali sono costanti nel codice (`MANUAL_CV_PLAN_LIMITS`, `COVER_LETTER_PLAN_LIMITS`, `REFERRAL_MESSAGE_PLAN_LIMITS`, `IMPORT_DAILY_LIMIT`, `MANUAL_JOB_DAILY_LIMIT`, `COLLECTION_DAILY_LIMIT`, `CV_IMPORT_DAILY_LIMIT`); i prezzi sono `Decimal` letti dall'ambiente (`config/settings.py`). Con saldo insufficiente l'azione è rifiutata (409, o 402 per le chat). Il controllo di piano dell'import precede quello di quota/credito.
 
 **Riserva e restituzione.** Ogni servizio esegue in una transazione `select_for_update` (sul Job per la guardia, sulla `DailyQuota` e, se serve, sull'`User`): se il contatore è sotto il massimale lo incrementa (modalità `"quota"`), altrimenti scala il prezzo dal saldo (modalità `"credit"`). La modalità è tenuta in memoria per la durata della richiesta; in caso di eccezione `_refund` decrementa il contatore o riaccredita il prezzo. La logica è replicata in ogni servizio (`manual_generation.py`, `cover_letter_manual_generation.py`, `referral_message_manual_generation.py`, `import_service.py`, `manual_job_service.py`, `tasks.py`, `draft_chat.py`, `cover_letter_draft_chat.py`); non esiste un registro delle operazioni di addebito.
 
@@ -408,7 +414,7 @@ Le generazioni riuscite, le anteprime e le finalizzazioni non lasciano traccia n
 
 ### 4.8 `PushSubscription` (`apps/notifications/models.py`)
 
-`user`, `endpoint` (URL 1000), `p256dh_key`, `auth_key`, `created_at`; unicità su (`user`, `endpoint`). Un utente può avere più dispositivi. Le sottoscrizioni scadute non vengono rimosse.
+`user`, `endpoint` (URL 1000), `p256dh_key`, `auth_key`, `created_at`; unicità su (`user`, `endpoint`). Un utente può avere più dispositivi, al massimo 10 sottoscrizioni (le più vecchie oltre il limite vengono eliminate alla registrazione di una nuova). Endpoint ammessi solo verso i push service noti (§3.8). Una sottoscrizione per cui il push service risponde 404/410 viene eliminata all'invio (Sprint 66).
 
 ### 4.9 `CVDraft` (bozza dell'editor CV, Sprint 51)
 
@@ -431,7 +437,7 @@ La bozza non ha un PDF proprio. Il seme si crea dall'ultimo `CVDocument` con `co
 ### 4.10 `CoverLetterDocument` (Sprint 42)
 
 - `job` (FK, `related_name="cover_letter_documents"`), `user`, `html_source`;
-- `pdf_file`: file nella cartella media `cover_letter_documents/`;
+- `pdf_file`: file nella cartella media `cover_letter_documents/`, nome casuale `<uuid4>.pdf` (Sprint 66); scaricabile solo con URL firmato (§4.15);
 - `generated_at`;
 - `instructions_used`: indicazioni dell'utente per questa generazione (alimenta lo storico delle indicazioni riusabili); vuoto per i documenti finalizzati dall'editor;
 - `content_json` (Sprint 63): `{"content_language": str, "translated_city": str, "paragraphs": [str]}`; `{}` per le lettere precedenti, non riapribili nell'editor.
@@ -459,10 +465,27 @@ Nessun PDF. Più messaggi per job (storico, mai sostituiti, non modificabili né
 
 ### 4.14 Tabelle di terze parti
 
-- `authtoken_token` (DRF): un token per utente, creato alla registrazione o al primo login.
+- `authtoken_token` (DRF): non più usata dallo Sprint 66 (app non installata, righe cancellate dalla migrazione `accounts/0008`); i token sono in `AuthToken` (§4.15).
 - Tabelle di django-allauth (`account_emailaddress`, `socialaccount_*`) e `django_site`.
 - Tabelle di `django_celery_beat` (`PeriodicTask`, `CrontabSchedule`, `IntervalSchedule`…): pianificazioni dei task (§3.2).
 - Sessioni Django (login Google e Admin).
+
+### 4.15 `AuthToken` e file degli utenti (Sprint 66)
+
+**`AuthToken`** (`apps/accounts/models.py`): `user` (FK, `related_name="auth_tokens"`), `key_hash` (SHA-256 esadecimale del token, unico), `created_at`, `last_used_at` (default now; aggiornato al più una volta l'ora), `user_agent` (primi 200 caratteri, per riconoscere il dispositivo in Admin). Il token in chiaro esiste solo nella risposta di login/registrazione e nel `localStorage` del dispositivo. In Admin la lista è in sola lettura; eliminare una riga disconnette quel dispositivo.
+
+**File degli utenti** (`apps/common/files.py`). CV, cover letter e foto profilo stanno in `MEDIA_ROOT` (volume `media_data`) con nomi casuali (`uuid4().hex`), assegnati dalle `upload_to` `cv_document_upload_to`, `cover_letter_document_upload_to`, `profile_photo_upload_to`. Non sono mai serviti da Caddy (`/media/*` → 404, volume non montato nel container `caddy`) né da Django (nessuna rotta `/media/` neanche in sviluppo). Si scaricano solo da URL firmati:
+
+- firma `django.core.signing.TimestampSigner` con salt distinto per tipo (`cv`, `cover-letter`, `photo`) su `"<user_id>:<doc_id>"` (foto: `"<user_id>"`), validità `SIGNED_URL_MAX_AGE = 3600` s;
+- URL generati dall'API per il proprietario: `JobSerializer.cv_pdf_url` / `cover_letter_pdf_url` (ultimo documento) e `ProfileSerializer.photo_url`;
+- le view `/api/files/...` non richiedono l'header `Authorization` (funzionano come semplice `<a href>`, anche nella PWA iOS) ma verificano firma, scadenza, corrispondenza documento↔firma e che il documento appartenga all'utente della firma (attivo); ogni errore → **404**, mai 403;
+- risposta `FileResponse` con `Cache-Control: private, no-store`; PDF come allegato con i nomi suggeriti di sempre (`cv_download_filename`, `cover_letter_download_filename` in `apps/jobs/serializers.py`), foto inline.
+
+Il frontend ricarica il dettaglio del job ogni 20 minuti e quando la pagina torna visibile, così i link non scadono con la pagina aperta.
+
+**Foto profilo.** Alla scrittura (`ProfileSerializer.validate_photo` → `sanitize_photo`) è riaperta con Pillow e ricodificata da zero: solo JPEG/PNG/WebP, max 5 MB e 4000×4000 pixel, orientamento applicato ai pixel (`ImageOps.exif_transpose`), nessun metadato EXIF/GPS/XMP (resta solo il profilo colore). L'API non espone più il campo `photo` in lettura: `has_photo` (bool) e `photo_url` (firmato, `null` se assente). Il rendering PDF continua a leggerla dal filesystem (`file://{profile.photo.path}`, `generation._build_photo_url`).
+
+**File esistenti.** Il comando idempotente `manage.py secure_media_files [--dry-run] [--delete-orphans]` rinomina con nomi casuali i file con nomi del vecchio schema aggiornando il DB (le foto vengono anche ricodificate come sopra) e, con `--delete-orphans`, elimina i file in `MEDIA_ROOT` non più referenziati da nessun record (versioni vecchie di foto, file di record cancellati).
 
 ---
 
@@ -530,12 +553,13 @@ Il "riprova" dopo un fallimento è una normale nuova richiesta e consuma come ta
 
 `POST /api/profile/import-cv/` (multipart, campo `file`), view `CVImportView`, modulo `apps/profiles/cv_import.py`:
 
-1. **Estrazione del testo** lato server: `pdfplumber` per `.pdf`, `python-docx` per `.docx`. File mancante o formato diverso → 400; file corrotto → 422.
+1. **Estrazione del testo** lato server: `pdfplumber` per i PDF, `python-docx` per i `.docx`; il formato si decide dai primi byte del file (`%PDF-` / `PK\x03\x04`), non da nome o content-type (Sprint 66). File mancante, formato diverso, oltre 5 MB, PDF oltre 10 pagine o `.docx` oltre 30 MB decompresso → 400; file corrotto → 422. Il testo estratto è troncato a `MAX_TEXT_LENGTH = 30.000` caratteri.
 2. **Soglia**: se il testo è sotto `MIN_TEXT_LENGTH = 40` caratteri (tipico dei PDF scannerizzati; niente OCR) → 422 "non siamo riusciti a leggere il CV, compila il profilo manualmente", senza chiamare Claude.
 3. **Strutturazione** con `BEDROCK_CV_PARSING_MODEL` sul solo testo. Prompt: nessuna invenzione; date ISO (primo del mese se c'è solo mese/anno); telefono ed email solo se scritti letteralmente; lingue mappate su codice ISO e uno dei 4 livelli (A1/A2 → elementary, B1/B2 → intermediate, C1 → fluent, C2/nativo → mother_tongue), voce omessa se incerta.
-4. **Risposta 200** con il JSON strutturato. **Nulla viene salvato**: è la PWA a pre-compilare il form, che l'utente salva poi con le API del profilo.
+4. Prima della chiamata AI si riserva `DailyQuota.cv_import_count` (5/giorno, nessun credito; oltre → 409); se Bedrock fallisce la quota viene restituita e la risposta è 502 (prima: 500 non gestito). Throttle `cv_import` 10/ora (§7.1).
+5. **Risposta 200** con il JSON strutturato. **Nulla viene salvato**: è la PWA a pre-compilare il form, che l'utente salva poi con le API del profilo.
 
-L'import non consuma quota né credito. Lato frontend il pre-fill scarta date e `technologies` delle esperienze e date dell'istruzione; città e LinkedIn non sono estratti. Un errore Bedrock o `StructuredOutputError` non è gestito dalla view e produce un 500. L'import è disponibile solo in onboarding, non nella pagina Profilo.
+L'import non consuma credito. Lato frontend il pre-fill scarta date e `technologies` delle esperienze e date dell'istruzione; città e LinkedIn non sono estratti. L'import è disponibile solo in onboarding, non nella pagina Profilo.
 
 ### 5.5 Notifiche: meccanismo
 
@@ -544,7 +568,7 @@ Due task Beat ogni 15 minuti iterano su tutti gli utenti (`apps/notifications/ta
 - **Mattutina** (`send_morning_notifications`): se l'ora locale dell'utente (`User.timezone`) è **10** (qualunque minuto tra 10:00 e 10:59) ed esiste almeno un `Job` con `date_collected > last_notified_at`, invia a tutte le sue `PushSubscription` il payload fisso "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista." e aggiorna `last_notified_at`. Il confronto col timestamp è la guardia anti doppio invio e gestisce i fusi a est (si annuncia il batch più recente non ancora annunciato). Contano tutti i job creati (raccolti, raccolta manuale, importati, manuali, anche senza punteggio).
 - **Inattività** (`send_inactivity_notifications`): se sono passati 7 giorni (`INACTIVITY_THRESHOLD`) da `last_activity_reset` e non è già stato inviato un promemoria per questo periodo (`last_inactivity_notified_at >= last_activity_reset`), invia "Non ti candidi da un po'" / "Entra nell'app e valuta le offerte in attesa." e aggiorna `last_inactivity_notified_at`.
 
-I testi sono solo in italiano. I timestamp vengono aggiornati anche se l'utente non ha sottoscrizioni. Un errore di invio (es. sottoscrizione scaduta, 410) non è gestito e interrompe il giro del task per gli utenti successivi (§11).
+I testi sono solo in italiano. I timestamp vengono aggiornati anche se l'utente non ha sottoscrizioni o se gli invii falliscono. Dallo Sprint 66: `webpush(..., timeout=10)`; una risposta 404/410 del push service elimina la sottoscrizione; qualunque altro errore su una sottoscrizione viene registrato nel log (solo l'id, mai l'endpoint) e si prosegue con le altre; un errore su un utente non interrompe il giro degli utenti successivi.
 
 ### 5.6 Raccolta manuale "Collect now" (Home)
 
@@ -630,11 +654,12 @@ Stesso schema per i due documenti (moduli `apps/cv/draft.py` e `apps/cv/cover_le
 |---|---|---|
 | **Apertura** | `GET …/cv-draft/` (200 `content_json`, 404 se manca); su 404 la PWA chiama `POST …/cv-draft/` | `GET` / `POST …/cover-letter-draft/` |
 | **Seed** | `seed_draft_for_job`: `update_or_create` della bozza copiando `content_json` dall'ultimo `CVDocument`; 409 se non c'è un documento o se il suo `content_json` è vuoto | `seed_cover_letter_draft_for_job`, stessa logica sull'ultima `CoverLetterDocument` |
-| **Modifica** | `PATCH …/cv-draft/` con l'intero `content_json` (400 se non è un oggetto), dall'autosave della PWA (debounce 1,2 s) | `PATCH …/cover-letter-draft/` |
+| **Modifica** | `PATCH …/cv-draft/` con l'intero `content_json` (400 se non supera la validazione, vedi sotto), dall'autosave della PWA (debounce 1,2 s) | `PATCH …/cover-letter-draft/` |
 | **Anteprima** | `POST …/cv-draft/preview/` con il contenuto corrente nel body (o quello salvato): PDF binario + header `X-Page-Count`. Nessun taglio automatico: si renderizzano solo esperienze e bullet con `shown = true`, nell'ordine della bozza; codici lingua tradotti | `POST …/cover-letter-draft/preview/`: oggetto, saluto e chiusura fissi, paragrafi e città dalla bozza |
 | **Finalizzazione** | `POST …/cv-draft/finalize/` → nuovo `CVDocument` (`generation_type=manual`, `content_json` = bozza) | `POST …/cover-letter-draft/finalize/` → nuova `CoverLetterDocument` |
 
 Proprietà comuni:
+- **validazione del `content_json`** (Sprint 66, `apps/cv/draft_validation.py`) in `PATCH` e anteprima: esattamente le chiavi prodotte dalla generazione (chiavi sconosciute o mancanti → 400), tipi attesi, numero massimo di elementi (CV: 20 aree, 30 esperienze con 30 bullet e 50 tecnologie ciascuna, 20 voci di istruzione, 100 skill, 50 certificazioni, 30 lingue; cover letter: 15 paragrafi), lunghezza massima di ogni testo (es. sommario 5.000, bullet 2.000, paragrafo 3.000) e dimensione totale (200.000 caratteri di JSON). Throttle `draft_preview` 60/min sull'anteprima;
 - nessuna chiamata AI e **nessun consumo** di quota o credito in apertura, modifica, anteprima e finalizzazione;
 - la finalizzazione non cambia `Job.status` né `date_cv_generated`; il nuovo PDF diventa quello scaricabile; la bozza resta;
 - la finalizzazione usa la bozza **salvata sul server**: le modifiche degli ultimi ~1,2 s non ancora salvate dall'autosave possono restarne fuori;
@@ -648,9 +673,9 @@ Endpoint `…/cv-draft/chat/` e `…/cover-letter-draft/chat/` (moduli `draft_ch
 
 - `GET` → `{history}` (404 senza bozza).
 - `POST {message[, focus_bullets]}`:
-  1. messaggio vuoto → 400; bozza assente → 502;
+  1. messaggio vuoto o oltre 2.000 caratteri → 400 (al massimo 50 `focus_bullets`); bozza assente → 502; throttle `chat` 20/min sul solo `POST`;
   2. **riserva del credito** (`select_for_update` sull'`User`): saldo sotto `PRICE_CV_DRAFT_CHAT_MESSAGE` / `PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE` → **402** "Saldo credito insufficiente…"; non c'è quota gratuita;
-  3. chiamata Bedrock (`BEDROCK_CV_GENERATION_MODEL`, 2000 token) con: `content_json` salvato della bozza (con gli id interni), skill/certificazioni del profilo (CV), titolo/azienda/descrizione dell'offerta, cronologia (solo i testi, senza azioni né decisioni), nuovo messaggio; per il CV anche i **bullet puntati** dall'utente (`focus_bullets: [{profile_experience_id, bullet_index}]`, tenuti solo se esistono), presentati come aiuto per le frasi ambigue, non come vincolo;
+  3. chiamata Bedrock (`BEDROCK_CV_GENERATION_MODEL`, 2000 token) con: `content_json` salvato della bozza (con gli id interni), skill/certificazioni del profilo (CV), titolo/azienda/descrizione dell'offerta, cronologia (solo i testi degli ultimi 20 turni, `MAX_HISTORY_TURNS_IN_PROMPT`, senza azioni né decisioni; la cronologia completa resta salvata), nuovo messaggio; per il CV anche i **bullet puntati** dall'utente (`focus_bullets: [{profile_experience_id, bullet_index}]`, tenuti solo se esistono), presentati come aiuto per le frasi ambigue, non come vincolo;
   4. errore AI → riaccredito, `RunLog` FAILURE, 502;
   5. **filtro difensivo** sulle azioni (`_sanitize_actions`): per il CV scarta i toggle di skill/certificazioni con nomi non presenti nel profilo e i livelli lingua non validi; per la cover letter scarta gli indici di paragrafo fuori range;
   6. accoda turno utente e risposta in `chat_history`; risponde `{reply, actions}`. **Il backend non modifica mai `content_json`**.
@@ -727,7 +752,42 @@ Valori in `rendering.py` (`COMPACT_LEVELS`) e in `cv_template.html`, fissati con
 - La PWA usa la data del browser per il default "oggi–oggi" del filtro date e per formattare le date mostrate.
 - Per fusi lontani da Roma restano piccole incoerenze accettate (reset quote in un'ora inattesa, freschezza del batch, spostamento DST).
 
-**Isolamento.** Ogni record è legato a un `user`; ogni queryset delle view filtra per l'utente autenticato (`get_object_or_404(Job, pk=pk, user=request.user)`, `filter(profile__user=…)`, ecc.): un oggetto di un altro utente restituisce 404. Coperto da `apps/common/test_multi_user_isolation.py`.
+**Isolamento.** Tutte le view richiedono autenticazione per default (`DEFAULT_PERMISSION_CLASSES = IsAuthenticated`, Sprint 66): gli endpoint pubblici (registrazione, login, download firmati) dichiarano `AllowAny` esplicitamente. Ogni record è legato a un `user`; ogni queryset delle view filtra per l'utente autenticato (`get_object_or_404(Job, pk=pk, user=request.user)`, `filter(profile__user=…)`, ecc.): un oggetto di un altro utente restituisce 404. Coperto da `apps/common/test_multi_user_isolation.py`. I file degli utenti seguono la stessa regola tramite gli URL firmati (§4.15).
+
+### 7.1 Limiti di frequenza e di input (Sprint 66)
+
+**Throttling DRF** (`REST_FRAMEWORK` in `config/settings.py`), contatori nella cache Redis condivisa dai worker (`CACHES` → `REDIS_CACHE_URL`, default `redis://redis:6379/2`; nei test una `DummyCache`). L'IP del client è l'ultimo indirizzo di `X-Forwarded-For` impostato da Caddy (`NUM_PROXIES = 1`). Oltre il limite → 429.
+
+| Scope | Limite | Dove |
+|---|---|---|
+| `anon` | 60/min per IP | tutte le richieste non autenticate |
+| `user` | 300/min per utente | tutte le richieste autenticate |
+| `login` | 10/min per IP | `POST /api/accounts/login/` |
+| `login_email` | 10/ora per email (hash) | `POST /api/accounts/login/` (`LoginEmailRateThrottle`) |
+| `register` | 5/ora per IP | `POST /api/accounts/register/` |
+| `cv_import` | 10/ora per utente | `POST /api/profile/import-cv/` (oltre alla quota di 5/giorno) |
+| `chat` | 20/min per utente | `POST` delle due chat degli editor |
+| `draft_preview` | 60/min per utente | anteprime PDF delle bozze |
+
+**Django Admin.** La view di login è sostituita da `apps/accounts/admin_login.throttled_admin_login`: dopo 10 tentativi falliti dallo stesso IP in 15 minuti (finestra fissa dal primo errore, azzerata da un login riuscito) risponde 429. Path da `DJANGO_ADMIN_PATH` (con "/" finale, default `admin/`), da passare identico anche a Caddy.
+
+**Limiti di input** (validazione lato server, 400 oltre il limite):
+
+| Testo | Limite |
+|---|---|
+| Descrizione del job manuale | 20.000 |
+| Indicazioni di cover letter e messaggi di networking, istruzione "colma i gap" | 2.000 |
+| Gap selezionati | 30, da 500 caratteri |
+| Messaggio di chat degli editor | 2.000 |
+| Nome destinatario / URL LinkedIn del destinatario | 255 / 500 |
+| `objective_statement`, sommario del profilo, note istruzione, bullet | 2.000 / 5.000 / 3.000 / 2.000 (max 30 bullet) |
+| `content_json` delle bozze | struttura e dimensioni in §5.12 |
+| Import CV | 5 MB, 10 pagine, 30.000 caratteri estratti (§5.4) |
+| Foto profilo | 5 MB, 4000×4000, JPEG/PNG/WebP (§4.15) |
+
+Upload: `DATA_UPLOAD_MAX_MEMORY_SIZE` 2,5 MB per il corpo non-file, `FILE_UPLOAD_MAX_MEMORY_SIZE` 5 MB (oltre, l'upload passa su file temporaneo); Caddy rifiuta corpi oltre 10 MB su `/api/*`.
+
+**Altre impostazioni.** Renderer DRF solo JSON con `DEBUG=False` (la Browsable API solo in sviluppo). `DEBUG` è falso se `DJANGO_DEBUG` manca; con `DEBUG=False` l'avvio fallisce se `DJANGO_SECRET_KEY` è vuota o contiene "insecure" (quella di sviluppo). `PATCH /api/accounts/me/` salva solo i campi modificati (`save(update_fields=…)`), così non può riscrivere `extra_credit` con un valore letto prima di un addebito o di una ricarica concorrente.
 
 ---
 
@@ -746,18 +806,28 @@ In produzione si usa **solo** `docker-compose.prod.yml` (mai mescolato con `dock
 | Servizio | Immagine | Ruolo |
 |---|---|---|
 | `db` | `postgres:16-alpine` | Database, volume `postgres_data`, healthcheck `pg_isready` |
-| `redis` | `redis:7-alpine` | Broker Celery |
+| `redis` | `redis:7-alpine` | Broker Celery (db 0/1) e cache Django (db 2: throttling) |
 | `web` | `./backend` | All'avvio `migrate` + `collectstatic`, poi `gunicorn --workers 4 --timeout 1800`; volumi `static_data`, `media_data` |
 | `worker` | `./backend` | `celery worker`; volume `media_data` |
 | `beat` | `./backend` | `celery beat` (`DatabaseScheduler`) |
 | `frontend-build` | `./frontend` | One-shot: `npm run build` nel volume `frontend_dist`, poi termina |
-| `caddy` | `caddy:2-alpine` | Porte 80/443, monta i volumi statici in sola lettura |
+| `caddy` | `caddy:2-alpine` | Porte 80/443, monta in sola lettura `static_data` e `frontend_dist` (non `media_data`, Sprint 66); access log nel volume `caddy_logs` |
+
+Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 file da 10 MB per container, Sprint 66). `web`, `worker` e `beat` girano come utente non privilegiato `app` (uid 1000, `backend/Dockerfile`): il codice è di root e in sola lettura, scrivibili solo `/app/staticfiles` e `/app/mediafiles`; `pg_dump` del backup e WeasyPrint funzionano senza privilegi. I volumi `media_data`/`static_data` creati prima dello Sprint 66 vanno passati a uid 1000 una volta (`DEPLOY.md` §4.5).
 
 `web`, `worker` e `beat` condividono la stessa immagine: dopo una modifica al backend vanno ricostruiti tutti e tre. Il timeout di 1800 s e i 4 worker gunicorn servono alle operazioni sincrone (raccolta manuale con decine di job da scorare, generazioni): con 4 worker al massimo 4 operazioni lunghe possono essere in corso contemporaneamente su tutto il sito.
 
 ### 8.3 Caddy per HTTPS
 
-`docker/caddy/Caddyfile.prod`: certificato Let's Encrypt automatico per il dominio configurato (`DOMAIN`, `CADDY_EMAIL`), compressione gzip, `reverse_proxy web:8000` per `/api/*`, `/admin/*`, `/accounts/*`; serve direttamente `/static/*` e `/media/*`; PWA statica con fallback su `index.html` per le rotte client-side.
+`docker/caddy/Caddyfile.prod`: certificato Let's Encrypt automatico per il dominio configurato (`DOMAIN`, `CADDY_EMAIL`), compressione gzip, `reverse_proxy web:8000` per `/api/*` (corpo massimo 10 MB), il path dell'admin (`DJANGO_ADMIN_PATH`) e `/accounts/*`; serve direttamente `/static/*`; **`/media/*` risponde 404** (i file degli utenti si scaricano solo dagli URL firmati, §4.15); PWA statica con fallback su `index.html` per le rotte client-side.
+
+Dallo Sprint 66 Caddy aggiunge a tutte le risposte (sostituendo i valori equivalenti di Django, senza duplicati) `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` (anche Django usa lo stesso valore), una `Permissions-Policy` che nega camera, microfono, geolocalizzazione, pagamenti e USB, toglie l'header `Server` e applica la `Content-Security-Policy`:
+
+`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+
+Motivazioni (verificate sul bundle di build): nessuno script inline in `index.html` né `eval`, nessuna risorsa esterna; `'unsafe-inline'` negli stili perché le primitive Radix inseriscono elementi `<style>` a runtime; l'anteprima PDF degli editor è un `<iframe>` su un URL `blob:` (i documenti blob ereditano la policy, quindi servono `frame-src blob:` e `object-src blob:` per il visualizzatore PDF del browser; `frame-ancestors` e `X-Frame-Options` non si applicano ai documenti blob). Il service worker è `/sw.js` (stessa origine).
+
+**Access log** in JSON su file nel volume `caddy_logs` (`/var/log/caddy/access.log`), ruotato ogni 24 ore o a 10 MiB e cancellato dopo 14 giorni (`roll_keep_for 336h`); il parametro `s` dei download firmati è sostituito con `REDACTED`, gli header `Authorization`/`Cookie` e `Set-Cookie` sono rimossi. Log applicativo Django su stdout (`LOGGING`: errori 5xx di `django.request`, warning e log del package `apps`), mai token, header o query string.
 
 ### 8.4 Backup
 
@@ -767,11 +837,11 @@ In produzione si usa **solo** `docker-compose.prod.yml` (mai mescolato con `dock
 
 ### 8.5 Configurazione e segreti
 
-Solo variabili d'ambiente, lette in `config/settings.py`; `.env.example` alla radice documenta le chiavi, `.env` non è mai committato. Gruppi: Django (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`), database (`POSTGRES_*`), Celery (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`), AI (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_*_MODEL`), Apify (`APIFY_API_TOKEN`, l'unica letta dal codice), Google OAuth (vuote in produzione), Web Push (`VAPID_*`), prezzi (`PRICE_*`, §4.6), deploy (`DOMAIN`, `CADDY_EMAIL`), backup (`BACKUP_S3_*`, vuote in produzione). Dopo una modifica a `.env` i container vanno ricreati, non solo riavviati. I massimali giornalieri e i parametri della pipeline CV sono invece costanti nel codice.
+Solo variabili d'ambiente, lette in `config/settings.py`; `.env.example` alla radice documenta le chiavi, `.env` non è mai committato. Gruppi: Django (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_ADMIN_PATH`, `REGISTRATION_INVITE_CODE`), database (`POSTGRES_*`), Celery e cache (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `REDIS_CACHE_URL`), AI (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_*_MODEL`), Apify (`APIFY_API_TOKEN`, l'unica letta dal codice), Google OAuth (vuote in produzione), Web Push (`VAPID_*`), prezzi (`PRICE_*`, §4.6), deploy (`DOMAIN`, `CADDY_EMAIL`), backup (`BACKUP_S3_*`, vuote in produzione). Dopo una modifica a `.env` i container vanno ricreati, non solo riavviati. I massimali giornalieri e i parametri della pipeline CV sono invece costanti nel codice.
 
 ### 8.6 Aggiornamenti di sicurezza
 
-Aggiornamenti automatici del sistema operativo; dipendenze applicative con intervalli di versione bloccati in `requirements.txt` e `package-lock.json`, da aggiornare periodicamente a mano.
+Aggiornamenti automatici del sistema operativo; dipendenze applicative con intervalli di versione bloccati in `requirements.txt` e `package-lock.json`, da aggiornare periodicamente a mano (Sprint 66: Django 5.2 LTS, DRF 3.16, Celery 5.5, Pillow 12). Il controllo periodico delle vulnerabilità note (`pip-audit`, `npm audit`) è nel runbook di `DEPLOY.md`.
 
 ---
 
@@ -787,12 +857,13 @@ L'amministratore gestisce piani e credito **solo dal Django Admin** (`/admin/`),
 | `Profile` | Con inline di `Experience`, `Education`, `Skill`, `Certification`, `Language` |
 | `SavedSearch` | Lista con keywords, città, paese, utente, attiva |
 | `Job` | Lista con titolo, azienda, utente, source, origin, status, score, archiviato, `discarded_by_cap`; filtri e ricerca |
-| `DailyQuota` | In lista solo `manual_cv_count` e `import_count`; gli altri 4 contatori solo nel dettaglio |
+| `DailyQuota` | In lista solo `manual_cv_count` e `import_count`; gli altri 5 contatori solo nel dettaglio |
 | `RunLog` | Lista con tipo, esito, utente, job, date; filtri per tipo ed esito |
 | `CVDocument` | Lista con job, utente, tipo, data |
 | `PushSubscription` | Lista con utente, endpoint, data |
+| `AuthToken` | Sprint 66: lista in sola lettura con utente, creazione, ultimo uso, user agent; nessuna aggiunta; eliminare una riga disconnette quel dispositivo |
 
-Registrati automaticamente dalle librerie: token DRF, sito e account social di allauth, PeriodicTask e pianificazioni di `django_celery_beat` (da qui si modificano gli orari dei task).
+Registrati automaticamente dalle librerie: sito e account social di allauth, PeriodicTask e pianificazioni di `django_celery_beat` (da qui si modificano gli orari dei task).
 
 **Non registrati**: `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument`, `JobFilterPreset`. Per consultarli serve la shell.
 
@@ -824,7 +895,7 @@ Rispetto al prototipo e alle prime versioni di questo documento sono venuti meno
 
 ## 11. Punti aperti e limiti tecnici noti
 
-Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14. Non sono decisioni: sono lo stato attuale, da valutare in sprint futuri. I punti aperti delle versioni precedenti già chiusi o superati (supporto multi-filtro dell'actor, distribuzione tra ricerche con tetto unico, compattamento del CV, prezzi e modelli "da fissare", formato di `Education`, overflow estremo) sono stati tolti. La numerazione è rifatta.
+Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (aggiornato allo Sprint 66, che ha chiuso i punti su import CV, token senza scadenza e invio push non protetto). Non sono decisioni: sono lo stato attuale, da valutare in sprint futuri. I punti aperti delle versioni precedenti già chiusi o superati (supporto multi-filtro dell'actor, distribuzione tra ricerche con tetto unico, compattamento del CV, prezzi e modelli "da fissare", formato di `Education`, overflow estremo) sono stati tolti. La numerazione è rifatta.
 
 **Rischi di prodotto e conformità**
 
@@ -836,78 +907,79 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14. 
 **Infrastruttura e operatività**
 
 5. **Backup non operativo.** Il backup su storage esterno è implementato ma non configurato; nessun ripristino è mai stato provato (§8.4).
-6. **Login Google non attivo** in produzione (credenziali vuote), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Inoltre il client della PWA non invia l'header CSRF: per un utente autenticato solo via sessione le richieste non-GET verrebbero probabilmente respinte dal controllo CSRF di `SessionAuthentication` (non verificato).
+6. **Login Google non attivo** in produzione (credenziali vuote), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Dallo Sprint 66 l'API accetta solo token: per attivarlo serve un passaggio sessione → token dopo il ritorno da Google (§3.7).
 7. **Operazioni lunghe sincrone in gunicorn.** Raccolta manuale e generazioni occupano un worker gunicorn per tutta la durata; con 4 worker, poche operazioni contemporanee bastano a rallentare tutto il sito. Un deploy o riavvio durante un'operazione la interrompe.
 8. **Flag transitori senza timeout.** `cv_generation_in_progress`, `cover_letter_generation_in_progress` e `referral_message_generation_in_progress` vengono spenti solo dal codice della richiesta; se il processo muore (timeout gunicorn → `SystemExit`, non intercettato da `except Exception`; riavvio) il flag resta acceso e il job resta bloccato per quel tipo di generazione, con la riserva di quota/credito non restituita. Solo la guardia della raccolta manuale ha uno sblocco automatico (2 ore).
 9. **Raccolta notturna fragile.** Un errore su un solo gruppo Apify fa perdere tutta la raccolta dell'utente; un errore durante la creazione dei job lascia job senza punteggio; i job senza punteggio non vengono mai ritentati. Il ciclo è sequenziale su tutti gli utenti in un unico task.
 10. **Nessuna guardia condivisa** tra raccolta manuale e notturna (doppie chiamate Apify possibili). Lo sblocco di una seconda raccolta manuale nello stesso giorno richiede la shell.
-11. **Notifiche: invio non protetto.** Un errore di `pywebpush` (es. sottoscrizione scaduta, 410) non è gestito: interrompe il giro del task per tutti gli utenti successivi; le sottoscrizioni scadute non vengono rimosse. Non esiste un modo per disattivare le notifiche dall'app.
+11. **Notifiche.** Non esiste un modo per disattivare le notifiche dall'app né per annullare la sottoscrizione di un dispositivo al logout.
 12. **Osservabilità limitata.** `RunLog` registra solo i fallimenti per CV, cover letter, messaggi e chat (più il caso multi-pagina del CV); le generazioni riuscite, le offerte scartate dalla raccolta (campi mancanti, troppo lunghi, duplicati) e i consumi di quota/credito non lasciano traccia. Non esiste un registro contabile del credito.
 13. **Modelli non in Admin.** `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument` e `JobFilterPreset` non sono registrati; la lista `DailyQuota` mostra 2 contatori su 6; `User` in Admin non espone i campi della raccolta manuale e dell'inattività.
 14. **Costi AI e Apify non stimati.** Senza tetto per notte il costo della raccolta cresce con il numero di gruppi (ogni chiamata fattura almeno 150 risultati) e quello dello scoring con il numero di offerte raccolte; nessuna soglia o monitoraggio è definito.
 
 **Backend: difetti puntuali**
 
-15. **Import CV: 500 se Bedrock fallisce.** `CVImportView` non gestisce gli errori AI (`StructuredOutputError`, errori Bedrock): la PWA mostra un errore generico.
-16. **Stato del job sovrascritto dalla generazione CV.** Il successo imposta sempre `status = cv_generated` e il fallimento sempre `new`, anche per un job già in `application_done` (la PWA permette di rigenerare il CV su questi job).
-17. **`JobSerializer` non espone `referral_message_generation_in_progress`**: il frontend lo legge ma il valore è sempre indefinito, quindi il pulsante "Genera messaggio" si disabilita solo durante la richiesta locale (la guardia server resta attiva).
-18. **`discarded_by_cap` non filtrato.** I job storici marcati dal vecchio cap compaiono in lista e nelle statistiche Home.
-19. **Import da URL.** Non applica il controllo `max_length` della raccolta; il controllo duplicati avviene prima della riserva senza lock, quindi due import simultanei dello stesso URL possono arrivare al vincolo di unicità con un errore non gestito (non verificato).
-20. **Job manuale senza restituzione**: se qualcosa fallisce dopo la riserva la quota resta consumata (lo scoring fallito non fa fallire la richiesta).
-21. **Scoring.** Il cap lingua dipende dal fatto che il modello segnali la lingua richiesta; il prefisso del cap è sempre in italiano; la località del job non è passata al modello; i punteggi storici su 1–5 si mescolano a quelli su 1–10 in ordinamento, filtro e colori.
-22. **Ricerche salvate.** La `PATCH` che cambia il tipo di una ricerca attiva non ricontrolla i limiti di piano; su Free la disattivazione automatica della ricerca precedente non è segnalata dalla UI.
-23. **Profilo.** Nessun limite applicato a numero e lunghezza dei bullet; `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo.
-24. **Token DRF senza scadenza**; il logout della PWA non invalida il token né la sessione lato server.
-25. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese.
-26. **Commenti e docstring superati** nel codice: "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft` ("generare un nuovo CV sovrascrive il draft") e di `CoverLetterDraft`; nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md`.
+15. **Stato del job sovrascritto dalla generazione CV.** Il successo imposta sempre `status = cv_generated` e il fallimento sempre `new`, anche per un job già in `application_done` (la PWA permette di rigenerare il CV su questi job).
+16. **`JobSerializer` non espone `referral_message_generation_in_progress`**: il frontend lo legge ma il valore è sempre indefinito, quindi il pulsante "Genera messaggio" si disabilita solo durante la richiesta locale (la guardia server resta attiva).
+17. **`discarded_by_cap` non filtrato.** I job storici marcati dal vecchio cap compaiono in lista e nelle statistiche Home.
+18. **Import da URL.** Non applica il controllo `max_length` della raccolta; il controllo duplicati avviene prima della riserva senza lock, quindi due import simultanei dello stesso URL possono arrivare al vincolo di unicità con un errore non gestito (non verificato).
+19. **Job manuale senza restituzione**: se qualcosa fallisce dopo la riserva la quota resta consumata (lo scoring fallito non fa fallire la richiesta).
+20. **Scoring.** Il cap lingua dipende dal fatto che il modello segnali la lingua richiesta; il prefisso del cap è sempre in italiano; la località del job non è passata al modello; i punteggi storici su 1–5 si mescolano a quelli su 1–10 in ordinamento, filtro e colori.
+21. **Ricerche salvate.** La `PATCH` che cambia il tipo di una ricerca attiva non ricontrolla i limiti di piano; su Free la disattivazione automatica della ricerca precedente non è segnalata dalla UI.
+22. **Profilo.** `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo; le foto e le versioni precedenti dei documenti restano su disco finché non si esegue `secure_media_files --delete-orphans`.
+23. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese.
+24. **Commenti e docstring superati** nel codice: "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft` ("generare un nuovo CV sovrascrive il draft") e di `CoverLetterDraft`; nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md`.
 
 **Editor e chat**
 
-27. **Bozza non riseminata.** Dopo "Rigenera CV" o una nuova cover letter, "Modifica" riapre la bozza precedente (con la sua chat), perché la PWA chiama il seed solo su 404 e nessun codice aggiorna la bozza alla generazione.
-28. **Finalizzazione e autosave.** "Genera PDF finale" usa la bozza salvata: le modifiche degli ultimi ~1,2 s possono restare fuori.
-29. **Indici posizionali nelle azioni chat.** Le azioni e il puntamento dei bullet usano indici sulla bozza al momento dell'invio: dopo un riordino, o accettando più azioni `add`/`remove` dello stesso turno, gli indici successivi possono puntare all'elemento sbagliato. Il filtro server del CV non valida indici e id; quello della cover letter controlla solo il range.
-30. **Contesto della chat.** Al modello arriva la cronologia senza le azioni proposte né le decisioni; lo stato reale arriva solo dal `content_json` salvato. Una decisione la cui registrazione fallisce non viene ritentata.
-31. **Documenti precedenti non riapribili.** CV precedenti allo Sprint 51 e cover letter precedenti allo Sprint 63 hanno `content_json` vuoto: il pulsante "Modifica" compare ma l'apertura fallisce (409) finché non si rigenera.
-32. **Grassetto** interpretato solo nei bullet delle esperienze: marcatori `**` in altri campi (es. sommario modificato a mano o dalla chat) escono come asterischi.
-33. **Gap filling.** La numerazione dei gap in UI (sull'elenco completo) non coincide con quella del prompt (solo i selezionati, in ordine di clic): un'indicazione "per il gap 2" può riferirsi a un gap diverso.
-34. **Cover letter.** Template non allineato allo stile del CV (font sans-serif di fallback, nessun giustificato); il pannello chat riusa testi che parlano di "CV" e "sommario"; le combinazioni di indicazioni riusate diventano nuove voci nello storico.
+25. **Bozza non riseminata.** Dopo "Rigenera CV" o una nuova cover letter, "Modifica" riapre la bozza precedente (con la sua chat), perché la PWA chiama il seed solo su 404 e nessun codice aggiorna la bozza alla generazione.
+26. **Finalizzazione e autosave.** "Genera PDF finale" usa la bozza salvata: le modifiche degli ultimi ~1,2 s possono restare fuori.
+27. **Indici posizionali nelle azioni chat.** Le azioni e il puntamento dei bullet usano indici sulla bozza al momento dell'invio: dopo un riordino, o accettando più azioni `add`/`remove` dello stesso turno, gli indici successivi possono puntare all'elemento sbagliato. Il filtro server del CV non valida indici e id; quello della cover letter controlla solo il range.
+28. **Contesto della chat.** Al modello arriva la cronologia senza le azioni proposte né le decisioni; lo stato reale arriva solo dal `content_json` salvato. Una decisione la cui registrazione fallisce non viene ritentata.
+29. **Documenti precedenti non riapribili.** CV precedenti allo Sprint 51 e cover letter precedenti allo Sprint 63 hanno `content_json` vuoto: il pulsante "Modifica" compare ma l'apertura fallisce (409) finché non si rigenera.
+30. **Grassetto** interpretato solo nei bullet delle esperienze: marcatori `**` in altri campi (es. sommario modificato a mano o dalla chat) escono come asterischi.
+31. **Gap filling.** La numerazione dei gap in UI (sull'elenco completo) non coincide con quella del prompt (solo i selezionati, in ordine di clic): un'indicazione "per il gap 2" può riferirsi a un gap diverso.
+32. **Cover letter.** Template non allineato allo stile del CV (font sans-serif di fallback, nessun giustificato); il pannello chat riusa testi che parlano di "CV" e "sommario"; le combinazioni di indicazioni riusate diventano nuove voci nello storico.
 
 **Frontend**
 
-35. **Bundle vecchio nelle tab aperte**: dopo un deploy una tab già aperta può usare la versione precedente finché non viene ricaricata (osservato nello Sprint 58); nessun ricaricamento automatico.
-36. **Filtri preferiti.** Un preset creato dalla sezione Importati salva anche il filtro "Ricerca" (lì nascosto), che torna attivo applicandolo altrove; l'eliminazione è ottimistica e non gestisce l'errore dell'API.
-37. **Test e2e obsoleto**: `job-list.spec.js` contiene ancora il test dell'arricchimento con "salva anche nel profilo", funzione rimossa nello Sprint 44 (§13).
+33. **Bundle vecchio nelle tab aperte**: dopo un deploy una tab già aperta può usare la versione precedente finché non viene ricaricata (osservato nello Sprint 58); nessun ricaricamento automatico.
+34. **Filtri preferiti.** Un preset creato dalla sezione Importati salva anche il filtro "Ricerca" (lì nascosto), che torna attivo applicandolo altrove; l'eliminazione è ottimistica e non gestisce l'errore dell'API.
+35. **Test e2e obsoleto**: `job-list.spec.js` contiene ancora il test dell'arricchimento con "salva anche nel profilo", funzione rimossa nello Sprint 44 (§13).
 
 **Calibrazione**
 
-38. **Parametri della pipeline CV** (budget 18/16/14, minimo 2 bullet garantiti, 4 iterazioni di ripiego, 5 esperienze) e prezzi del listino sono valori da tarare con l'uso reale; sono costanti nel codice o variabili d'ambiente, senza impatto architetturale.
+36. **Parametri della pipeline CV** (budget 18/16/14, minimo 2 bullet garantiti, 4 iterazioni di ripiego, 5 esperienze) e prezzi del listino sono valori da tarare con l'uso reale; sono costanti nel codice o variabili d'ambiente, senza impatto architetturale.
 
 ---
 
 ## 12. API REST
 
-Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedono autenticazione (token DRF o sessione) e restituiscono 401 senza credenziali. Ogni oggetto è filtrato sull'utente autenticato: un id di un altro utente dà **404**. Le risposte d'errore hanno la forma `{"detail": "…"}` (o gli errori per campo di DRF per i 400 di validazione). Prefissi da `backend/config/urls.py`; route in `apps/*/urls.py`.
+Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedono autenticazione (header `Authorization: Token …`, §3.7; la sessione Django non è accettata dall'API) e restituiscono 401 senza credenziali o con token scaduto/revocato. Oltre i limiti di frequenza (§7.1) rispondono 429. Ogni oggetto è filtrato sull'utente autenticato: un id di un altro utente dà **404**. Le risposte d'errore hanno la forma `{"detail": "…"}` (o gli errori per campo di DRF per i 400 di validazione). Prefissi da `backend/config/urls.py`; route in `apps/*/urls.py`.
 
 ### 12.1 Account, profilo, ricerche, notifiche
 
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
-| POST | `/api/accounts/register/` | Registrazione email/password (pubblico) | 201 `{token}`; 400 validazione |
-| POST | `/api/accounts/login/` | Login (pubblico) | 200 `{token}`; 400 credenziali errate |
+| POST | `/api/accounts/register/` | Registrazione `{email, password, invite_code?}` (pubblico; `invite_code` obbligatorio se `REGISTRATION_INVITE_CODE` è valorizzato) | 201 `{token}`; 400 validazione o codice di invito errato; 429 |
+| POST | `/api/accounts/login/` | Login (pubblico); crea un nuovo token per questo dispositivo | 200 `{token}`; 400 credenziali errate (messaggio generico); 429 |
+| POST | `/api/accounts/logout/` | Revoca il token della richiesta (Sprint 66) | 204; 401 |
 | GET, PATCH | `/api/accounts/me/` | Dati utente e preferenze: `id, email, first_name, last_name, plan, extra_credit, timezone, interface_language, cv_language_mode, cv_include_photo, objective_statement` (read-only: id, email, plan, extra_credit) | 200; 400 |
-| GET, PATCH | `/api/profiles/me/` | Profilo dell'utente (creato se manca); PATCH JSON o multipart per la foto | 200; 400 |
+| GET, PATCH | `/api/profiles/me/` | Profilo dell'utente (creato se manca); PATCH JSON o multipart per la foto (`photo` solo in scrittura; in lettura `has_photo` e `photo_url` firmato, §4.15) | 200; 400 (anche foto non ammessa) |
 | GET, PUT, PATCH | `/api/profiles/<id>/` | Stesso profilo per id (solo il proprio) | 200; 404 |
 | GET, POST | `/api/experiences/`, `/api/educations/`, `/api/skills/`, `/api/certifications/`, `/api/languages/` | Elenco e creazione delle voci del profilo | 200; 201; 400 (es. lingua/livello fuori lista) |
 | GET, PUT, PATCH, DELETE | `/api/<sezione>/<id>/` | Lettura, modifica, eliminazione di una voce | 200; 204; 404 |
-| POST | `/api/profile/import-cv/` | Estrazione e strutturazione di un CV PDF/.docx (multipart `file`), senza salvataggio | 200 JSON strutturato; 400 file mancante o formato non supportato; 422 illeggibile o testo < 40 caratteri; 500 se l'AI fallisce |
+| POST | `/api/profile/import-cv/` | Estrazione e strutturazione di un CV PDF/.docx (multipart `file`), senza salvataggio | 200 JSON strutturato; 400 file mancante, formato non supportato, oltre 5 MB o 10 pagine; 409 quota giornaliera esaurita; 422 illeggibile o testo < 40 caratteri; 502 se l'AI fallisce |
 | GET, POST | `/api/searches/` | Ricerche salvate (`search_type, keywords, city, country`; `is_active` read-only) | 200; 201; 400 oltre il limite di piano |
 | GET, PUT, PATCH, DELETE | `/api/searches/<id>/` | Singola ricerca | 200; 204; 404 |
 | POST | `/api/searches/<id>/activate/` | Attiva; su Free disattiva la precedente dello stesso tipo | 200 (con `deactivated_previous` se applicabile); 400 limite attive Pro |
 | POST | `/api/searches/<id>/deactivate/` | Disattiva | 200 |
 | GET | `/api/searches-city-autocomplete/?q=` | Proxy Nominatim (min 2 caratteri, max 8 risultati, cache 1 h) | 200 lista `{city, country…}`, `[]` anche su errore di rete |
 | GET | `/api/notifications/vapid-public-key/` | Chiave pubblica VAPID | 200 `{public_key}` |
-| POST | `/api/notifications/push-subscriptions/` | Registra/aggiorna la sottoscrizione `{endpoint, keys:{p256dh, auth}}` | 201; 400 |
-| GET | `/api/` | Radice navigabile del router DRF | 200 |
+| POST | `/api/notifications/push-subscriptions/` | Registra/aggiorna la sottoscrizione `{endpoint, keys:{p256dh, auth}}`; endpoint solo verso push service noti (§3.8), max 10 per utente | 201; 400 |
+| GET | `/api/` | Radice del router DRF (autenticata; navigabile solo con `DEBUG=True`) | 200; 401 |
+| GET | `/api/files/cv/<doc_id>/?s=…`, `/api/files/cover-letter/<doc_id>/?s=…` | Download del PDF con URL firmato (Sprint 66, §4.15); **nessun header di autenticazione richiesto** | 200 PDF allegato, `Cache-Control: private, no-store`; 404 firma assente/manomessa/scaduta o documento non dell'utente della firma |
+| GET | `/api/files/photo/?s=…` | Foto profilo con URL firmato | 200 immagine inline; 404 come sopra |
 
 ### 12.2 Job: lista, azioni, raccolta, import
 
@@ -925,28 +997,28 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 | GET, POST | `/api/job-filter-presets/` | Elenco e creazione dei filtri preferiti | 200; 201; 400 validazione; 409 oltre 50 |
 | DELETE | `/api/job-filter-presets/<id>/` | Eliminazione | 204; 404 |
 
-Campi di `JobSerializer`: `id, title, company, location, description, apply_url, published_at, salary, matched_search, applicants_count, applicants_bucket, recruiter_name, recruiter_profile_url, origin, is_archived, is_favorite, status, cv_generation_in_progress, cover_letter_generation_in_progress, score, score_match, score_gaps, score_reasoning, date_collected, date_scored, date_cv_generated, date_application_done, cv_pdf_url, cv_download_filename, cover_letter_pdf_url, cover_letter_download_filename`.
+Campi di `JobSerializer`: `id, title, company, location, description, apply_url, published_at, salary, matched_search, applicants_count, applicants_bucket, recruiter_name, recruiter_profile_url, origin, is_archived, is_favorite, status, cv_generation_in_progress, cover_letter_generation_in_progress, score, score_match, score_gaps, score_reasoning, date_collected, date_scored, date_cv_generated, date_application_done, cv_pdf_url, cv_download_filename, cover_letter_pdf_url, cover_letter_download_filename`. Dallo Sprint 66 `cv_pdf_url` e `cover_letter_pdf_url` sono URL firmati validi un'ora (`/api/files/…?s=…`, §4.15), non più il path media.
 
 ### 12.3 CV, cover letter, messaggi, editor e chat
 
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
-| POST | `/api/jobs/<id>/generate-cv/` | Genera/rigenera CV `{gaps?: [str], gap_instructions?: str}` (§5.2, §6.2) | 201 `{cv_document_id}`; 409 già in corso, profilo incompleto, quota/credito esauriti; 502 generazione fallita |
+| POST | `/api/jobs/<id>/generate-cv/` | Genera/rigenera CV `{gaps?: [str], gap_instructions?: str}` (§5.2, §6.2) | 201 `{cv_document_id}`; 400 oltre i limiti di §7.1; 409 già in corso, profilo incompleto, quota/credito esauriti; 502 generazione fallita |
 | GET | `/api/jobs/<id>/cv-draft/` | Bozza CV | 200 `content_json`; 404 |
 | POST | `/api/jobs/<id>/cv-draft/` | Crea o risemina la bozza dall'ultimo CV | 201 `content_json`; 409 nessun CV riapribile |
-| PATCH | `/api/jobs/<id>/cv-draft/` | Sostituisce l'intero `content_json` | 200; 400 non oggetto; 404 |
-| POST | `/api/jobs/<id>/cv-draft/preview/` | Anteprima PDF (body facoltativo con il contenuto) | 200 `application/pdf` + `X-Page-Count`; 404 |
+| PATCH | `/api/jobs/<id>/cv-draft/` | Sostituisce l'intero `content_json` | 200; 400 struttura o dimensioni non valide (§5.12); 404 |
+| POST | `/api/jobs/<id>/cv-draft/preview/` | Anteprima PDF (body facoltativo con il contenuto) | 200 `application/pdf` + `X-Page-Count`; 400 come sopra; 404; 429 |
 | POST | `/api/jobs/<id>/cv-draft/finalize/` | Nuovo `CVDocument` dalla bozza, gratuito | 201 `{cv_document_id}`; 409 nessuna bozza |
 | GET | `/api/jobs/<id>/cv-draft/chat/` | Cronologia chat CV | 200 `{history}`; 404 |
-| POST | `/api/jobs/<id>/cv-draft/chat/` | Messaggio `{message, focus_bullets?: [{profile_experience_id, bullet_index}]}` | 200 `{reply, actions}`; 400 vuoto; 402 credito insufficiente; 502 AI fallita o bozza assente |
+| POST | `/api/jobs/<id>/cv-draft/chat/` | Messaggio `{message, focus_bullets?: [{profile_experience_id, bullet_index}]}` | 200 `{reply, actions}`; 400 vuoto o oltre 2.000 caratteri; 402 credito insufficiente; 429; 502 AI fallita o bozza assente |
 | PATCH | `/api/jobs/<id>/cv-draft/chat/` | Decisione `{message_index, action_index, decision}` | 204; 400 |
-| POST | `/api/jobs/<id>/generate-cover-letter/` | Genera cover letter `{instructions?}` (§5.10) | 201 `{cover_letter_document_id}`; 409; 502 |
+| POST | `/api/jobs/<id>/generate-cover-letter/` | Genera cover letter `{instructions?}` (§5.10) | 201 `{cover_letter_document_id}`; 400 indicazioni oltre 2.000 caratteri; 409; 502 |
 | GET | `/api/cover-letter-instructions/` | Ultime 20 indicazioni distinte | 200 `{instructions}` |
 | GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/` | Bozza cover letter (come per il CV) | 200 / 201; 400; 404; 409 |
 | POST | `/api/jobs/<id>/cover-letter-draft/preview/` | Anteprima PDF | 200 `application/pdf` + `X-Page-Count`; 404 |
 | POST | `/api/jobs/<id>/cover-letter-draft/finalize/` | Nuova `CoverLetterDocument` dalla bozza, gratuita | 201 `{cover_letter_document_id}`; 409 |
 | GET, POST, PATCH | `/api/jobs/<id>/cover-letter-draft/chat/` | Chat cover letter (`POST {message}`, senza `focus_bullets`) | come la chat CV: 200 / 204; 400; 402; 404; 502 |
-| POST | `/api/jobs/<id>/generate-referral-message/` | Messaggio di networking `{channel, recipient_name?, recipient_linkedin_url?, instructions?}` (§5.11) | 201 messaggio; 400 canale non valido; 409; 502 |
+| POST | `/api/jobs/<id>/generate-referral-message/` | Messaggio di networking `{channel, recipient_name?, recipient_linkedin_url?, instructions?}` (§5.11) | 201 messaggio; 400 canale non valido o testi oltre i limiti; 409; 502 |
 | GET | `/api/jobs/<id>/referral-messages/` | Storico messaggi del job, dal più recente | 200 lista |
 | GET | `/api/referral-message-instructions/` | Ultime 20 indicazioni distinte | 200 `{instructions}` |
 
@@ -954,9 +1026,10 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 
 | Path | Scopo |
 |---|---|
-| `/admin/` | Django Admin (sessione, utenti staff) |
+| `/admin/` (o `DJANGO_ADMIN_PATH`) | Django Admin (sessione, utenti staff); login limitato a 10 errori per IP in 15 minuti (429) |
 | `/accounts/…` | django-allauth (login Google: `/accounts/google/login/`, callback) |
-| `/media/…`, `/static/…` | Serviti direttamente da Caddy in produzione (da Django solo con `DEBUG=True`) |
+| `/static/…` | Servito direttamente da Caddy in produzione |
+| `/media/…` | **Mai servito** (404 da Caddy; nessuna rotta Django): i file si scaricano da `/api/files/…` |
 
 ---
 
@@ -964,23 +1037,26 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 
 ### 13.1 Suite backend
 
-234 test Django (`python manage.py test`), **tutti verdi il 2026-11-14** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
+299 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 66)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
 
 | File | Test | Cosa copre |
 |---|---|---|
 | `apps/jobs/tests.py` | 105 | Raccolta per utente (campi obbligatori, dedup, scarto oltre `max_length`, assenza di cap), scoring singolo e parallelo (concorrenza, fallimenti, cap lingua e regressione sottostringa), ciclo notturno per utente e orchestratore, assenza di CV automatici, raccolta manuale (guardia, guardia stantia, quota, rimborso, `SystemExit`) e relativa API, schedulazione del ciclo notturno, import da link (servizio e API), job manuale (servizio e API), lista e filtri (sezioni, date nel fuso utente, location, candidati, recruiter, ricerca multipla, ricerca testuale), archivio, preferiti, dettaglio, candidatura fatta (anche senza CV), API dei messaggi di networking, filtri preferiti, comando `seed_e2e_jobs` |
 | `apps/jobs/sources/tests.py` | 26 | Fonte Apify (payload raggruppato, Company con `companyInclude`, normalizzazione, candidati e recruiter, retry) e import via API guest |
-| `apps/cv/tests.py` | 30 | Generazione CV (un blocco per esperienza, 1 pagina su profilo standard, foto on/off, istruzione copiata dal profilo, CV congelato dopo modifiche al profilo, modalità lingua, ripiego per overflow e `RunLog` multi-pagina), generazione manuale (quota nel giorno Europe/Rome, credito, concorrenza, rimborso, ritorno a `new`, uscita dall'archivio), messaggi di networking (8 test: quota, più messaggi per job, concorrenza, credito, rimborso, indicazioni) |
+| `apps/cv/tests.py` | 31 | Generazione CV (un blocco per esperienza, 1 pagina su profilo standard, foto on/off, istruzione copiata dal profilo, CV congelato dopo modifiche al profilo, modalità lingua, ripiego per overflow e `RunLog` multi-pagina), generazione manuale (quota nel giorno Europe/Rome, credito, concorrenza, rimborso, ritorno a `new`, uscita dall'archivio), messaggi di networking (8 test: quota, più messaggi per job, concorrenza, credito, rimborso, indicazioni) |
 | `apps/cv/test_selection.py` | 19 | Selezione dell'istruzione, budget bullet, cap esperienze con swap, taglio per rilevanza, rimozione del bullet meno rilevante |
-| `apps/notifications/tests.py` | 12 | Notifica mattutina (ora locale, `last_notified_at`), promemoria di inattività, API sottoscrizione e chiave VAPID |
+| `apps/notifications/tests.py` | 18 | Notifica mattutina (ora locale, `last_notified_at`), promemoria di inattività, API sottoscrizione e chiave VAPID; Sprint 66: allowlist degli endpoint, massimo 10 sottoscrizioni, `timeout=10`, 410 → sottoscrizione eliminata, un errore non interrompe il giro (né sulle altre sottoscrizioni né sugli altri utenti) |
 | `apps/common/test_multi_user_isolation.py` | 11 | Isolamento dei dati tra utenti sulle API |
 | `apps/searches/tests.py` | 10 | Limiti di piano delle ricerche, attivazione per tipo su Free, downgrade, modifica |
-| `apps/profiles/tests.py` | 7 | API del profilo; import CV (4 test, di cui 2 con `call_claude_structured` simulato) |
+| `apps/profiles/tests.py` | 7 | API del profilo (foto: `has_photo` e `photo_url` firmato); import CV (4 test, di cui 2 con `call_claude_structured` simulato) |
 | `apps/common/tests.py` | 5 | Schedulazione e task di backup, comando `restore_backup` |
-| `apps/accounts/tests.py` | 5 | `/me` (plan e credito esposti e read-only, nome modificabile), comando `set_e2e_account` |
-| `apps/searches/test_geo.py` | 4 | Proxy di autocomplete città |
+| `apps/accounts/tests.py` | 7 | `/me` (plan e credito esposti e read-only, nome modificabile, nessun lost update di `extra_credit`, fuso orario validato), comando `set_e2e_account` |
+| `apps/accounts/test_security.py` | 21 | Sprint 66: token (solo hash nel DB, un token per login/dispositivo, logout revoca solo il corrente, scadenza a 30 giorni di inattività con scorrimento, `last_used_at` al più ogni ora, `revoke_all_tokens`), errore di login generico, permessi di default e sessione non accettata dall'API, codice di invito (errato, mancante, corretto, vuoto = aperta, nessuna rivelazione dell'email), throttling di login per IP e per email e della registrazione, limite dei login falliti all'admin |
+| `apps/common/test_files.py` | 19 | Sprint 66: download firmati (proprietario senza header, altro utente, firma assente/manomessa/scaduta/di un altro tipo o documento → 404, `/media/` non servito, header di risposta), URL firmati nel `JobSerializer`, nomi casuali, foto (EXIF/GPS rimossi e orientamento applicato, formato/dimensioni/peso, URL firmato), comando `secure_media_files` (dry-run, rinomina idempotente con ricodifica delle foto, orfani) |
+| `apps/jobs/test_input_limits.py` | 16 | Sprint 66: limiti di lunghezza (descrizione job manuale, messaggi di chat, indicazioni cover letter, gap, destinatario), validazione del `content_json` delle bozze CV e cover letter in PATCH e anteprima, import CV (5 MB, formato dai primi byte, 10 pagine, troncamento del testo, quota giornaliera, errore AI → 502 con quota restituita), limiti dei bullet del profilo |
+| `apps/searches/test_geo.py` | 4 | Proxy di autocomplete città (con una LocMemCache: nei test la cache di default è una DummyCache) |
 
-Prima di chiudere uno sprint che tocca i modelli va eseguito anche `makemigrations --check`.
+Prima di chiudere uno sprint che tocca i modelli va eseguito anche `makemigrations --check`; dallo Sprint 66 anche `check --deploy` con `DEBUG=false` (nessun problema segnalato: i warning su HSTS `includeSubDomains`/`preload` sono silenziati per scelta).
 
 ### 13.2 Test end-to-end (Playwright)
 
@@ -989,7 +1065,7 @@ In `frontend/e2e/` (`npm run test:e2e`, configurazione `playwright.config.js`, b
 - `auth-onboarding.spec.js`: registrazione e onboarding manuale, raggruppamento esperienze per azienda, login errato, lingua dell'interfaccia (browser it/en, switcher);
 - `account.spec.js`: piano e saldo, ciclo di vita di una ricerca salvata, limite di piano, persistenza delle impostazioni, istruzione iOS per le push;
 - `job-list.spec.js`: sezioni, filtri (punteggio, stato, location, ricerca multi-selezione, candidati, recruiter), ricerca testuale, archivio con annulla e swipe, generazione CV (pulsante disabilitato), link annuncio e candidatura senza CV, espandi motivazioni, badge candidati e icona recruiter, preferiti, filtri preferiti;
-- `push-subscription.spec.js`: sottoscrizione push verificata lato backend.
+- `push-subscription.spec.js`: sottoscrizione push verificata lato backend (endpoint finto su `fcm.googleapis.com`, per passare l'allowlist dello Sprint 66).
 
 L'esecuzione degli e2e non è documentata negli ultimi sprint. `job-list.spec.js` contiene ancora il test "arricchimento con 'salva anche nel profilo'", relativo a una funzione rimossa nello Sprint 44: con il codice attuale non può passare.
 
@@ -1003,8 +1079,8 @@ L'esecuzione degli e2e non è documentata negli ultimi sprint. `job-list.spec.js
 - gap filling (`gap_filling.py`) e il suo passaggio nel prompt;
 - filtro di grounding su skill/certificazioni del CV (`_filter_grounded_skills`), etichette nelle 5 lingue, grassetto nel PDF;
 - normalizzazione delle lingue (`profiles/0007`), validazione delle choices di `Language`, `Profile.email`;
-- errore AI durante l'import del CV (oggi risposta 500);
-- login Google, CSRF con autenticazione a sessione;
+- login Google;
+- renderer solo JSON con `DEBUG=False` (i test girano con `DEBUG=True`), header di Caddy e CSP (verificati solo con `caddy validate` e una prova manuale);
 - frontend senza test unitari: editor, chat, Home e dialog di cover letter e messaggi non hanno test e2e.
 
 ---

@@ -40,6 +40,12 @@ from apps.cv.cover_letter_draft_chat import (
     record_action_decision as record_cover_letter_action_decision,
     send_chat_message as send_cover_letter_chat_message,
 )
+from apps.accounts.throttling import PostOnlyScopeMixin
+from apps.cv.draft_validation import (
+    InvalidDraftContent,
+    validate_cover_letter_draft_content,
+    validate_cv_draft_content,
+)
 from apps.cv.gap_filling import build_extra_instructions
 from apps.cv.manual_generation import (
     ManualGenerationFailed,
@@ -74,7 +80,15 @@ from .list_service import (
     unfavorite_job,
 )
 from .models import Job, JobFilterPreset
-from .serializers import JobFilterPresetSerializer, JobSerializer, ManualJobCreateSerializer
+from .serializers import (
+    ChatMessageInputSerializer,
+    GenerateCvInputSerializer,
+    InstructionsInputSerializer,
+    JobFilterPresetSerializer,
+    JobSerializer,
+    ManualJobCreateSerializer,
+    ReferralMessageInputSerializer,
+)
 from .stats import get_home_stats
 from .tasks import (
     CollectionAlreadyInProgress,
@@ -96,9 +110,11 @@ class GenerateCvView(APIView):
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        gaps = request.data.get("gaps", [])
-        gap_instructions = request.data.get("gap_instructions", "")
-        extra_instructions = build_extra_instructions(gaps, gap_instructions)
+        params = GenerateCvInputSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        extra_instructions = build_extra_instructions(
+            params.validated_data["gaps"], params.validated_data["gap_instructions"]
+        )
 
         try:
             cv_document = request_manual_cv_generation(job, extra_instructions=extra_instructions)
@@ -143,6 +159,10 @@ class CvDraftView(APIView):
             draft = job.cv_draft
         except CVDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            validate_cv_draft_content(request.data)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         draft.content_json = request.data
         draft.save(update_fields=["content_json", "updated_at"])
         return Response(draft.content_json)
@@ -157,6 +177,7 @@ class CvDraftPreviewView(APIView):
     richiamato spesso (debounced) dal frontend."""
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "draft_preview"
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -166,6 +187,10 @@ class CvDraftPreviewView(APIView):
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
+        try:
+            validate_cv_draft_content(draft_content)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         pdf_bytes, page_count = render_draft_preview(request.user, request.user.profile, draft_content)
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["X-Page-Count"] = str(page_count)
@@ -187,13 +212,14 @@ class FinalizeCvDraftView(APIView):
         return Response({"cv_document_id": cv_document.pk}, status=status.HTTP_201_CREATED)
 
 
-class CvDraftChatView(APIView):
+class CvDraftChatView(PostOnlyScopeMixin, APIView):
     """Chat di assistenza sulla bozza (Sprint 59, Fase 2): un messaggio
     dell'utente per richiesta, risposta con 0+ modifiche proposte — mai
     applicate automaticamente, vedi `apps.cv.draft_chat`. Il GET restituisce
     la cronologia già persistita (apertura/ricarica dell'editor)."""
 
     permission_classes = [permissions.IsAuthenticated]
+    post_throttle_scope = "chat"
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -204,10 +230,12 @@ class CvDraftChatView(APIView):
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        message = (request.data.get("message") or "").strip()
+        params = ChatMessageInputSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        message = (params.validated_data["message"] or "").strip()
         if not message:
             return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
-        raw_focus_bullets = request.data.get("focus_bullets") or []
+        raw_focus_bullets = params.validated_data["focus_bullets"]
         focus_bullets = [
             item
             for item in raw_focus_bullets
@@ -255,10 +283,13 @@ class GenerateCoverLetterView(APIView):
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        instructions = request.data.get("instructions", "")
+        params = InstructionsInputSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
 
         try:
-            document = request_cover_letter_generation(job, instructions=instructions)
+            document = request_cover_letter_generation(
+                job, instructions=params.validated_data["instructions"]
+            )
         except CoverLetterGenerationRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except CoverLetterGenerationFailed as exc:
@@ -296,6 +327,10 @@ class CoverLetterDraftView(APIView):
             draft = job.cover_letter_draft
         except CoverLetterDraft.DoesNotExist:
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            validate_cover_letter_draft_content(request.data)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         draft.content_json = request.data
         draft.save(update_fields=["content_json", "updated_at"])
         return Response(draft.content_json)
@@ -306,6 +341,7 @@ class CoverLetterDraftPreviewView(APIView):
     della bozza corrente, nessuna chiamata AI."""
 
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "draft_preview"
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -315,6 +351,10 @@ class CoverLetterDraftPreviewView(APIView):
             return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
+        try:
+            validate_cover_letter_draft_content(draft_content)
+        except InvalidDraftContent as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         pdf_bytes, page_count = render_cover_letter_draft_preview(request.user, request.user.profile, job, draft_content)
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["X-Page-Count"] = str(page_count)
@@ -336,12 +376,13 @@ class FinalizeCoverLetterDraftView(APIView):
         return Response({"cover_letter_document_id": document.pk}, status=status.HTTP_201_CREATED)
 
 
-class CoverLetterDraftChatView(APIView):
+class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
     """Mirror di CvDraftChatView (Sprint 63), senza riferimento a singoli
     elementi (niente 'focus_bullets': con 3-5 paragrafi l'ambiguità è
     bassa, il solo testo libero basta — vedi apps.cv.cover_letter_draft_chat)."""
 
     permission_classes = [permissions.IsAuthenticated]
+    post_throttle_scope = "chat"
 
     def get(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -352,7 +393,9 @@ class CoverLetterDraftChatView(APIView):
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
-        message = (request.data.get("message") or "").strip()
+        params = ChatMessageInputSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        message = (params.validated_data["message"] or "").strip()
         if not message:
             return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -421,14 +464,16 @@ class GenerateReferralMessageView(APIView):
         channel = request.data.get("channel", "")
         if channel not in ReferralMessageDocument.Channel.values:
             return Response({"detail": "Canale non valido."}, status=status.HTTP_400_BAD_REQUEST)
+        params = ReferralMessageInputSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
 
         try:
             document = request_referral_message_generation(
                 job,
                 channel,
-                recipient_name=request.data.get("recipient_name", ""),
-                recipient_linkedin_url=request.data.get("recipient_linkedin_url", ""),
-                instructions=request.data.get("instructions", ""),
+                recipient_name=params.validated_data["recipient_name"],
+                recipient_linkedin_url=params.validated_data["recipient_linkedin_url"],
+                instructions=params.validated_data["instructions"],
             )
         except ReferralMessageGenerationRejected as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)

@@ -29,6 +29,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Utente non privilegiato (Sprint 66) per web/worker/beat: una falla in un
+# parser (pdfminer, Pillow, lxml, WeasyPrint) non dà root nel container, e
+# il codice (di root) resta in sola lettura: scrivibili solo staticfiles e
+# mediafiles. uid fisso 1000: i volumi media_data/static_data esistenti vanno passati a
+# questo uid una volta prima del primo avvio (DEPLOY.md §4.5); i volumi nuovi
+# ereditano il proprietario dalle cartelle create qui sotto.
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /app/staticfiles /app/mediafiles \
+    && chown app:app /app/staticfiles /app/mediafiles
+
 COPY . .
+
+USER app
 
 EXPOSE 8000

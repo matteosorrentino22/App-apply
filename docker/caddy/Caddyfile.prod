@@ -5,10 +5,53 @@
 {$DOMAIN} {
 	encode gzip
 
+	# Access log (Sprint 66): JSON su file nel volume caddy_logs, ruotato ogni
+	# giorno e cancellato dopo 14 giorni (contiene gli IP dei client). Mai la
+	# firma dei download (?s=) né gli header di autenticazione.
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10MiB
+			roll_interval 24h
+			roll_keep_for 336h
+		}
+		format filter {
+			wrap json
+			request>uri query {
+				replace s REDACTED
+			}
+			request>headers>Authorization delete
+			request>headers>Cookie delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+
+	# Header di sicurezza (Sprint 66) su tutte le risposte, comprese quelle di
+	# Django (sostituiscono i valori equivalenti impostati da Django, nessun
+	# duplicato). CSP: la PWA carica solo risorse proprie; 'unsafe-inline'
+	# negli stili perché Radix inserisce elementi <style> a runtime; blob: in
+	# frame-src/object-src per l'anteprima PDF degli editor (iframe su un URL
+	# blob: — i documenti blob ereditano questa policy); data:/blob: nelle
+	# immagini. Dettagli in DEPLOY.md §8.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
 	handle /api/* {
+		# Il file più grande accettato dall'API è il CV da importare (5 MB).
+		request_body {
+			max_size 10MB
+		}
 		reverse_proxy web:8000
 	}
-	handle /admin/* {
+	# Path dell'admin configurabile: DJANGO_ADMIN_PATH (con la "/" finale) va
+	# passato identico a Django (.env) e a questo container (docker-compose.prod.yml).
+	handle /{$DJANGO_ADMIN_PATH:admin/}* {
 		reverse_proxy web:8000
 	}
 	handle /accounts/* {
@@ -18,9 +61,11 @@
 		root * /srv/static
 		file_server
 	}
-	handle_path /media/* {
-		root * /srv/media
-		file_server
+	# I file media (CV, cover letter, foto) non sono mai serviti da Caddy (il
+	# volume non è nemmeno montato in questo container): si scaricano solo
+	# dagli URL firmati a scadenza di /api/files/*, che verificano il proprietario.
+	handle /media/* {
+		respond 404
 	}
 	# PWA statica (build di produzione): fallback su index.html per le rotte
 	# client-side di React Router, coerente col resto servito da Caddy.

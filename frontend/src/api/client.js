@@ -20,11 +20,15 @@ export class ApiError extends Error {
   }
 }
 
-// Wrapper minimo su fetch: aggiunge il token DRF se presente, invia i cookie
-// di sessione (fallback per il login Google via django-allauth, Sprint 18)
-// e normalizza gli errori in ApiError. Percorsi relativi (`/api/...`): in
-// dev il proxy di Vite li inoltra al backend, in produzione Caddy fa da
-// reverse proxy sullo stesso host — nessuna configurazione di base URL.
+// Evento emesso quando il backend rifiuta il token (401: sessione scaduta
+// per inattività o revocata, Sprint 66): AuthContext lo ascolta e riporta
+// l'utente al login.
+export const AUTH_EXPIRED_EVENT = 'app-apply:auth-expired'
+
+// Wrapper minimo su fetch: aggiunge il token se presente e normalizza gli
+// errori in ApiError. Percorsi relativi (`/api/...`): in dev il proxy di
+// Vite li inoltra al backend, in produzione Caddy fa da reverse proxy sullo
+// stesso host — nessuna configurazione di base URL.
 export async function apiFetch(path, { method = 'GET', body, isMultipart = false } = {}) {
   const headers = {}
   const token = getToken()
@@ -38,7 +42,6 @@ export async function apiFetch(path, { method = 'GET', body, isMultipart = false
   const response = await fetch(path, {
     method,
     headers,
-    credentials: 'include',
     body: body === undefined ? undefined : isMultipart ? body : JSON.stringify(body),
   })
 
@@ -52,6 +55,10 @@ export async function apiFetch(path, { method = 'GET', body, isMultipart = false
     }
   }
 
+  if (response.status === 401 && token) {
+    setToken(null)
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+  }
   if (!response.ok) {
     throw new ApiError(response.status, data)
   }

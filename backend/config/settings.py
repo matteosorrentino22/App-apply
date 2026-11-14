@@ -1,6 +1,10 @@
 import os
+import sys
+import tempfile
 from decimal import Decimal
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -14,8 +18,16 @@ def env_list(name, default=""):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-key-change-me")
-DEBUG = env_bool("DJANGO_DEBUG", True)
+_DEV_SECRET_KEY = "insecure-dev-key-change-me"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", _DEV_SECRET_KEY)
+# Default sicuri (Sprint 66): una variabile mancante nel .env non deve mai
+# accendere DEBUG né lasciare in uso una chiave nota (firma di sessioni,
+# reset password e URL firmati dei download).
+DEBUG = env_bool("DJANGO_DEBUG", False)
+# "insecure" copre sia questo default sia quello di .env.example.
+if not DEBUG and (not SECRET_KEY or "insecure" in SECRET_KEY):
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY obbligatoria (e non quella di sviluppo) con DJANGO_DEBUG=false.")
+TESTING = sys.argv[1:2] == ["test"]
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
@@ -28,6 +40,15 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Caddy imposta già lo stesso valore su tutte le risposte (Caddyfile.prod):
+    # qui serve a `check --deploy` e a non dipendere solo dal proxy.
+    SECURE_HSTS_SECONDS = 31536000
+    # HSTS senza includeSubDomains/preload, per scelta (Sprint 66): il
+    # dominio può avere sottodomini non serviti da questa app.
+    SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
+
+# Stesso valore impostato da Caddy su tutte le risposte (Caddyfile.prod).
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -39,7 +60,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "rest_framework.authtoken",
     "django.contrib.sites",
     "allauth",
     "allauth.account",
@@ -122,16 +142,95 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Foto profilo e PDF dei CV generati (apps.profiles.Profile.photo, apps.cv.CVDocument.pdf_file).
+# Mai serviti direttamente (Caddy risponde 404 su /media/*, Sprint 66): si
+# scaricano solo dagli URL firmati di apps.common.files.
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "mediafiles"
+if TESTING:
+    # I test lanciati nel container di produzione (`compose run web`) non
+    # devono mai scrivere nel volume media_data montato su /app/mediafiles.
+    MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="test-media-"))
+
+# Upload (Sprint 66): il file più grande accettato è il CV da importare
+# (5 MB, apps.profiles.cv_import), la foto profilo ha lo stesso tetto. Il
+# corpo non-file (JSON delle bozze, testi) resta sotto i 2,5 MB di default.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Path del Django Admin configurabile (Sprint 66): va tenuto allineato con
+# Caddy, che inoltra a Django solo /api/*, /accounts/* e questo path (stessa
+# variabile d'ambiente passata al container caddy in docker-compose.prod.yml).
+DJANGO_ADMIN_PATH = os.environ.get("DJANGO_ADMIN_PATH", "admin/").strip("/") + "/"
+
+# Cache condivisa tra i worker gunicorn (Sprint 66): serve a throttling DRF e
+# al limite dei tentativi di login dell'admin, che con la LocMemCache di
+# default sarebbero contati per processo. Nei test una DummyCache: nessuna
+# dipendenza da Redis e nessun contatore che si accumula tra un test e
+# l'altro (i test del throttling usano override_settings con una LocMemCache).
+if TESTING:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": os.environ.get("REDIS_CACHE_URL", "redis://redis:6379/2"),
+        }
+    }
+
+# Token di accesso dell'API (Sprint 66, apps.accounts.authentication):
+# scadono dopo questo numero di giorni senza alcuna richiesta.
+AUTH_TOKEN_IDLE_DAYS = 30
+
+# Registrazione su invito (Sprint 66): se valorizzato, POST /api/accounts/
+# register/ richiede `invite_code` uguale; vuoto = registrazione aperta.
+REGISTRATION_INVITE_CODE = os.environ.get("REGISTRATION_INVITE_CODE", "")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        "apps.accounts.authentication.ExpiringTokenAuthentication",
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ]
+    + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "300/min",
+        "login": "10/min",
+        "login_email": "10/hour",
+        "register": "5/hour",
+        "cv_import": "10/hour",
+        "chat": "20/min",
+        "draft_preview": "60/min",
+    },
+    # Caddy è l'unico proxy davanti a Django e sostituisce X-Forwarded-For
+    # con l'IP del client: l'identificativo usato dal throttling è quello.
+    "NUM_PROXIES": 1,
+}
+
+# Log su stdout (Sprint 66): con DEBUG=false Django non scrive gli errori
+# da nessuna parte (ADMINS vuoto). Finiscono in `docker logs`, ruotati da
+# docker-compose.prod.yml. Mai token, header o query string nei messaggi.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        # Solo gli errori 5xx: i 4xx (404, 401, 429) sono già nell'access log di Caddy.
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        "apps": {"handlers": ["console"], "level": "WARNING" if TESTING else "INFO", "propagate": False},
+    },
 }
 
 # Login via email+password (nativo Django) — nessun username scelto dall'utente

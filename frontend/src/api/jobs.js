@@ -111,7 +111,6 @@ export async function previewCvDraft(id, content) {
   const response = await fetch(`/api/jobs/${id}/cv-draft/preview/`, {
     method: 'POST',
     headers,
-    credentials: 'include',
     body: JSON.stringify(content),
   })
   if (!response.ok) {
@@ -159,7 +158,6 @@ export async function previewCoverLetterDraft(id, content) {
   const response = await fetch(`/api/jobs/${id}/cover-letter-draft/preview/`, {
     method: 'POST',
     headers,
-    credentials: 'include',
     body: JSON.stringify(content),
   })
   if (!response.ok) {

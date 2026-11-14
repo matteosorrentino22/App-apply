@@ -1587,7 +1587,7 @@ class JobDetailApiTests(APITestCase):
 
         response = self.client.get(f"/api/jobs/{self.job.pk}/")
 
-        self.assertIn("newer", response.data["cv_pdf_url"])
+        self.assertTrue(response.data["cv_pdf_url"].startswith(f"/api/files/cv/{newer.pk}/?s="))
 
 
 class MarkApplicationDoneTests(TestCase):

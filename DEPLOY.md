@@ -1,6 +1,6 @@
 # Deploy e operatività in produzione
 
-> Stato descritto: **as-is al 2026-11-14** (HEAD = Sprint 64).
+> Stato descritto: **as-is al 2026-11-14** (Sprint 66, sicurezza).
 > Riferimenti: `Docs/02-specifiche-tecniche-v5.md` §8 (infrastruttura), `CLAUDE.md` (regola "un solo file compose").
 > Questo file è nel repository pubblico: **non** riportare qui dominio, IP, email, nomi di account o utenti, token.
 
@@ -13,12 +13,14 @@ Un unico VPS Linux (1 vCPU, ~4 GB RAM) con Docker Engine + plugin Compose. Tutto
 | Servizio | Immagine / build | Ruolo |
 |---|---|---|
 | `db` | `postgres:16-alpine` | Database (volume `postgres_data`) |
-| `redis` | `redis:7-alpine` | Broker/result backend Celery |
+| `redis` | `redis:7-alpine` | Broker/result backend Celery (db 0/1) e cache Django condivisa (db 2: throttling, limite login admin, cache autocomplete) |
 | `web` | `./backend` | `migrate` + `collectstatic` all'avvio, poi `gunicorn --workers 4 --timeout 1800` |
 | `worker` | `./backend` (stessa immagine) | `celery worker` — concorrenza = n. CPU (oggi 1) |
 | `beat` | `./backend` (stessa immagine) | `celery beat` con `DatabaseScheduler` (task schedulati salvati nel DB) |
 | `frontend-build` | `./frontend` | One-shot: `npm run build` della PWA nel volume `frontend_dist`, poi termina |
-| `caddy` | `caddy:2-alpine` | HTTPS automatico (Let's Encrypt) su `$DOMAIN`, reverse proxy `/api/*`, `/admin/*`, `/accounts/*` → `web:8000`; serve direttamente `/static/*`, `/media/*` e la PWA con fallback su `index.html` |
+| `caddy` | `caddy:2-alpine` | HTTPS automatico (Let's Encrypt) su `$DOMAIN`, reverse proxy `/api/*`, path dell'admin (`DJANGO_ADMIN_PATH`), `/accounts/*` → `web:8000`; serve direttamente `/static/*` e la PWA con fallback su `index.html`; **`/media/*` → 404** (il volume `media_data` non è montato in Caddy); header di sicurezza e access log (§8.1) |
+
+`web`, `worker` e `beat` girano come utente non privilegiato `app` (**uid 1000**, `backend/Dockerfile`, Sprint 66): codice di root in sola lettura, scrivibili solo `/app/staticfiles` e `/app/mediafiles`. Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 × 10 MB per container).
 
 Perché `--timeout 1800` e 4 worker gunicorn: la **raccolta manuale** ("Collect now") esegue raccolta + scoring in sincrono dentro la richiesta HTTP (fino a ~100 job, scoring in parallelo con `SCORING_CONCURRENCY=5`); con il timeout di default i worker venivano uccisi a metà lasciando job senza punteggio (Sprint 45). Stesso rischio per generazione CV/cover letter (Sprint 44).
 
@@ -47,7 +49,10 @@ Copiare `.env.example` in `.env` alla radice del repo sul VPS e compilare. `.env
 
 | Gruppo | Chiavi | Note |
 |---|---|---|
-| Django | `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Host = dominio reale; origins = `https://<dominio>` |
+| Django | `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=false`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Host = dominio reale; origins = `https://<dominio>`. Dallo Sprint 66 `DJANGO_DEBUG` mancante = `false`, e con `DEBUG=false` l'avvio fallisce se `DJANGO_SECRET_KEY` è vuota o contiene "insecure" |
+| Admin | `DJANGO_ADMIN_PATH` (default `admin/`, con "/" finale) | Sprint 66. Letta da Django **e** dal container `caddy` (`docker-compose.prod.yml` la passa a entrambi dal `.env`): Caddy inoltra a Django solo quel path. Un path non standard riduce i tentativi automatici; il valore reale non va scritto nel repository |
+| Registrazione | `REGISTRATION_INVITE_CODE` | Sprint 66. Se valorizzato la registrazione richiede questo codice (da comunicare ai tester); vuoto = registrazione aperta |
+| Cache | `REDIS_CACHE_URL` (default `redis://redis:6379/2`) | Sprint 66. Cache Django condivisa dai worker gunicorn |
 | Database | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST=db`, `POSTGRES_PORT=5432` | |
 | Celery | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Redis del compose |
 | AI (Bedrock) | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BEDROCK_REGION`, `BEDROCK_SCORING_MODEL`, `BEDROCK_CV_GENERATION_MODEL`, `BEDROCK_CV_PARSING_MODEL` | Oggi: scoring su Haiku 4.5, generazione e parsing su Opus 5 (ID inference-profile `us.anthropic.*`). L'API Anthropic diretta non è più usata (dal 18/08/2026) |
@@ -89,14 +94,41 @@ Tutti i container `app-apply-*` devono riportare `.../docker-compose.prod.yml`. 
 ### 4.4 Test
 
 ```
-docker compose -f docker-compose.prod.yml exec -T -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (234 test, OK al 2026-11-14)
-docker compose -f docker-compose.prod.yml exec web python manage.py makemigrations --check
+docker compose -f docker-compose.prod.yml build web
+docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (299 test, OK al 2026-11-14, Sprint 66)
+docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py makemigrations --check --dry-run
+docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py check --deploy                     # con DEBUG=false: nessun problema atteso
 cd frontend && npm run test:e2e                                                     # Playwright (e2e/*.spec.js)
 ```
 
+`run --rm --no-deps` usa l'immagine appena ricostruita senza toccare i container in esecuzione (si collega al `db` di produzione solo per creare/distruggere il database di test). Nei test la cache è una `DummyCache`: niente contatori su Redis. Frontend senza toccare la PWA in produzione: `docker compose -f docker-compose.prod.yml build frontend-build` e poi `docker run --rm --entrypoint sh app-apply-frontend-build -c "npm run build && npx oxlint src"` (mai `run`/`up` del servizio `frontend-build`, che sovrascrive il volume servito da Caddy). Caddyfile: `docker run --rm -v $PWD/docker/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro -e DOMAIN=example.com -e CADDY_EMAIL=a@example.com caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile`.
+
 `-e DJANGO_DEBUG=true` è necessario: con la configurazione di produzione (`DEBUG=false` → redirect HTTPS) il test client riceve 301 su tutte le chiamate API e circa 60 test falliscono senza che ci sia una regressione. Il database di test è separato (`test_<db>`), i dati di produzione non vengono toccati.
 
-I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova.
+I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova. Dallo Sprint 66 il login è limitato a 10 tentativi al minuto per IP: una suite e2e lunga lanciata contro lo stesso ambiente può ricevere 429.
+
+### 4.5 Rilascio dello Sprint 66 (sicurezza) — passi una tantum, in ordine
+
+Da eseguire a mano sul VPS, nella cartella del repository. Effetti visibili: **tutti gli utenti devono rifare il login** (i vecchi token vengono cancellati) e la registrazione richiede il codice di invito, se configurato.
+
+1. **Backup locale** del database (§6, "Backup manuale locale").
+2. **`.env`**: aggiungere `REGISTRATION_INVITE_CODE=<codice>` e, se si vuole spostare l'admin, `DJANGO_ADMIN_PATH=<path>/` (con "/" finale; da quel momento `/admin/` non risponde più). `REDIS_CACHE_URL` serve solo se diverso dal default.
+3. **Build** delle immagini: `docker compose -f docker-compose.prod.yml build web worker beat frontend-build`.
+4. **Fermare** i servizi applicativi: `docker compose -f docker-compose.prod.yml stop web worker beat`.
+5. **Proprietario dei volumi** (i container ora girano come uid 1000; i volumi esistenti sono di root):
+   ```
+   docker run --rm -v app-apply_media_data:/m -v app-apply_static_data:/s alpine chown -R 1000:1000 /m /s
+   ```
+   I volumi creati da zero dopo questo sprint ereditano già il proprietario giusto dall'immagine.
+6. **Avvio**: `docker compose -f docker-compose.prod.yml up -d`. `web` applica le migrazioni (`accounts/0007` `AuthToken`, `accounts/0008` cancella i vecchi token DRF, `cv/0009`, `profiles/0009`, `jobs/0016`), `frontend-build` ricompila la PWA, `caddy` viene ricreato (cambiano volumi e variabili) e carica il nuovo `Caddyfile.prod`. Se `caddy` non fosse stato ricreato: `docker compose -f docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile`.
+7. **File media esistenti** (nomi casuali, foto ripulite dai metadati, eliminazione dei file non più referenziati):
+   ```
+   docker compose -f docker-compose.prod.yml exec web python manage.py secure_media_files --dry-run --delete-orphans   # solo elenco
+   docker compose -f docker-compose.prod.yml exec web python manage.py secure_media_files                             # rinomina
+   docker compose -f docker-compose.prod.yml exec web python manage.py secure_media_files --delete-orphans            # elimina gli orfani
+   ```
+   Il comando è idempotente: rilanciato, non rinomina di nuovo i file già sistemati.
+8. **Verifiche**: coerenza dello stack (§4.3); `docker compose -f docker-compose.prod.yml exec web id` → `uid=1000(app)`; `curl -sI https://<dominio>/` mostra `strict-transport-security`, `content-security-policy`, `x-frame-options` e nessun header `server`; un vecchio URL `/media/...` risponde 404; dalla PWA: login, download di CV e cover letter, anteprima PDF negli editor (CSP), foto nel profilo; login all'admin sul path configurato; access log presente in `docker compose -f docker-compose.prod.yml exec caddy ls -la /var/log/caddy`.
 
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 
@@ -159,11 +191,29 @@ Attenzione: nessuna guardia di quota/lock su questo percorso e **ogni gruppo ric
 Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da shell (`u.plan = User.Plan.PRO; u.save(update_fields=['plan'])`). Il passaggio Pro→Free disattiva tutte le ricerche (regola di downgrade, specifiche funzionali §4.2).
 
 ### 7.6 Diagnosi rapida
-- Log: `docker compose -f docker-compose.prod.yml logs --tail 200 web|worker|beat|caddy`.
+- Log applicativi: `docker compose -f docker-compose.prod.yml logs --tail 200 web|worker|beat|caddy` (errori 5xx di Django, warning, invii push falliti; mai token o query string).
+- Access log HTTP (JSON, 14 giorni): `docker compose -f docker-compose.prod.yml exec caddy tail -n 50 /var/log/caddy/access.log`.
+- Utente con "sessione scaduta" o da disconnettere da un dispositivo: Django Admin → Auth tokens (eliminare la riga del dispositivo); da shell `from apps.accounts.tokens import revoke_all_tokens; revoke_all_tokens(User.objects.get(pk=<id>))` lo disconnette ovunque.
+- Utente bloccato dal limite dei login all'admin (429): attendere 15 minuti dal primo errore.
+- Quota giornaliera dell'import CV esaurita (409): contatore `cv_import_count` di `DailyQuota`, stesso schema di §7.3.
+- Vulnerabilità note delle dipendenze (controllo manuale periodico): `docker compose -f docker-compose.prod.yml run --rm --no-deps --user root web sh -c "pip install -q pip-audit && pip-audit"` e, in `frontend/`, `npm audit --omit=dev`.
 - Esiti di raccolta, scoring, generazioni e chat: modello `RunLog` (Django Admin), con `task_type`, `status`, `message`.
 - PDF generato ma "pagina bianca" al download: quasi sempre stack misto dev/prod (§4.3).
 
-## 8. Storico verifiche di deploy
+## 8. Sicurezza HTTP, log e conservazione (Sprint 66)
+
+### 8.1 Header e CSP
+
+`Caddyfile.prod` aggiunge a tutte le risposte (anche a quelle di Django, sostituendone i valori equivalenti: niente header duplicati) `Strict-Transport-Security: max-age=31536000` (senza `includeSubDomains`), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera, microfono, geolocalizzazione, pagamenti, USB negati), e toglie `Server`. La `Content-Security-Policy` è in modalità applicata (non report-only): solo risorse della stessa origine, stili inline ammessi (Radix), immagini anche `data:`/`blob:`, `frame-src`/`object-src` limitati a `blob:` per l'anteprima PDF degli editor, `frame-ancestors 'none'`. Testo completo e motivazioni in `Docs/02-specifiche-tecniche-v5.md` §8.3. Se una futura modifica della PWA carica risorse esterne (font, script, API di terzi) la CSP va aggiornata, altrimenti il browser le blocca (errore visibile nella console).
+
+Caddy limita inoltre il corpo delle richieste su `/api/*` a 10 MB.
+
+### 8.2 Log e conservazione
+
+- **Access log di Caddy**: JSON su file nel volume `caddy_logs` (`/var/log/caddy/access.log`), ruotato ogni 24 ore (o a 10 MiB) e cancellato automaticamente dopo **14 giorni** (`roll_keep_for 336h`). Contengono gli IP dei client, quindi la conservazione è volutamente breve (14 giorni, come da informativa). La firma dei download (`?s=`) è sostituita con `REDACTED`; `Authorization`, `Cookie` e `Set-Cookie` non sono registrati.
+- **Log dei container** (Django, Celery, Postgres, Redis, stdout di Caddy): driver `json-file` con rotazione a dimensione (5 file da 10 MB per container). Django registra errori 5xx, warning e i log del package `apps`; nessun token né query string.
+
+## 9. Storico verifiche di deploy
 
 - Sprint 21 (sandbox, senza VPS): validati `docker compose -f docker-compose.prod.yml config`, gunicorn con `DJANGO_DEBUG=false` dietro proxy (redirect HTTPS/cookie sicuri, nessun loop), `collectstatic`, round-trip `pg_dump -Fc` → `pg_restore` su PostgreSQL 16, `npm run build`.
 - Produzione reale (da luglio 2026): certificato Let's Encrypt emesso da Caddy, stack completo in esecuzione da `docker-compose.prod.yml`.

@@ -68,9 +68,16 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 
+# Stesso tetto della chat del CV (apps.cv.draft_chat).
+MAX_HISTORY_TURNS_IN_PROMPT = 20
+
+
 def _build_user_content(draft, job, profile, chat_history, user_message):
     profile_context = _build_profile_context(profile)
-    history_lines = [{"role": turn["role"], "message": turn["message"]} for turn in chat_history]
+    history_lines = [
+        {"role": turn["role"], "message": turn["message"]}
+        for turn in chat_history[-MAX_HISTORY_TURNS_IN_PROMPT:]
+    ]
     return (
         f"BOZZA COVER LETTER ATTUALE (JSON, solo paragrafi editabili):\n"
         f"{json.dumps(draft.content_json, ensure_ascii=False)}\n\n"

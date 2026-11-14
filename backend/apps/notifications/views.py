@@ -18,6 +18,12 @@ class VapidPublicKeyView(APIView):
         return Response({"public_key": settings.VAPID_PUBLIC_KEY})
 
 
+# Una sottoscrizione per browser/dispositivo: oltre questo numero si
+# eliminano le più vecchie (Sprint 66), così un nuovo dispositivo non resta
+# mai escluso dalle notifiche per colpa di sottoscrizioni abbandonate.
+MAX_PUSH_SUBSCRIPTIONS_PER_USER = 10
+
+
 class PushSubscriptionView(APIView):
     """Registra (o aggiorna) la sottoscrizione Web Push del browser
     dell'utente autenticato (Sprint 17, 02-specifiche-tecniche-v3.md §3.8)."""
@@ -37,4 +43,8 @@ class PushSubscriptionView(APIView):
                 "auth_key": data["keys"]["auth"],
             },
         )
+        stale_ids = PushSubscription.objects.filter(user=request.user).order_by("-created_at", "-id").values_list(
+            "id", flat=True
+        )[MAX_PUSH_SUBSCRIPTIONS_PER_USER:]
+        PushSubscription.objects.filter(id__in=list(stale_ids)).delete()
         return Response(status=status.HTTP_201_CREATED)

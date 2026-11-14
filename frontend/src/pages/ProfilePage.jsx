@@ -176,6 +176,8 @@ export default function ProfilePage() {
   })
   const [profileCountry, setProfileCountry] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
+  // URL firmato a scadenza (Sprint 66), mai il path /media/ del file.
+  const [photoUrl, setPhotoUrl] = useState(null)
   const [companies, setCompanies] = useState([])
   const [initialExperienceIds, setInitialExperienceIds] = useState([])
   const [educations, setEducations] = useState([])
@@ -220,6 +222,7 @@ export default function ProfilePage() {
       linkedin_url: data.linkedin_url || '',
     })
     setProfileCountry(data.country_code || '')
+    setPhotoUrl(data.photo_url || null)
     setCompanies(groupExperiencesByCompany(data.experiences))
     setInitialExperienceIds((data.experiences || []).map((exp) => exp.id))
     setEducations(existingEducationsToRows(data.educations))
@@ -269,7 +272,8 @@ export default function ProfilePage() {
         const formData = new FormData()
         Object.entries(profileFields).forEach(([key, value]) => formData.append(key, value))
         formData.append('photo', photoFile)
-        await updateProfile(formData, { isMultipart: true })
+        const saved = await updateProfile(formData, { isMultipart: true })
+        setPhotoUrl(saved.photo_url || null)
       } else {
         await updateProfile(profileFields)
       }
@@ -398,10 +402,13 @@ export default function ProfilePage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="photo">{t('profile.photo')}</Label>
+              {photoUrl && (
+                <img src={photoUrl} alt={t('profile.photo')} className="h-16 w-16 rounded-full border border-border object-cover" />
+              )}
               <Input
                 id="photo"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setPhotoFile(event.target.files[0] || null)}
               />
             </div>

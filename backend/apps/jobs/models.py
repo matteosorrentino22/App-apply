@@ -133,6 +133,9 @@ class DailyQuota(models.Model):
     # tutti i piani e senza estensione a credito — il limite esiste per non
     # sprecare chiamate Apify, che pagare per superarlo vanificherebbe.
     collection_count = models.PositiveIntegerField(default=0)
+    # Import del CV in onboarding/profilo (Sprint 66): chiamata AI costosa,
+    # tetto giornaliero uguale per tutti i piani, nessuna estensione a credito.
+    cv_import_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [

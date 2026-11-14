@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 
+from apps.common.files import cover_letter_document_upload_to, cv_document_upload_to
 from apps.jobs.models import Job
 
 
@@ -14,7 +15,7 @@ class CVDocument(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cv_documents"
     )
     html_source = models.TextField()
-    pdf_file = models.FileField(upload_to="cv_documents/")
+    pdf_file = models.FileField(upload_to=cv_document_upload_to)
     generated_at = models.DateTimeField(auto_now_add=True)
     generation_type = models.CharField(max_length=10, choices=GenerationType.choices)
     # Testo "gap da colmare + istruzioni" usato per questa generazione
@@ -76,7 +77,7 @@ class CoverLetterDocument(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_letter_documents"
     )
     html_source = models.TextField()
-    pdf_file = models.FileField(upload_to="cover_letter_documents/")
+    pdf_file = models.FileField(upload_to=cover_letter_document_upload_to)
     generated_at = models.DateTimeField(auto_now_add=True)
     # Testo libero fornito dall'utente in questa generazione (indicazioni di
     # tono/enfasi e/o dettagli reali non ancora nel profilo, sotto la sua

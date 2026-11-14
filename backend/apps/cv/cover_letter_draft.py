@@ -87,6 +87,6 @@ def finalize_cover_letter_draft(job):
         content_json=draft.content_json,
     )
     document.pdf_file.save(
-        f"cover_letter_{job.pk}_{document.pk}.pdf", ContentFile(pdf_bytes), save=True
+        "cover_letter.pdf", ContentFile(pdf_bytes), save=True
     )
     return document

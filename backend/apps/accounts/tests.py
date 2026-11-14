@@ -72,3 +72,30 @@ class SetE2eAccountCommandTests(TestCase):
     def test_refuses_to_run_without_debug(self):
         with self.assertRaises(CommandError):
             call_command("set_e2e_account", "e2e-account@example.com", stdout=StringIO())
+
+
+class LostUpdateTests(APITestCase):
+    def test_patch_me_does_not_overwrite_credit_changed_meanwhile(self):
+        user = User.objects.create_user(
+            username="credit@example.com",
+            email="credit@example.com",
+            password="pw-Credit-12345!",
+            extra_credit=Decimal("12.50"),
+        )
+        # request.user è l'oggetto letto all'autenticazione: nel frattempo
+        # un'altra richiesta (o l'admin) cambia il credito nel DB.
+        self.client.force_authenticate(user)
+        User.objects.filter(pk=user.pk).update(extra_credit=Decimal("5.00"))
+
+        response = self.client.patch("/api/accounts/me/", {"first_name": "Anna"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.first_name, "Anna")
+        self.assertEqual(user.extra_credit, Decimal("5.00"))
+
+    def test_invalid_timezone_is_rejected(self):
+        user = User.objects.create_user(username="tz@example.com", email="tz@example.com", password="pw-Tz-12345!")
+        self.client.force_authenticate(user)
+        response = self.client.patch("/api/accounts/me/", {"timezone": "Mars/Base"}, format="json")
+        self.assertEqual(response.status_code, 400)

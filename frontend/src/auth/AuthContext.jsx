@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import * as authApi from '../api/auth'
-import { ApiError } from '../api/client'
+import { ApiError, AUTH_EXPIRED_EVENT } from '../api/client'
 
 const AuthContext = createContext(null)
 
@@ -27,18 +27,24 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const handleExpired = () => setUser(null)
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+  }, [])
+
   const login = useCallback(async (email, password) => {
     await authApi.login(email, password)
     return refreshUser()
   }, [refreshUser])
 
-  const register = useCallback(async (email, password) => {
-    await authApi.register(email, password)
+  const register = useCallback(async (email, password, inviteCode) => {
+    await authApi.register(email, password, inviteCode)
     return refreshUser()
   }, [refreshUser])
 
-  const logout = useCallback(() => {
-    authApi.logout()
+  const logout = useCallback(async () => {
+    await authApi.logout()
     setUser(null)
   }, [])
 

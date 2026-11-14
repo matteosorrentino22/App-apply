@@ -468,7 +468,7 @@ export default function OnboardingPage() {
                   <Input
                     id="photo"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     onChange={(event) => setPhotoFile(event.target.files[0] || null)}
                   />
                 </div>

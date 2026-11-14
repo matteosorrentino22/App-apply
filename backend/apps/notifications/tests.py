@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -189,7 +189,7 @@ class PushSubscriptionApiTests(APITestCase):
 
     def test_registers_a_new_subscription(self):
         payload = {
-            "endpoint": "https://push.example.com/xyz",
+            "endpoint": "https://fcm.googleapis.com/fcm/send/xyz",
             "keys": {"p256dh": "p256dh-key", "auth": "auth-key"},
         }
 
@@ -202,7 +202,7 @@ class PushSubscriptionApiTests(APITestCase):
 
     def test_registering_the_same_endpoint_again_updates_instead_of_duplicating(self):
         payload = {
-            "endpoint": "https://push.example.com/xyz",
+            "endpoint": "https://fcm.googleapis.com/fcm/send/xyz",
             "keys": {"p256dh": "p256dh-key-1", "auth": "auth-key-1"},
         }
         self.client.post("/api/notifications/push-subscriptions/", payload, format="json")
@@ -238,3 +238,99 @@ class VapidPublicKeyApiTests(APITestCase):
         response = self.client.get("/api/notifications/vapid-public-key/")
 
         self.assertEqual(response.status_code, 401)
+
+
+class PushSecurityTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="pushsec@example.com", email="pushsec@example.com", password="pw-PushSec-12345!"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _subscribe(self, endpoint):
+        return self.client.post(
+            "/api/notifications/push-subscriptions/",
+            {"endpoint": endpoint, "keys": {"p256dh": "k", "auth": "a"}},
+            format="json",
+        )
+
+    def test_only_known_push_services_over_https_are_accepted(self):
+        for endpoint in [
+            "https://fcm.googleapis.com/fcm/send/abc",
+            "https://updates.push.services.mozilla.com/wpush/v2/abc",
+            "https://web.push.apple.com/abc",
+            "https://wns2-par02p.notify.windows.com/w/?token=abc",
+        ]:
+            self.assertEqual(self._subscribe(endpoint).status_code, 201, endpoint)
+        for endpoint in [
+            "http://fcm.googleapis.com/fcm/send/abc",
+            "https://fcm.googleapis.com:8443/fcm/send/abc",
+            "https://169.254.169.254/latest",
+            "https://web:8000/api/",
+            "https://push.apple.com.evil.example/abc",
+            "https://evilpush.apple.com/abc",
+        ]:
+            self.assertEqual(self._subscribe(endpoint).status_code, 400, endpoint)
+
+    def test_at_most_ten_subscriptions_per_user_keeping_the_newest(self):
+        for index in range(12):
+            self._subscribe(f"https://fcm.googleapis.com/fcm/send/{index}")
+
+        endpoints = set(PushSubscription.objects.filter(user=self.user).values_list("endpoint", flat=True))
+        self.assertEqual(len(endpoints), 10)
+        self.assertIn("https://fcm.googleapis.com/fcm/send/11", endpoints)
+        self.assertNotIn("https://fcm.googleapis.com/fcm/send/0", endpoints)
+
+    def test_webpush_is_called_with_a_timeout(self):
+        from .services import send_web_push
+
+        subscription = PushSubscription.objects.create(
+            user=self.user, endpoint="https://fcm.googleapis.com/fcm/send/t", p256dh_key="k", auth_key="a"
+        )
+        with patch("apps.notifications.services.webpush") as mock_webpush:
+            send_web_push(subscription, {"title": "t"})
+        self.assertEqual(mock_webpush.call_args.kwargs["timeout"], 10)
+
+    def test_gone_subscription_is_deleted(self):
+        from pywebpush import WebPushException
+
+        from .services import send_web_push
+
+        subscription = PushSubscription.objects.create(
+            user=self.user, endpoint="https://fcm.googleapis.com/fcm/send/gone", p256dh_key="k", auth_key="a"
+        )
+        error = WebPushException("gone", response=MagicMock(status_code=410))
+        with patch("apps.notifications.services.webpush", side_effect=error):
+            send_web_push(subscription, {"title": "t"})
+        self.assertFalse(PushSubscription.objects.filter(pk=subscription.pk).exists())
+
+    def test_an_error_does_not_stop_other_subscriptions_or_users(self):
+        from .tasks import send_inactivity_notifications
+
+        other = User.objects.create_user(
+            username="pushsec2@example.com", email="pushsec2@example.com", password="pw-PushSec-12345!"
+        )
+        old = timezone.now() - timedelta(days=8)
+        User.objects.filter(pk__in=[self.user.pk, other.pk]).update(last_activity_reset=old)
+        for user, name in [(self.user, "a"), (self.user, "b"), (other, "c")]:
+            PushSubscription.objects.create(
+                user=user, endpoint=f"https://fcm.googleapis.com/fcm/send/{name}", p256dh_key="k", auth_key="a"
+            )
+
+        with patch(
+            "apps.notifications.tasks.send_web_push", side_effect=[RuntimeError("500"), None, None]
+        ) as mock_send, self.assertLogs("apps.notifications.tasks", level="WARNING"):
+            send_inactivity_notifications()
+
+        self.assertEqual(mock_send.call_count, 3)
+        self.assertTrue(User.objects.get(pk=other.pk).last_inactivity_notified_at)
+
+    def test_an_exception_for_one_user_does_not_stop_the_round(self):
+        from .tasks import send_morning_notifications
+
+        User.objects.create_user(username="pushsec3@example.com", email="pushsec3@example.com", password="pw-X-12345!aa")
+        with patch(
+            "apps.notifications.tasks.send_morning_notification_for_user", side_effect=[RuntimeError("tz"), None]
+        ) as mock_user, self.assertLogs("apps.notifications.tasks", level="ERROR"):
+            send_morning_notifications()
+        self.assertEqual(mock_user.call_count, 2)

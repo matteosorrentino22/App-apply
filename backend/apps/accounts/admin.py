@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import User
+from .models import AuthToken, User
 
 
 @admin.register(User)
@@ -25,3 +25,17 @@ class UserAdmin(DjangoUserAdmin):
         ),
     )
     list_display = DjangoUserAdmin.list_display + ("plan", "extra_credit")
+
+
+@admin.register(AuthToken)
+class AuthTokenAdmin(admin.ModelAdmin):
+    """Sola lettura, eliminabile: cancellare una riga disconnette quel
+    dispositivo. La chiave non è recuperabile (nel DB c'è solo l'hash)."""
+
+    list_display = ("user", "created_at", "last_used_at", "user_agent")
+    search_fields = ("user__email",)
+    readonly_fields = ("user", "created_at", "last_used_at", "user_agent")
+    exclude = ("key_hash",)
+
+    def has_add_permission(self, request):
+        return False

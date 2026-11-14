@@ -22,6 +22,8 @@ export const translations = {
       submit: 'Registrati',
       hasAccount: 'Hai già un account?',
       loginLink: 'Accedi',
+      inviteCode: 'Codice di invito',
+      inviteCodeHint: "Richiesto durante la fase di test: lo ricevi da chi ti ha invitato.",
     },
     onboarding: {
       title: 'Configura il tuo profilo',
@@ -434,6 +436,7 @@ export const translations = {
     common: {
       loading: 'Caricamento…',
       genericError: 'Qualcosa è andato storto. Riprova.',
+      tooManyRequests: 'Troppi tentativi. Attendi qualche minuto e riprova.',
       or: 'oppure',
     },
   },
@@ -456,6 +459,8 @@ export const translations = {
       submit: 'Sign up',
       hasAccount: 'Already have an account?',
       loginLink: 'Log in',
+      inviteCode: 'Invite code',
+      inviteCodeHint: 'Required during the test phase: you get it from whoever invited you.',
     },
     onboarding: {
       title: 'Set up your profile',
@@ -862,6 +867,7 @@ export const translations = {
     common: {
       loading: 'Loading…',
       genericError: 'Something went wrong. Please try again.',
+      tooManyRequests: 'Too many attempts. Wait a few minutes and try again.',
       or: 'or',
     },
   },

@@ -126,6 +126,6 @@ def finalize_cv_draft(job):
         content_json=draft.content_json,
     )
     cv_document.pdf_file.save(
-        f"cv_{job.pk}_{cv_document.pk}.pdf", ContentFile(pdf_bytes), save=True
+        "cv.pdf", ContentFile(pdf_bytes), save=True
     )
     return cv_document

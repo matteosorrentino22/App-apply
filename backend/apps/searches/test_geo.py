@@ -2,7 +2,10 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APITestCase
+
+from apps.common.testing import LOCMEM_CACHES
 
 User = get_user_model()
 
@@ -14,6 +17,7 @@ def _fake_nominatim_response(items):
     return response
 
 
+@override_settings(CACHES=LOCMEM_CACHES)
 class CityAutocompleteApiTests(APITestCase):
     def setUp(self):
         cache.clear()

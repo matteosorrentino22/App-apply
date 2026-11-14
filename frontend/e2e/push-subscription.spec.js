@@ -51,7 +51,7 @@ async function registerUser(request, baseURL) {
 // Si mocka quindi solo l'API nativa (Notification.requestPermission,
 // PushManager.subscribe), mantenendo reale il service worker della build di
 // produzione, per verificare il codice di integrazione scritto per Sprint 20.
-const FAKE_ENDPOINT = 'https://fake-push.example.com/abc123'
+const FAKE_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/e2e-fake-abc123'
 
 async function mockPushApi(page) {
   await page.addInitScript((endpoint) => {
