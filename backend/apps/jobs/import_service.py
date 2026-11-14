@@ -3,6 +3,7 @@ import re
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.accounts.models import User
 
@@ -52,7 +53,7 @@ def _reserve_import_quota_or_credit(user):
     """Controllo e riserva atomici del contatore giornaliero `import_count`
     (Pro: 3/giorno) o del credito extra (`PRICE_IMPORT_EXTRA`), stessa
     struttura della riserva per la generazione manuale (Sprint 12)."""
-    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
 
     if quota.import_count < IMPORT_DAILY_LIMIT:
@@ -68,14 +69,14 @@ def _reserve_import_quota_or_credit(user):
         return "credit"
 
     raise ImportRejected(
-        "Hai raggiunto il limite giornaliero di import e il saldo credito non è sufficiente."
+        _("Hai raggiunto il limite giornaliero di import e il saldo credito non è sufficiente.")
     )
 
 
 @transaction.atomic
 def _refund_import(user, charge_mode):
     if charge_mode == "quota":
-        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
         quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
         quota.import_count = max(0, quota.import_count - 1)
         quota.save(update_fields=["import_count"])
@@ -91,16 +92,16 @@ def import_job_from_url(user, url):
     generazione automatica di CV anche se il punteggio risulta 4-5 (a
     differenza del ciclo notturno, Sprint 11 — l'import è sempre manuale)."""
     if user.plan != User.Plan.PRO:
-        raise ImportNotAllowed("L'import manuale di job è riservato al piano Pro.")
+        raise ImportNotAllowed(_("L'import manuale di job è riservato al piano Pro."))
 
     external_id = _extract_external_id(url)
     if external_id is None:
-        raise ImportRejected("Impossibile importare quel job.")
+        raise ImportRejected(_("Impossibile importare quel job."))
 
     if Job.objects.filter(
         user=user, source=Job.Source.LINKEDIN, external_id=external_id
     ).exists():
-        raise ImportDuplicate("Questo job è già nella tua lista.")
+        raise ImportDuplicate(_("Questo job è già nella tua lista."))
 
     charge_mode = _reserve_import_quota_or_credit(user)
 
@@ -113,7 +114,7 @@ def import_job_from_url(user, url):
     # 68): un campo troppo lungo farebbe fallire l'INSERT con un DataError.
     if not offer or offer_rejection_reason(offer) is not None:
         _refund_import(user, charge_mode)
-        raise ImportRejected("Impossibile importare quel job.")
+        raise ImportRejected(_("Impossibile importare quel job."))
 
     try:
         # Savepoint: due import simultanei dello stesso link passano entrambi
@@ -139,7 +140,7 @@ def import_job_from_url(user, url):
             )
     except IntegrityError:
         _refund_import(user, charge_mode)
-        raise ImportDuplicate("Questo job è già nella tua lista.")
+        raise ImportDuplicate(_("Questo job è già nella tua lista."))
     except Exception:
         _refund_import(user, charge_mode)
         raise

@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404
 from django.utils.encoding import force_str
 from django.utils.http import urlencode, urlsafe_base64_decode
+from django.utils.translation import gettext as _
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
@@ -47,6 +48,13 @@ EXPORT_URL_MAX_AGE = 10 * 60
 
 def _user_agent(request):
     return request.META.get("HTTP_USER_AGENT", "")
+
+
+def _email_unavailable_response():
+    return Response(
+        {"code": "email_unavailable", "detail": _("L'invio di email non è disponibile.")},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 class RegisterView(generics.CreateAPIView):
@@ -94,7 +102,7 @@ class LoginView(APIView):
             return Response(
                 {
                     "code": "email_not_verified",
-                    "detail": "Conferma il tuo indirizzo email con il link che ti abbiamo inviato.",
+                    "detail": _("Conferma il tuo indirizzo email con il link che ti abbiamo inviato."),
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -176,12 +184,12 @@ class VerifyEmailView(APIView):
         try:
             user_id, email = read_verification_token(serializer.validated_data["token"])
         except signing.SignatureExpired:
-            return Response({"code": "expired", "detail": "Link scaduto."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "expired", "detail": _("Link scaduto.")}, status=status.HTTP_400_BAD_REQUEST)
         except signing.BadSignature:
-            return Response({"code": "invalid", "detail": "Link non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "invalid", "detail": _("Link non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         user = User.objects.filter(pk=user_id, email__iexact=email, is_active=True).first()
         if user is None:
-            return Response({"code": "invalid", "detail": "Link non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "invalid", "detail": _("Link non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         if not user.email_verified:
             User.objects.filter(pk=user.pk).update(email_verified=True)
         return Response({"status": "verified"})
@@ -202,10 +210,7 @@ class _EmailRequestView(APIView):
 
     def post(self, request):
         if not email_enabled():
-            return Response(
-                {"code": "email_unavailable", "detail": "L'invio di email non è disponibile."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+            return _email_unavailable_response()
         serializer = EmailOnlySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = User.objects.filter(email__iexact=serializer.validated_data["email"], is_active=True).first()
@@ -242,7 +247,7 @@ class PasswordResetConfirmView(APIView):
         user = User.objects.filter(pk=user_id, is_active=True).first() if user_id else None
         if user is None or not default_token_generator.check_token(user, data["token"]):
             return Response(
-                {"code": "invalid_link", "detail": "Link non valido o scaduto."},
+                {"code": "invalid_link", "detail": _("Link non valido o scaduto.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
@@ -272,9 +277,6 @@ class ChangePasswordView(APIView):
         return Response({"token": create_token(user, _user_agent(request))})
 
 
-EMAIL_UNAVAILABLE_RESPONSE = {"code": "email_unavailable", "detail": "L'invio di email non è disponibile."}
-
-
 class EmailChangeRequestView(APIView):
     """Cambio dell'email di accesso (Sprint 70, diritto di rettifica):
     password + nuovo indirizzo → link di conferma al nuovo indirizzo e avviso
@@ -286,7 +288,7 @@ class EmailChangeRequestView(APIView):
 
     def post(self, request):
         if not email_enabled():
-            return Response(EMAIL_UNAVAILABLE_RESPONSE, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return _email_unavailable_response()
         serializer = EmailChangeSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_email = serializer.validated_data["new_email"]
@@ -309,15 +311,15 @@ class EmailChangeConfirmView(APIView):
         try:
             user_id, old_email, new_email = read_email_change_token(serializer.validated_data["token"])
         except signing.SignatureExpired:
-            return Response({"code": "expired", "detail": "Link scaduto."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "expired", "detail": _("Link scaduto.")}, status=status.HTTP_400_BAD_REQUEST)
         except signing.BadSignature:
-            return Response({"code": "invalid", "detail": "Link non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "invalid", "detail": _("Link non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         user = User.objects.filter(pk=user_id, email__iexact=old_email, is_active=True).first()
         if user is None:
-            return Response({"code": "invalid", "detail": "Link non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"code": "invalid", "detail": _("Link non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
             return Response(
-                {"code": "email_taken", "detail": "Questo indirizzo è già usato da un altro account."},
+                {"code": "email_taken", "detail": _("Questo indirizzo è già usato da un altro account.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Lo username resta uguale all'email (§4.1 tecniche): il login lo usa.

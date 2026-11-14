@@ -1,4 +1,5 @@
 import { apiFetch, getToken } from './client'
+import { currentLanguage } from '../i18n/language'
 
 export function fetchJobs({
   section = 'main',
@@ -115,7 +116,7 @@ export function recordCvDraftChatDecision(id, messageIndex, actionIndex, decisio
 // non nel body — un fetch diretto resta più semplice che adattare il
 // wrapper generico per questo unico caso.
 export async function previewCvDraft(id, content) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers = { 'Content-Type': 'application/json', 'Accept-Language': currentLanguage() }
   const token = getToken()
   if (token) headers.Authorization = `Token ${token}`
 
@@ -166,7 +167,7 @@ export function finalizeCoverLetterDraft(id, content) {
 // Stesso motivo di `previewCvDraft`: risposta PDF binaria con il
 // conteggio pagine in un header custom.
 export async function previewCoverLetterDraft(id, content) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers = { 'Content-Type': 'application/json', 'Accept-Language': currentLanguage() }
   const token = getToken()
   if (token) headers.Authorization = `Token ${token}`
 

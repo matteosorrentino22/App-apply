@@ -11,6 +11,7 @@ import copy
 
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.utils.translation import gettext as _
 
 from apps.profiles.language_options import LANGUAGE_LEVEL_LABELS, LANGUAGE_NAME_LABELS
 
@@ -60,7 +61,7 @@ def seed_draft_for_job(job):
     sovrascrivendo contenuto e chat (scelta "riparti dal nuovo documento")."""
     latest = latest_cv_document(job)
     if latest is None or not latest.content_json:
-        raise NoCvDocumentToEdit("Genera prima un CV per questo job.")
+        raise NoCvDocumentToEdit(_("Genera prima un CV per questo job."))
 
     content = copy.deepcopy(latest.content_json)
     ensure_cv_bullet_ids(content)
@@ -159,7 +160,7 @@ def finalize_cv_draft(job, content=None):
     try:
         draft = load_cv_draft(job)
     except CVDraft.DoesNotExist as exc:
-        raise NoDraftToFinalize("Apri prima l'editor per questo CV.") from exc
+        raise NoDraftToFinalize(_("Apri prima l'editor per questo CV.")) from exc
 
     if content is not None:
         draft.content_json = content

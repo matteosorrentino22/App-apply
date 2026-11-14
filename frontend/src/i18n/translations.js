@@ -1285,9 +1285,4 @@ export const translations = {
   },
 }
 
-export const SUPPORTED_LANGUAGES = ['it', 'en']
-
-export function detectDeviceLanguage() {
-  const raw = (typeof navigator !== 'undefined' && navigator.language) || 'en'
-  return raw.toLowerCase().startsWith('it') ? 'it' : 'en'
-}
+export { detectDeviceLanguage, SUPPORTED_LANGUAGES } from './language'

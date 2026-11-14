@@ -98,7 +98,7 @@ Tutti i container `app-apply-*` devono riportare `.../docker-compose.prod.yml`. 
 
 ```
 docker compose -f docker-compose.prod.yml build web
-docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true -e REGISTRATION_INVITE_CODE= web python manage.py test --noinput   # suite backend (419 test, OK al 2026-11-14, Sprint 70)
+docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true -e REGISTRATION_INVITE_CODE= web python manage.py test --noinput   # suite backend (465 test, OK al 2026-11-14, Sprint 71)
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py makemigrations --check --dry-run
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py check --deploy                     # con DEBUG=false: nessun problema atteso
 cd frontend && npm run test:e2e                                                     # Playwright (e2e/*.spec.js)
@@ -191,6 +191,27 @@ Nessuna migrazione, nessuna variabile d'ambiente nuova, nessun comando sui dati.
 2. **Avvio**: `docker compose -f docker-compose.prod.yml up -d` (`frontend-build` ricompila la PWA).
 3. **Prima volta dopo il rilascio**: le schede già aperte eseguono ancora il bundle precedente, che non conosce l'avviso "Nuova versione disponibile": vanno ricaricate una volta a mano (o chiuse e riaperte). Dai rilasci successivi l'avviso compare da solo (entro 30 minuti o al ritorno sulla scheda).
 4. **Verifiche**: coerenza dello stack (§4.3); dalla PWA: Impostazioni con il titolo "Impostazioni", "I tuoi limiti di oggi" con contatori e prezzi, fuso orario modificabile; "Esci" (icona in alto a destra) da una pagina qualsiasi; Profilo con foto rimovibile, tecnologie e obiettivo; cambio email di prova (link al nuovo indirizzo, avviso al vecchio, login con il nuovo indirizzo dopo la conferma).
+
+### 4.9 Rilascio dello Sprint 71 (testi del backend in it/en) e traduzioni
+
+Nessuna migrazione, nessuna variabile d'ambiente nuova, nessun cambio alla build: il catalogo compilato `backend/locale/en/LC_MESSAGES/django.mo` è nel repository ed entra nell'immagine con il resto del codice (l'immagine non contiene `gettext`).
+
+1. **Build**: `docker compose -f docker-compose.prod.yml build web worker beat frontend-build` (il `worker` serve per le notifiche e lo scoring in inglese, `frontend-build` perché la PWA invii `Accept-Language`).
+2. **Avvio**: `docker compose -f docker-compose.prod.yml up -d`.
+3. **Prima volta dopo il rilascio**: le schede aperte con il bundle precedente non mandano ancora `Accept-Language` e ricevono i messaggi in italiano (o nella lingua del browser, se italiano o inglese) finché non si aggiornano ("Nuova versione disponibile — Aggiorna", Sprint 70).
+4. **Verifiche**: coerenza dello stack (§4.3); dalla PWA con interfaccia in inglese un login con password errata mostra "Invalid credentials.", in italiano "Credenziali non valide."; il Django Admin resta in italiano. Da shell: `curl -s -H 'Accept-Language: en' -H 'Content-Type: application/json' -d '{"email":"x@example.com","password":"x"}' https://$DOMAIN/api/accounts/login/`.
+
+**Aggiungere o modificare un testo rivolto all'utente** (regola in `CLAUDE.md`): marcarlo con `gettext` (`_("…")`, msgid in italiano, segnaposto con nome `%(nome)s`), poi rigenerare `.po` e `.mo` in un container usa e getta con `gettext` installato, dalla radice del repository:
+
+```
+docker compose -f docker-compose.prod.yml build web
+docker run --rm -u root -v "$PWD/backend:/app" -e DJANGO_DEBUG=true app-apply-web sh -c "
+  apt-get update -qq && apt-get install -y -qq --no-install-recommends gettext >/dev/null &&
+  python manage.py makemessages -l en --add-location=file --no-obsolete --ignore=staticfiles --ignore=mediafiles --ignore=backups &&
+  python manage.py compilemessages -l en --ignore=staticfiles --ignore=mediafiles --ignore=backups"
+```
+
+Poi completare in `backend/locale/en/LC_MESSAGES/django.po` le voci con `msgstr ""` e togliere i `#, fuzzy` (makemessages propone in automatico traduzioni di frasi simili, spesso sbagliate: vanno controllate e il flag rimosso), rilanciare lo stesso comando per ricompilare il `.mo` e committare entrambi i file. `apps/common/test_i18n.py` fallisce se restano voci vuote o fuzzy o se il `.mo` non corrisponde al `.po`. Il comando non usa il database e scrive solo in `backend/locale/`; i file creati da root nel bind mount vanno eventualmente riassegnati all'utente del repository.
 
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 

@@ -3,6 +3,8 @@ import logging
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -35,7 +37,7 @@ class ProfileViewSet(
 
     @action(detail=False, methods=["get", "patch"])
     def me(self, request):
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile, _created = Profile.objects.get_or_create(user=request.user)
         if request.method == "PATCH":
             serializer = self.get_serializer(profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
@@ -65,10 +67,10 @@ class ProfileSectionViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(profile__user=self.request.user)
 
     def perform_create(self, serializer):
-        profile, _ = Profile.objects.get_or_create(user=self.request.user)
+        profile, _created = Profile.objects.get_or_create(user=self.request.user)
         if self.max_items is not None and self.get_queryset().count() >= self.max_items:
             raise serializers.ValidationError(
-                {"detail": f"Hai raggiunto il numero massimo di voci per questa sezione ({self.max_items})."}
+                {"detail": _("Hai raggiunto il numero massimo di voci per questa sezione (%(max)s).") % {"max": self.max_items}}
             )
         serializer.save(profile=profile)
 
@@ -109,12 +111,12 @@ logger = logging.getLogger(__name__)
 # senza credito: ogni import è una chiamata al modello più costoso.
 CV_IMPORT_DAILY_LIMIT = 5
 
-UNREADABLE_CV_MESSAGE = "non siamo riusciti a leggere il CV, compila il profilo manualmente"
+UNREADABLE_CV_MESSAGE = gettext_lazy("non siamo riusciti a leggere il CV, compila il profilo manualmente")
 
 
 @transaction.atomic
 def _reserve_cv_import(user):
-    quota, _ = DailyQuota.objects.get_or_create(
+    quota, _created = DailyQuota.objects.get_or_create(
         user=user, date=timezone.localtime(timezone.now()).date()
     )
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
@@ -132,13 +134,13 @@ class CVImportView(PostOnlyScopeMixin, APIView):
     post_throttle_scope = "cv_import"
 
     # Ogni errore ha un `code` stabile (Sprint 70): la PWA mostra un
-    # messaggio specifico nella lingua dell'interfaccia; `detail` resta in
-    # italiano come gli altri errori del backend.
+    # messaggio specifico nella lingua dell'interfaccia; `detail` è nella
+    # lingua della richiesta (Accept-Language, Sprint 71).
     def post(self, request):
         uploaded_file = request.FILES.get("file")
         if uploaded_file is None:
             return Response(
-                {"code": "file_missing", "detail": "Nessun file caricato."},
+                {"code": "file_missing", "detail": _("Nessun file caricato.")},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -163,7 +165,7 @@ class CVImportView(PostOnlyScopeMixin, APIView):
             return Response(
                 {
                     "code": "quota_exceeded",
-                    "detail": f"Hai raggiunto il limite di {CV_IMPORT_DAILY_LIMIT} import del CV per oggi.",
+                    "detail": _("Hai raggiunto il limite di %(max)s import del CV per oggi.") % {"max": CV_IMPORT_DAILY_LIMIT},
                     "limit": CV_IMPORT_DAILY_LIMIT,
                 },
                 status=status.HTTP_409_CONFLICT,
@@ -176,7 +178,7 @@ class CVImportView(PostOnlyScopeMixin, APIView):
             return Response(
                 {
                     "code": "ai_unavailable",
-                    "detail": "Il servizio di lettura del CV non è disponibile in questo momento: riprova più tardi.",
+                    "detail": _("Il servizio di lettura del CV non è disponibile in questo momento: riprova più tardi."),
                 },
                 status=status.HTTP_502_BAD_GATEWAY,
             )

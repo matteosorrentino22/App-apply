@@ -80,6 +80,9 @@ SITE_ID = 1
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # Dopo le sessioni e prima di CommonMiddleware, come LocaleMiddleware
+    # (Sprint 71): lingua dei messaggi dell'API da Accept-Language.
+    "apps.common.middleware.ApiLocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -133,8 +136,16 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Europe/Rome governa il batch notturno e il reset delle quote giornaliere
 # (02-specifiche-tecniche-v3.md §7): fuso di sistema unico per Django/Celery Beat.
-LANGUAGE_CODE = "it-it"
 TIME_ZONE = "Europe/Rome"
+# Testi rivolti all'utente (Sprint 71): sorgenti in italiano con gettext,
+# traduzione inglese in locale/en/LC_MESSAGES/django.po (.mo compilato e
+# committato, comandi in DEPLOY.md §4.9). Nelle richieste API la lingua
+# arriva da Accept-Language (apps.common.middleware.ApiLocaleMiddleware);
+# nei task (notifiche, scoring) da User.interface_language. Qualunque altra
+# lingua ricade sull'italiano, come il Django Admin.
+LANGUAGE_CODE = "it"
+LANGUAGES = [("it", "Italiano"), ("en", "English")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
 USE_I18N = True
 USE_TZ = True
 
@@ -277,6 +288,8 @@ REST_FRAMEWORK = {
         "password_check": "10/hour",
         "data_export": "3/day",
     },
+    # Messaggio del 429 tradotto (Sprint 71), il resto come l'handler di DRF.
+    "EXCEPTION_HANDLER": "apps.common.exceptions.api_exception_handler",
     # Caddy è l'unico proxy davanti a Django e sostituisce X-Forwarded-For
     # con l'IP del client: l'identificativo usato dal throttling è quello.
     "NUM_PROXIES": 1,

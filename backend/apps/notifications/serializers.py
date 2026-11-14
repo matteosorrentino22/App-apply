@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit
 
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 # Push service dei browser supportati (Sprint 66): l'endpoint arriva dal
@@ -36,10 +37,10 @@ class PushSubscriptionSerializer(serializers.Serializer):
 
     def validate_endpoint(self, value):
         if not is_allowed_push_endpoint(value):
-            raise serializers.ValidationError("Endpoint di notifica non supportato.")
+            raise serializers.ValidationError(_("Endpoint di notifica non supportato."))
         return value
 
     def validate_keys(self, value):
         if "p256dh" not in value or "auth" not in value:
-            raise serializers.ValidationError("Richiede le chiavi 'p256dh' e 'auth'.")
+            raise serializers.ValidationError(_("Richiede le chiavi 'p256dh' e 'auth'."))
         return value

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.jobs.models import DailyQuota, Job, RunLog, is_generation_active
 
@@ -36,7 +37,7 @@ def _today_europe_rome():
 
 
 def _reserve_quota_or_credit(user):
-    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
 
     limit = REFERRAL_MESSAGE_PLAN_LIMITS[user.plan]
@@ -53,15 +54,14 @@ def _reserve_quota_or_credit(user):
         return "credit"
 
     raise ReferralMessageGenerationRejected(
-        "Hai raggiunto il limite giornaliero di messaggi di networking e "
-        "il saldo credito non è sufficiente."
+        _("Hai raggiunto il limite giornaliero di messaggi di networking e il saldo credito non è sufficiente.")
     )
 
 
 @transaction.atomic
 def _refund(user, charge_mode):
     if charge_mode == "quota":
-        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
         quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
         quota.referral_message_count = max(0, quota.referral_message_count - 1)
         quota.save(update_fields=["referral_message_count"])
@@ -82,7 +82,7 @@ def _guard_and_reserve(job):
     if is_generation_active(
         locked_job.referral_message_generation_in_progress, locked_job.referral_message_generation_started_at
     ):
-        raise ReferralMessageGenerationRejected("Generazione già in corso per questo job.")
+        raise ReferralMessageGenerationRejected(_("Generazione già in corso per questo job."))
 
     charge_mode = _reserve_quota_or_credit(locked_job.user)
 
@@ -134,7 +134,7 @@ def request_referral_message_generation(
         if isinstance(exc, SystemExit):
             raise
         raise ReferralMessageGenerationFailed(
-            "Impossibile creare il messaggio per questo job."
+            _("Impossibile creare il messaggio per questo job.")
         ) from exc
 
     Job.objects.filter(pk=job.pk).update(

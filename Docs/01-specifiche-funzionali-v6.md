@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -61,7 +61,7 @@ La v6 fonde le due versioni divergenti precedenti: la v4 in radice, che aveva re
   - arricchimento ristretto alle esperienze esistenti;
   - qualifica professionale;
   - vincoli minimi del profilo.
-- **v6** (14/11/2026): fusione di v4 e v5 e allineamento all'as-is degli sprint 40–64 (vedi nota sopra). Le versioni superate sono in `Docs/archivio/`. Aggiornata in place con lo Sprint 66 (sicurezza), lo Sprint 67 (privacy e GDPR: consensi in registrazione, verifica dell'email, recupero e cambio password, export e cancellazione dell'account, pagine legali, preferenza notifiche, avviso AI), lo Sprint 68 (lista, scoring, raccolta) e lo Sprint 70 (contatori e prezzi visibili, fuso orario, cambio email, logout ovunque, notifiche al logout, pagina Profilo completa, avviso di nuova versione).
+- **v6** (14/11/2026): fusione di v4 e v5 e allineamento all'as-is degli sprint 40–64 (vedi nota sopra). Le versioni superate sono in `Docs/archivio/`. Aggiornata in place con lo Sprint 66 (sicurezza), lo Sprint 67 (privacy e GDPR: consensi in registrazione, verifica dell'email, recupero e cambio password, export e cancellazione dell'account, pagine legali, preferenza notifiche, avviso AI), lo Sprint 68 (lista, scoring, raccolta), lo Sprint 70 (contatori e prezzi visibili, fuso orario, cambio email, logout ovunque, notifiche al logout, pagina Profilo completa, avviso di nuova versione) e lo Sprint 71 (messaggi del server e notifiche nella lingua dell'interfaccia).
 
 ---
 
@@ -300,7 +300,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
   - Con una descrizione vuota o non valutabile, match e gap sono vuoti e il punteggio non supera 6.
   - Lo scoring non inventa competenze e non segnala come gap ciò che è già nel profilo. Al modello arrivano titolo, azienda, **località** (dallo Sprint 68) e descrizione dell'offerta.
 - **Limite per lingua richiesta** (Sprint 48). Se l'offerta richiede una lingua (dichiarata necessaria, oppure annuncio scritto interamente in una lingua diversa dall'inglese) che **non è nel profilo a nessun livello**, il punteggio è limitato a **3** (`LANGUAGE_MISMATCH_SCORE_CAP`).
-  - La motivazione si apre con "Punteggio limitato a 3/10: lingua richiesta (…) assente dal profilo."
+  - La motivazione si apre con "Punteggio limitato a 3/10: lingua richiesta (…) assente dal profilo." oppure, per chi ha l'interfaccia in inglese, "Score capped at 3/10: required language (…) missing from the profile." (Sprint 71): vale la lingua dell'interfaccia del momento in cui l'offerta viene valutata, e la frase non cambia se poi l'utente cambia lingua. Il resto della motivazione è scritto dall'AI e non dipende dalla lingua dell'interfaccia.
   - Fanno eccezione le offerte che dichiarano un ambiente internazionale o di lavoro in inglese.
 - **Nessuna generazione automatica di CV** (Sprint 45): il ciclo notturno è solo raccolta più scoring. Tutti i job nascono in stato "nuovo" (§4.6).
 - **Fallimenti:**
@@ -585,17 +585,17 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 - Parte nella fascia **10:00–10:59 locali**, **solo se** esistono **nuovi job**: job creati **dopo l'ultima notifica mattutina** inviata a quell'utente (o dopo la registrazione).
 - Contano tutti i job nuovi: raccolti di notte o con la raccolta manuale, importati, creati a mano, anche senza punteggio.
 - Ogni batch viene annunciato **una sola volta**.
-- Testo: "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista".
+- Testo: "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista" (in inglese: "New jobs ready" / "There are new job offers to review in your list").
 
 **Notifica di inattività.**
 - Parte se **per 7 giorni** l'utente non segna alcuna "candidatura fatta". Il timer parte dalla registrazione e si azzera a ogni candidatura.
 - Viene inviata una sola volta per periodo di inattività.
 - Scatta anche per chi non ha mai generato documenti e per chi usa l'app senza marcare candidature (effetto voluto, §8).
-- Testo: "Non ti candidi da un po'" / "Entra nell'app e valuta le offerte in attesa".
+- Testo: "Non ti candidi da un po'" / "Entra nell'app e valuta le offerte in attesa" (in inglese: "You haven't applied in a while" / "Open the app and review the pending job offers").
 
 **Valgono per entrambe:**
 - un clic sulla notifica apre l'app sulla lista;
-- i testi sono **solo in italiano**, qualunque sia la lingua dell'interfaccia;
+- i testi sono in italiano o in inglese secondo la **lingua dell'interfaccia** salvata sull'account al momento dell'invio (Sprint 71; prima solo in italiano);
 - l'"ora locale" è quella del fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
 
 ### 4.13 Home e statistiche (Sprint 44)
@@ -928,8 +928,8 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - La diagnosi resta lato server.
 - **Lingua dell'interfaccia:**
   - italiano o inglese (default dalla lingua del dispositivo), modificabile e salvata sull'account;
-  - i **messaggi d'errore del server** e i **testi delle notifiche** sono solo in italiano; le email di servizio (Sprint 67) seguono invece la lingua dell'interfaccia;
-  - lo è anche il prefisso automatico del limite per lingua nella motivazione del punteggio.
+  - dallo Sprint 71 anche **tutti i testi del server** seguono la lingua dell'interfaccia: messaggi d'errore e di validazione (login, registrazione, massimali e credito, limiti di piano, limiti di lunghezza, troppe richieste, accettazione dei testi legali, editor e chat, import), testi delle notifiche push, email di servizio (già dallo Sprint 67) e prefisso automatico del limite per lingua nella motivazione del punteggio (nella lingua del momento della valutazione, §4.4). Con l'interfaccia in italiano i testi sono gli stessi di prima;
+  - non cambiano lingua i contenuti generati dall'AI (motivazioni, match e gap del punteggio, CV, cover letter, messaggi, risposte della chat), che seguono le loro regole (§4.7), né il Django Admin, che resta in italiano.
 - **Lingua dei documenti:** vedi §4.7. Le etichette fisse esistono in 5 lingue (it/en/fr/de/es).
 - **Veridicità dei contenuti.**
   - Le funzioni AI non inventano aziende, ruoli, periodi, competenze o certificazioni.
@@ -1082,6 +1082,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Un utente non vede in app dati di un altro utente.
 - ☐ Se una raccolta fallisce, l'utente non vede errori tecnici.
 - ☐ L'interfaccia è in italiano se il dispositivo è in italiano, altrimenti in inglese, ed è modificabile.
+- ☐ Con l'interfaccia in inglese i messaggi d'errore del server, le notifiche push e il prefisso del limite per lingua sono in inglese; in italiano restano quelli di prima (Sprint 71).
 - ☐ Le chat degli editor, il pannello di generazione del CV e i popup di cover letter e messaggi mostrano l'avviso sul contenuto generato con l'AI (Sprint 67).
 - ☐ L'app non usa cookie di profilazione né strumenti di analisi; i backup più vecchi di 7 giorni vengono cancellati automaticamente (Sprint 67).
 - ☐ Dopo il rilascio di una nuova versione una scheda aperta mostra "Nuova versione disponibile — Aggiorna" e si ricarica solo premendo il pulsante (Sprint 70).
@@ -1149,7 +1150,7 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 35. **Contatori e prezzi non visibili.** *(Risolto nello Sprint 70: "I tuoi limiti di oggi" in Impostazioni; costo della prossima richiesta e conferma prima dell'addebito per import, job manuale, raccolta manuale e CV dalla lista. Resta da integrare la pagina del job: generazione di CV, cover letter e messaggi.)* L'utente non vede i massimali residui né i prezzi. Scopre il passaggio a credito solo dal saldo che cala, e il blocco solo dal messaggio d'errore.
 36. **Fuso orario fisso.** *(Risolto nello Sprint 70: fuso impostabile in Impostazioni e in onboarding, default dal dispositivo alla registrazione; il default del filtro date usa il fuso dell'utente.)* Il fuso orario per utente esiste ma non si imposta da interfaccia: le "10:00 locali" e il "giorno" della lista sono di fatto quelli italiani. La data predefinita del filtro usa invece la data del dispositivo.
 37. **Logout e notifiche.** *(Risolto nello Sprint 70: il logout disattiva le notifiche del dispositivo; alla riattivazione non si contano i job del periodo di silenzio.)* Il logout non disattiva le notifiche su quel dispositivo: per spegnerle si usa la preferenza in Impostazioni, che vale per tutti i dispositivi dell'account (dallo Sprint 67 le notifiche sono disattivabili).
-38. **Lingua di messaggi e notifiche.** Messaggi d'errore del server, notifiche e prefisso del limite per lingua sono solo in italiano, anche con l'interfaccia in inglese.
+38. **Lingua di messaggi e notifiche.** *(Risolto nello Sprint 71: messaggi del server, notifiche e prefisso del limite per lingua seguono la lingua dell'interfaccia, §6; le motivazioni con il prefisso salvate prima dello Sprint 71 restano in italiano.)* Messaggi d'errore del server, notifiche e prefisso del limite per lingua sono solo in italiano, anche con l'interfaccia in inglese.
 39. **Import CV in errore.** *(Risolto nello Sprint 70: messaggi dedicati per file troppo grande, formato, pagine, limite giornaliero e servizio AI non disponibile.)* Se il servizio AI fallisce durante l'import del CV in onboarding, l'utente vede solo un errore generico (l'import non viene però conteggiato nel limite giornaliero).
 40. **Limiti della pagina Profilo:** *(Risolto nello Sprint 70: foto rimovibile, tecnologie e obiettivo modificabili.)* non permette di rimuovere la foto; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
 41. **Onboarding saltabile.** *(Risolto nello Sprint 70: banner fisso con il link finché il profilo non è completo.)* Dopo il login non c'è alcun rimando all'onboarding se il profilo è incompleto: l'utente se ne accorge solo quando la generazione del CV viene rifiutata. Con la verifica dell'email attiva (Sprint 67) l'onboarding è proposto solo se il primo login avviene dal pulsante della pagina di conferma; un login fatto in altro modo porta alla lista.

@@ -1,5 +1,6 @@
 import re
 
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from apps.common.files import signed_document_url
@@ -266,32 +267,32 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         value = value.strip()
         if not value:
-            raise serializers.ValidationError("Il nome non può essere vuoto.")
+            raise serializers.ValidationError(_("Il nome non può essere vuoto."))
         return value
 
     def validate_scores(self, value):
         if not isinstance(value, list) or not all(isinstance(item, int) for item in value):
-            raise serializers.ValidationError("Deve essere una lista di punteggi interi.")
+            raise serializers.ValidationError(_("Deve essere una lista di punteggi interi."))
         return value
 
     def validate_statuses(self, value):
         if not isinstance(value, list) or not set(value) <= set(FILTERABLE_STATUSES):
-            raise serializers.ValidationError(f"Valori ammessi: {', '.join(FILTERABLE_STATUSES)}.")
+            raise serializers.ValidationError(_("Valori ammessi: %(values)s.") % {"values": ", ".join(FILTERABLE_STATUSES)})
         return value
 
     def validate_search_ids(self, value):
         if not isinstance(value, list) or not all(
             item == "none" or (isinstance(item, str) and item.isdigit()) for item in value
         ):
-            raise serializers.ValidationError('Deve essere una lista di "none" e/o id (stringa) di ricerche salvate.')
+            raise serializers.ValidationError(_('Deve essere una lista di "none" e/o id (stringa) di ricerche salvate.'))
         return value
 
     def validate_applicants_ranges(self, value):
         if not isinstance(value, list) or not set(value) <= set(APPLICANTS_RANGES):
-            raise serializers.ValidationError(f"Valori ammessi: {', '.join(APPLICANTS_RANGES)}.")
+            raise serializers.ValidationError(_("Valori ammessi: %(values)s.") % {"values": ", ".join(APPLICANTS_RANGES)})
         return value
 
     def validate_has_recruiter(self, value):
         if value not in ("", "yes", "no"):
-            raise serializers.ValidationError('Deve essere "", "yes" o "no".')
+            raise serializers.ValidationError(_('Deve essere "", "yes" o "no".'))
         return value

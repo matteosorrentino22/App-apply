@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.permissions import BasePermission
 
@@ -22,7 +23,7 @@ class LegalAcceptanceRequired(BasePermission):
         if missing_acceptances(user):
             raise exceptions.PermissionDenied(
                 {
-                    "detail": "Per continuare devi accettare l'informativa privacy e i termini di servizio.",
+                    "detail": _("Per continuare devi accettare l'informativa privacy e i termini di servizio."),
                     "code": LEGAL_ACCEPTANCE_REQUIRED_CODE,
                 }
             )

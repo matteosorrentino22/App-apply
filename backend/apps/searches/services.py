@@ -1,3 +1,5 @@
+from django.utils.translation import gettext as _
+
 from apps.accounts.models import User
 
 from .models import SavedSearch
@@ -30,7 +32,7 @@ def check_can_create(user):
     limits = get_limits(user)
     if SavedSearch.objects.filter(user=user).count() >= limits["max_saved"]:
         raise PlanLimitExceeded(
-            "Hai raggiunto il numero massimo di ricerche salvate per il tuo piano."
+            _("Hai raggiunto il numero massimo di ricerche salvate per il tuo piano.")
         )
 
 
@@ -56,7 +58,7 @@ def activate_search(search):
                 active_qs.update(is_active=False)
         elif active_qs.count() >= max_for_type:
             raise PlanLimitExceeded(
-                "Hai raggiunto il numero massimo di ricerche attive per il tuo piano."
+                _("Hai raggiunto il numero massimo di ricerche attive per il tuo piano.")
             )
     else:
         active_qs = SavedSearch.objects.filter(user=search.user, is_active=True).exclude(
@@ -64,7 +66,7 @@ def activate_search(search):
         )
         if active_qs.count() >= limits["max_active_total"]:
             raise PlanLimitExceeded(
-                "Hai raggiunto il numero massimo di ricerche attive per il tuo piano."
+                _("Hai raggiunto il numero massimo di ricerche attive per il tuo piano.")
             )
 
     search.is_active = True

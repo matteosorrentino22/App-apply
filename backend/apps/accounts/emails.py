@@ -1,13 +1,17 @@
 # Email di servizio (Sprint 67): testo semplice, in italiano o in inglese
 # secondo `User.interface_language`. Mai dati del profilo nel corpo: solo
-# il link o la conferma dell'operazione.
+# il link o la conferma dell'operazione. Dallo Sprint 71 i testi sono
+# tradotti con gettext come il resto del backend (msgid in italiano,
+# inglese in locale/en/LC_MESSAGES/django.po).
 import logging
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core import signing
 from django.utils.encoding import force_bytes
+from django.utils import translation
 from django.utils.http import urlencode, urlsafe_base64_encode
+from django.utils.translation import gettext_lazy
 
 from .tasks import send_service_email
 
@@ -16,105 +20,79 @@ logger = logging.getLogger(__name__)
 VERIFY_EMAIL_SALT = "apps.accounts.verify-email"
 CHANGE_EMAIL_SALT = "apps.accounts.change-email"
 
-_SIGNATURE = {
-    "it": "\n\n— App-apply\nEmail automatica: non rispondere a questo messaggio.",
-    "en": "\n\n— App-apply\nAutomated email: please do not reply to this message.",
-}
+_SIGNATURE = gettext_lazy(
+    "— App-apply\n"
+    "Email automatica: non rispondere a questo messaggio."
+)
 
 MESSAGES = {
-    "verify": {
-        "it": (
-            "Conferma il tuo indirizzo email",
-            "Ciao,\n\nper completare la registrazione ad App-apply conferma il tuo indirizzo "
-            "aprendo questo link (valido 3 giorni):\n\n{link}\n\n"
-            "Se non sei stato tu a registrarti, ignora questa email: senza conferma l'account non è utilizzabile.",
+    "verify": (
+        gettext_lazy("Conferma il tuo indirizzo email"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "per completare la registrazione ad App-apply conferma il tuo indirizzo aprendo questo "
+            "link (valido 3 giorni):\n\n"
+            "{link}\n\n"
+            "Se non sei stato tu a registrarti, ignora questa email: senza conferma l'account non è "
+            "utilizzabile."
         ),
-        "en": (
-            "Confirm your email address",
-            "Hi,\n\nto complete your App-apply registration please confirm your address "
-            "by opening this link (valid for 3 days):\n\n{link}\n\n"
-            "If you did not sign up, ignore this email: the account cannot be used without confirmation.",
+    ),
+    "already_registered": (
+        gettext_lazy("Tentativo di registrazione con il tuo indirizzo"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "qualcuno ha provato a registrarsi ad App-apply con questo indirizzo email, che ha già "
+            "un account.\n\n"
+            "Se sei stato tu, accedi da {login_link} oppure, se non ricordi la password, recuperala "
+            "da {forgot_link}.\n\n"
+            "Se non sei stato tu, puoi ignorare questa email: il tuo account non è stato modificato."
         ),
-    },
-    "already_registered": {
-        "it": (
-            "Tentativo di registrazione con il tuo indirizzo",
-            "Ciao,\n\nqualcuno ha provato a registrarsi ad App-apply con questo indirizzo email, "
-            "che ha già un account.\n\nSe sei stato tu, accedi da {login_link} oppure, se non ricordi "
-            "la password, recuperala da {forgot_link}.\n\nSe non sei stato tu, puoi ignorare questa "
-            "email: il tuo account non è stato modificato.",
+    ),
+    "password_reset": (
+        gettext_lazy("Recupero della password"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "abbiamo ricevuto una richiesta di recupero della password del tuo account App-apply. "
+            "Per sceglierne una nuova apri questo link (valido 3 giorni, utilizzabile una sola "
+            "volta):\n\n"
+            "{link}\n\n"
+            "Dopo il cambio sarai disconnesso da tutti i dispositivi.\n\n"
+            "Se non hai chiesto tu il recupero, ignora questa email: la password resta invariata."
         ),
-        "en": (
-            "Sign-up attempt with your address",
-            "Hi,\n\nsomeone tried to sign up to App-apply with this email address, which already "
-            "has an account.\n\nIf it was you, log in at {login_link} or, if you forgot your "
-            "password, reset it at {forgot_link}.\n\nIf it wasn't you, you can ignore this email: "
-            "your account has not been changed.",
-        ),
-    },
-    "password_reset": {
-        "it": (
-            "Recupero della password",
-            "Ciao,\n\nabbiamo ricevuto una richiesta di recupero della password del tuo account "
-            "App-apply. Per sceglierne una nuova apri questo link (valido 3 giorni, utilizzabile "
-            "una sola volta):\n\n{link}\n\nDopo il cambio sarai disconnesso da tutti i dispositivi.\n\n"
-            "Se non hai chiesto tu il recupero, ignora questa email: la password resta invariata.",
-        ),
-        "en": (
-            "Password reset",
-            "Hi,\n\nwe received a request to reset the password of your App-apply account. "
-            "To choose a new one open this link (valid for 3 days, single use):\n\n{link}\n\n"
-            "After the change you will be logged out of all devices.\n\n"
-            "If you did not request it, ignore this email: your password stays the same.",
-        ),
-    },
-    "email_change_confirm": {
-        "it": (
-            "Conferma il nuovo indirizzo email",
-            "Ciao,\n\nè stato chiesto di usare questo indirizzo come nuova email di accesso di un "
-            "account App-apply. Per confermare apri questo link (valido 3 giorni):\n\n{link}\n\n"
+    ),
+    "email_change_confirm": (
+        gettext_lazy("Conferma il nuovo indirizzo email"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "è stato chiesto di usare questo indirizzo come nuova email di accesso di un account "
+            "App-apply. Per confermare apri questo link (valido 3 giorni):\n\n"
+            "{link}\n\n"
             "Finché non confermi, l'email di accesso resta quella di prima. Se non sei stato tu, "
-            "ignora questa email.",
+            "ignora questa email."
         ),
-        "en": (
-            "Confirm your new email address",
-            "Hi,\n\nsomeone asked to use this address as the new login email of an App-apply "
-            "account. To confirm open this link (valid for 3 days):\n\n{link}\n\n"
-            "Until you confirm, the login email stays the same. If it wasn't you, ignore this email.",
+    ),
+    "email_change_notice": (
+        gettext_lazy("Richiesta di cambio dell'email di accesso"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "è stato chiesto di cambiare l'email di accesso del tuo account App-apply. Abbiamo "
+            "inviato un link di conferma al nuovo indirizzo: l'email di accesso cambia solo dopo la "
+            "conferma, fino ad allora resta questa.\n\n"
+            "Se non sei stato tu, qualcuno conosce la tua password: cambiala subito dalle "
+            "Impostazioni dell'app ({settings_link})."
         ),
-    },
-    "email_change_notice": {
-        "it": (
-            "Richiesta di cambio dell'email di accesso",
-            "Ciao,\n\nè stato chiesto di cambiare l'email di accesso del tuo account App-apply. "
-            "Abbiamo inviato un link di conferma al nuovo indirizzo: l'email di accesso cambia solo "
-            "dopo la conferma, fino ad allora resta questa.\n\nSe non sei stato tu, qualcuno conosce "
-            "la tua password: cambiala subito dalle Impostazioni dell'app ({settings_link}).",
+    ),
+    "account_deleted": (
+        gettext_lazy("Il tuo account è stato eliminato"),
+        gettext_lazy(
+            "Ciao,\n\n"
+            "ti confermiamo che il tuo account App-apply e tutti i dati collegati (profilo, offerte, "
+            "documenti, bozze, chat, file) sono stati eliminati. Le copie di backup che li "
+            "contengono vengono cancellate automaticamente entro 7 giorni.\n\n"
+            "Se non hai chiesto tu la cancellazione, rispondi al titolare indicato nell'informativa "
+            "privacy."
         ),
-        "en": (
-            "Login email change requested",
-            "Hi,\n\nsomeone asked to change the login email of your App-apply account. We sent a "
-            "confirmation link to the new address: the login email changes only after it is "
-            "confirmed, until then it stays this one.\n\nIf it wasn't you, someone knows your "
-            "password: change it right away from the app Settings ({settings_link}).",
-        ),
-    },
-    "account_deleted": {
-        "it": (
-            "Il tuo account è stato eliminato",
-            "Ciao,\n\nti confermiamo che il tuo account App-apply e tutti i dati collegati "
-            "(profilo, offerte, documenti, bozze, chat, file) sono stati eliminati. Le copie di "
-            "backup che li contengono vengono cancellate automaticamente entro 7 giorni.\n\n"
-            "Se non hai chiesto tu la cancellazione, rispondi al titolare indicato nell'informativa privacy.",
-        ),
-        "en": (
-            "Your account has been deleted",
-            "Hi,\n\nwe confirm that your App-apply account and all related data (profile, jobs, "
-            "documents, drafts, chats, files) have been deleted. Backup copies containing them "
-            "are automatically erased within 7 days.\n\n"
-            "If you did not request the deletion, contact the controller listed in the privacy policy.",
-        ),
-    },
+    ),
 }
 
 
@@ -129,10 +107,11 @@ def _lang(language):
 
 
 def send_templated_email(kind, to, language, **params):
-    lang = _lang(language)
-    subject, body = MESSAGES[kind][lang]
+    subject, body = MESSAGES[kind]
+    with translation.override(_lang(language)):
+        subject, body = str(subject), str(body).format(**params) + "\n\n" + str(_SIGNATURE)
     try:
-        send_service_email.delay(to, f"App-apply — {subject}", body.format(**params) + _SIGNATURE[lang])
+        send_service_email.delay(to, f"App-apply — {subject}", body)
     except Exception:
         # Broker non raggiungibile: l'operazione dell'utente non deve fallire
         # per un'email non accodata (nel log solo il tipo, mai l'indirizzo).
@@ -153,7 +132,7 @@ def read_verification_token(token):
     value = signing.TimestampSigner(salt=VERIFY_EMAIL_SALT).unsign(
         token, max_age=settings.EMAIL_VERIFICATION_MAX_AGE
     )
-    user_id, _, email = value.partition(":")
+    user_id, _sep, email = value.partition(":")
     if not user_id.isdigit() or not email:
         raise signing.BadSignature("payload non valido")
     return int(user_id), email

@@ -42,6 +42,7 @@ Proposte nello Sprint 01, in vigore da qui in avanti:
 - **Migrazioni:** sempre generate e **committate** nel repository (mai in `.gitignore`); `makemigrations --check` deve restituire nessuna differenza prima di chiudere uno sprint che tocca i modelli.
 - **Config/segreti:** solo variabili d'ambiente (mai hardcoded), lette in `settings.py` con `os.environ.get(...)`; `.env.example` alla radice documenta le chiavi attese, `.env` reale mai committato.
 - **Docker:** un'unica immagine (`backend/Dockerfile`) condivisa da `web`/`worker`/`beat`, differenziati solo dal comando lanciato in `docker-compose.yml`.
+- **Testi rivolti all'utente nel backend (Sprint 71):** ogni nuovo messaggio d'errore/validazione, testo di notifica o di email va scritto in italiano dentro `gettext` (`_("…")`, `gettext_lazy` per le costanti di modulo; segnaposto con nome `%(nome)s`, mai f-string) e tradotto in inglese in `backend/locale/en/LC_MESSAGES/django.po`, ricompilando e committando anche il `.mo` (comandi in `DEPLOY.md` §4.9; `apps/common/test_i18n.py` fallisce con voci vuote, `fuzzy` o `.mo` non aggiornato). Fuori da una richiesta (task Celery) usare `translation.override(user.interface_language)`. Non si traducono prompt AI, log, `RunLog` e Django Admin.
 - **Stile Python:** niente docstring multi-riga salvo motivare un vincolo non ovvio (es. perché `AUTH_USER_MODEL` punta a un modello custom fin dal primo sprint); niente helper/astrazioni introdotte in anticipo su bisogni futuri.
 
 ## Deploy — non mescolare mai `docker-compose.yml` e `docker-compose.prod.yml`

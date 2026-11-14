@@ -1,3 +1,5 @@
+import { currentLanguage } from '../i18n/language'
+
 const TOKEN_STORAGE_KEY = 'app_apply_token'
 
 export function getToken() {
@@ -29,12 +31,13 @@ export const AUTH_EXPIRED_EVENT = 'app-apply:auth-expired'
 // AuthContext ricarica l'utente e la PWA mostra la schermata di accettazione.
 export const LEGAL_REQUIRED_EVENT = 'app-apply:legal-required'
 
-// Wrapper minimo su fetch: aggiunge il token se presente e normalizza gli
-// errori in ApiError. Percorsi relativi (`/api/...`): in dev il proxy di
+// Wrapper minimo su fetch: aggiunge il token se presente e la lingua
+// dell'interfaccia (`Accept-Language`, Sprint 71: messaggi del backend in
+// it/en) e normalizza gli errori in ApiError. Percorsi relativi (`/api/...`): in dev il proxy di
 // Vite li inoltra al backend, in produzione Caddy fa da reverse proxy sullo
 // stesso host — nessuna configurazione di base URL.
 export async function apiFetch(path, { method = 'GET', body, isMultipart = false } = {}) {
-  const headers = {}
+  const headers = { 'Accept-Language': currentLanguage() }
   const token = getToken()
   if (token) {
     headers.Authorization = `Token ${token}`

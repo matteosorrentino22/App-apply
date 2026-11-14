@@ -11,6 +11,7 @@ from io import BytesIO
 from django.core import signing
 from django.core.files.base import ContentFile
 from django.utils.http import urlencode
+from django.utils.translation import gettext as _
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 SIGNED_URL_MAX_AGE = 60 * 60
@@ -53,23 +54,23 @@ def sanitize_photo(uploaded_file):
     per formati, dimensioni o file non ammessi."""
     uploaded_file.seek(0, os.SEEK_END)
     if uploaded_file.tell() > PHOTO_MAX_BYTES:
-        raise InvalidPhoto("La foto non può superare i 5 MB.")
+        raise InvalidPhoto(_("La foto non può superare i 5 MB."))
     try:
         uploaded_file.seek(0)
         image = Image.open(uploaded_file)
         image_format = image.format
         if image_format not in PHOTO_FORMATS:
-            raise InvalidPhoto("Formato non supportato: usa JPEG, PNG o WebP.")
+            raise InvalidPhoto(_("Formato non supportato: usa JPEG, PNG o WebP."))
         if image.width > PHOTO_MAX_DIMENSION or image.height > PHOTO_MAX_DIMENSION:
             raise InvalidPhoto(
-                f"La foto non può superare {PHOTO_MAX_DIMENSION}×{PHOTO_MAX_DIMENSION} pixel."
+                _("La foto non può superare %(max)s×%(max)s pixel.") % {"max": PHOTO_MAX_DIMENSION}
             )
         image = ImageOps.exif_transpose(image)
         image.load()
     except InvalidPhoto:
         raise
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError) as exc:
-        raise InvalidPhoto("Immagine non valida.") from exc
+        raise InvalidPhoto(_("Immagine non valida.")) from exc
 
     icc_profile = image.info.get("icc_profile")
     image.info = {}

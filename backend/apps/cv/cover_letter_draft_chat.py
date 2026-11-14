@@ -7,6 +7,7 @@ import json
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.common.ai import call_claude_structured
 from apps.jobs.models import RunLog
@@ -127,7 +128,7 @@ def _reserve_credit(user):
         locked_user = type(user).objects.select_for_update().get(pk=user.pk)
         price = settings.PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE
         if locked_user.extra_credit < price:
-            raise ChatMessageRejected("Saldo credito insufficiente per questo messaggio.")
+            raise ChatMessageRejected(_("Saldo credito insufficiente per questo messaggio."))
         locked_user.extra_credit -= price
         locked_user.save(update_fields=["extra_credit"])
         return locked_user.extra_credit
@@ -153,7 +154,7 @@ def send_chat_message(job, user_message):
     try:
         draft = load_cover_letter_draft(job)
     except CoverLetterDraft.DoesNotExist as exc:
-        raise ChatMessageFailed("Apri prima l'editor per questa cover letter.") from exc
+        raise ChatMessageFailed(_("Apri prima l'editor per questa cover letter.")) from exc
 
     user = job.user
     profile = user.profile
@@ -180,7 +181,7 @@ def send_chat_message(job, user_message):
             started_at=started_at,
             finished_at=timezone.now(),
         )
-        raise ChatMessageFailed("L'assistente non è riuscito a rispondere.") from exc
+        raise ChatMessageFailed(_("L'assistente non è riuscito a rispondere.")) from exc
 
     paragraph_ids = {p.get("id") for p in draft.content_json.get("paragraphs", [])}
     actions = _sanitize_actions(result["actions"], paragraph_ids)
@@ -202,11 +203,11 @@ def record_action_decision(job, message_index, action_index, decision):
     la scelta vivrebbe solo nello stato locale del pannello, perdendosi
     chiudendo/riaprendo la chat o ricaricando la pagina."""
     if decision not in ("accepted", "rejected"):
-        raise InvalidChatDecision("Decisione non valida.")
+        raise InvalidChatDecision(_("Decisione non valida."))
     try:
         draft = job.cover_letter_draft
     except CoverLetterDraft.DoesNotExist as exc:
-        raise InvalidChatDecision("Nessuna bozza per questo job.") from exc
+        raise InvalidChatDecision(_("Nessuna bozza per questo job.")) from exc
 
     history = draft.chat_history
     if (
@@ -214,10 +215,10 @@ def record_action_decision(job, message_index, action_index, decision):
         or message_index >= len(history)
         or history[message_index].get("role") != "assistant"
     ):
-        raise InvalidChatDecision("Messaggio non valido.")
+        raise InvalidChatDecision(_("Messaggio non valido."))
     actions = history[message_index].get("actions") or []
     if action_index < 0 or action_index >= len(actions):
-        raise InvalidChatDecision("Azione non valida.")
+        raise InvalidChatDecision(_("Azione non valida."))
 
     actions[action_index]["decision"] = decision
     draft.save(update_fields=["chat_history", "updated_at"])

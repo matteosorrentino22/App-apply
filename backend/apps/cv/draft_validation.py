@@ -8,6 +8,8 @@
 import copy
 import json
 
+from django.utils.translation import gettext as _
+
 from .draft_ids import ensure_cover_letter_paragraph_ids, ensure_cv_bullet_ids
 
 MAX_DRAFT_JSON_CHARS = 200_000
@@ -87,39 +89,39 @@ def _check(value, spec, path):
     kind = spec[0]
     if kind == "str":
         if not isinstance(value, str):
-            raise InvalidDraftContent(f"{path}: deve essere un testo.")
+            raise InvalidDraftContent(_("%(path)s: deve essere un testo.") % {"path": path})
         if len(value) > spec[1]:
-            raise InvalidDraftContent(f"{path}: massimo {spec[1]} caratteri.")
+            raise InvalidDraftContent(_("%(path)s: massimo %(max)s caratteri.") % {"path": path, "max": spec[1]})
     elif kind == "bool":
         if not isinstance(value, bool):
-            raise InvalidDraftContent(f"{path}: deve essere vero/falso.")
+            raise InvalidDraftContent(_("%(path)s: deve essere vero/falso.") % {"path": path})
     elif kind == "int_or_null":
         if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
-            raise InvalidDraftContent(f"{path}: deve essere un numero intero.")
+            raise InvalidDraftContent(_("%(path)s: deve essere un numero intero.") % {"path": path})
     elif kind == "list":
         if not isinstance(value, list):
-            raise InvalidDraftContent(f"{path}: deve essere una lista.")
+            raise InvalidDraftContent(_("%(path)s: deve essere una lista.") % {"path": path})
         if len(value) > spec[2]:
-            raise InvalidDraftContent(f"{path}: massimo {spec[2]} elementi.")
+            raise InvalidDraftContent(_("%(path)s: massimo %(max)s elementi.") % {"path": path, "max": spec[2]})
         for index, item in enumerate(value):
             _check(item, spec[1], f"{path}[{index}]")
     elif kind == "obj":
         if not isinstance(value, dict):
-            raise InvalidDraftContent(f"{path or 'contenuto'}: formato non valido.")
+            raise InvalidDraftContent(_("%(path)s: formato non valido.") % {"path": path or _("contenuto")})
         fields = spec[1]
         unknown = set(value) - set(fields)
         missing = set(fields) - set(value)
         if unknown or missing:
-            raise InvalidDraftContent(f"{path or 'contenuto'}: campi non validi.")
+            raise InvalidDraftContent(_("%(path)s: campi non validi.") % {"path": path or _("contenuto")})
         for name, field_spec in fields.items():
             _check(value[name], field_spec, f"{path}.{name}" if path else name)
 
 
 def _validate(content, spec):
     if not isinstance(content, dict):
-        raise InvalidDraftContent("Formato non valido.")
+        raise InvalidDraftContent(_("Formato non valido."))
     if len(json.dumps(content, ensure_ascii=False)) > MAX_DRAFT_JSON_CHARS:
-        raise InvalidDraftContent("Contenuto troppo grande.")
+        raise InvalidDraftContent(_("Contenuto troppo grande."))
     _check(content, spec, "")
 
 

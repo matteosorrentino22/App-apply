@@ -4,6 +4,7 @@ from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from .collection import collect_jobs_for_user
 from .models import DailyQuota, RunLog
@@ -142,7 +143,7 @@ def run_nightly_cycle_for_user(user):
 
 @transaction.atomic
 def _refund_collection_quota(user):
-    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
     quota.collection_count = max(0, quota.collection_count - 1)
     quota.save(update_fields=["collection_count"])
@@ -159,13 +160,13 @@ def run_manual_collection_for_user(user):
     with transaction.atomic():
         locked_user = User.objects.select_for_update().get(pk=user.pk)
         if _collection_lock_is_active(locked_user):
-            raise CollectionAlreadyInProgress("Raccolta già in corso per questo account.")
+            raise CollectionAlreadyInProgress(_("Raccolta già in corso per questo account."))
 
-        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
         quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
         if quota.collection_count >= COLLECTION_DAILY_LIMIT:
             raise CollectionDailyLimitReached(
-                "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
+                _("Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno.")
             )
         quota.collection_count += 1
         quota.save(update_fields=["collection_count"])
@@ -187,7 +188,7 @@ def run_manual_collection_for_user(user):
             started_at=started_at,
             finished_at=timezone.now(),
         )
-        raise ManualCollectionFailed("Raccolta non riuscita. Riprova più tardi.") from exc
+        raise ManualCollectionFailed(_("Raccolta non riuscita. Riprova più tardi.")) from exc
     finally:
         _release_collection_lock(user)
     return summary

@@ -2,7 +2,8 @@ import concurrent.futures
 import re
 
 from django.db.models import F
-from django.utils import timezone
+from django.utils import timezone, translation
+from django.utils.translation import gettext as _
 
 from apps.profiles.language_options import LANGUAGE_NAME_LABELS
 from apps.profiles.models import Profile
@@ -93,10 +94,16 @@ def _apply_score_result(job, result, profile):
     cap = _language_score_cap(result, profile)
     if cap is not None and score > cap:
         score = cap
-        reasoning = (
-            f"Punteggio limitato a {cap}/10: lingua richiesta "
-            f"({result['language_check']['language']}) assente dal profilo. {reasoning}"
-        )
+        # Il prefisso è salvato nel DB insieme alla motivazione: lingua
+        # dell'interfaccia del proprietario al momento dello scoring
+        # (Sprint 71; lo scoring gira nel ciclo notturno, fuori da una
+        # richiesta). La motivazione scritta dal modello non cambia.
+        with translation.override(job.user.interface_language):
+            prefix = _("Punteggio limitato a %(cap)s/10: lingua richiesta (%(language)s) assente dal profilo.") % {
+                "cap": cap,
+                "language": result["language_check"]["language"],
+            }
+        reasoning = f"{prefix} {reasoning}"
 
     job.score = score
     job.score_match = result["score_match"]

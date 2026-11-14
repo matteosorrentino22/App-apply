@@ -3,6 +3,7 @@ import zipfile
 import docx
 import pdfplumber
 from django.conf import settings
+from django.utils.translation import gettext as _
 
 from apps.common.ai import call_claude_structured
 
@@ -165,7 +166,7 @@ def extract_text(uploaded_file):
     del file, non dal nome o dal content-type dichiarati dal client. Solleva
     CVFileRejected (sottoclasse di ValueError) per file non ammessi (formato, dimensione, pagine)."""
     if uploaded_file.size is not None and uploaded_file.size > MAX_UPLOAD_BYTES:
-        raise CVFileRejected("file_too_large", "Il file non può superare i 5 MB.")
+        raise CVFileRejected("file_too_large", _("Il file non può superare i 5 MB."))
     uploaded_file.seek(0)
     header = uploaded_file.read(5)
     uploaded_file.seek(0)
@@ -176,7 +177,7 @@ def extract_text(uploaded_file):
         text = _extract_docx_text(uploaded_file)
     else:
         raise CVFileRejected(
-            "unsupported_type", "Formato non supportato: solo PDF e Word (.docx) sono accettati."
+            "unsupported_type", _("Formato non supportato: solo PDF e Word (.docx) sono accettati.")
         )
     return text[:MAX_TEXT_LENGTH]
 
@@ -195,7 +196,7 @@ def _extract_pdf_text(uploaded_file):
                 text_parts.append(page.extract_text() or "")
         return "\n".join(text_parts)
     except _TooManyPages as exc:
-        raise CVFileRejected("too_many_pages", f"Il CV non può superare le {MAX_PDF_PAGES} pagine.") from exc
+        raise CVFileRejected("too_many_pages", _("Il CV non può superare le %(max)s pagine.") % {"max": MAX_PDF_PAGES}) from exc
     except Exception as exc:
         raise CVUnreadableError(str(exc)) from exc
 
@@ -207,7 +208,7 @@ def _extract_docx_text(uploaded_file):
     except zipfile.BadZipFile as exc:
         raise CVUnreadableError(str(exc)) from exc
     if uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
-        raise CVFileRejected("file_too_large", "Il file Word è troppo grande.")
+        raise CVFileRejected("file_too_large", _("Il file Word è troppo grande."))
     uploaded_file.seek(0)
     try:
         document = docx.Document(uploaded_file)

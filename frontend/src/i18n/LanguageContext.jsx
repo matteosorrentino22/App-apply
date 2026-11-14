@@ -1,16 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { detectDeviceLanguage, SUPPORTED_LANGUAGES, translations } from './translations'
+import { translations } from './translations'
+import { currentLanguage, LANG_STORAGE_KEY, SUPPORTED_LANGUAGES } from './language'
 
-const LANG_STORAGE_KEY = 'app_apply_lang'
 const LanguageContext = createContext(null)
 
-function readStoredLanguage() {
-  const stored = localStorage.getItem(LANG_STORAGE_KEY)
-  return SUPPORTED_LANGUAGES.includes(stored) ? stored : null
-}
-
 export function LanguageProvider({ children }) {
-  const [lang, setLangState] = useState(() => readStoredLanguage() || detectDeviceLanguage())
+  const [lang, setLangState] = useState(currentLanguage)
 
   const setLang = useCallback((next) => {
     if (!SUPPORTED_LANGUAGES.includes(next)) return

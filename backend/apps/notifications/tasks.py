@@ -5,6 +5,8 @@ from datetime import timedelta
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.utils import timezone as dj_timezone
+from django.utils import translation
+from django.utils.translation import gettext_lazy
 
 from apps.jobs.models import Job
 
@@ -17,20 +19,29 @@ logger = logging.getLogger(__name__)
 # alcuna "candidatura fatta" (User.last_activity_reset).
 INACTIVITY_THRESHOLD = timedelta(days=7)
 
+# Testi tradotti nella lingua dell'interfaccia dell'utente al momento
+# dell'invio (Sprint 71): il task gira fuori da una richiesta, la lingua non
+# arriva da Accept-Language ma da `User.interface_language`.
 MORNING_NOTIFICATION_PAYLOAD = {
-    "title": "Nuovi job pronti",
-    "body": "Ci sono nuove offerte da valutare nella tua lista.",
+    "title": gettext_lazy("Nuovi job pronti"),
+    "body": gettext_lazy("Ci sono nuove offerte da valutare nella tua lista."),
 }
 INACTIVITY_NOTIFICATION_PAYLOAD = {
-    "title": "Non ti candidi da un po'",
-    "body": "Entra nell'app e valuta le offerte in attesa.",
+    "title": gettext_lazy("Non ti candidi da un po'"),
+    "body": gettext_lazy("Entra nell'app e valuta le offerte in attesa."),
 }
+
+
+def notification_payload(payload, user):
+    with translation.override(user.interface_language):
+        return {key: str(value) for key, value in payload.items()}
 
 
 def _send_to_all_subscriptions(user, payload):
     """Un errore su una sottoscrizione (push service lento o in errore) non
     deve fermare l'invio alle altre né il giro degli altri utenti
     (Sprint 66). Nel log solo l'id, mai l'endpoint completo."""
+    payload = notification_payload(payload, user)
     for subscription in list(user.push_subscriptions.all()):
         try:
             send_web_push(subscription, payload)

@@ -1,3 +1,4 @@
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 
 from apps.common.files import InvalidPhoto, sanitize_photo, signed_photo_url
@@ -19,13 +20,15 @@ MAX_TECHNOLOGY_LENGTH = 200
 
 def _validate_string_list(value, max_items, max_length, existing=()):
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise serializers.ValidationError("Deve essere una lista di testi.")
+        raise serializers.ValidationError(_("Deve essere una lista di testi."))
     existing = [item for item in existing if isinstance(item, str)] if isinstance(existing, list) else []
     if len(value) > max(max_items, len(existing)):
-        raise serializers.ValidationError(f"Massimo {max_items} elementi.")
+        raise serializers.ValidationError(_("Massimo %(max)s elementi.") % {"max": max_items})
     unchanged = set(existing)
     if any(len(item) > max_length and item not in unchanged for item in value):
-        raise serializers.ValidationError(f"Ogni elemento può avere al massimo {max_length} caratteri.")
+        raise serializers.ValidationError(
+            _("Ogni elemento può avere al massimo %(max)s caratteri.") % {"max": max_length}
+        )
     return value
 
 

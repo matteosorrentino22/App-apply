@@ -1,0 +1,679 @@
+# Traduzione inglese dei testi del backend rivolti all'utente (Sprint 71).
+# msgid in italiano (lingua sorgente). Rigenerare con makemessages e
+# compilare il .mo con compilemessages: comandi in DEPLOY.md §4.9.
+msgid ""
+msgstr ""
+"Project-Id-Version: App-apply\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-14 17:16+0100\n"
+"PO-Revision-Date: 2026-11-14 17:00+0100\n"
+"Last-Translator: App-apply\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: apps/accounts/authentication.py
+msgid "Token non valido."
+msgstr "Invalid token."
+
+#: apps/accounts/authentication.py
+msgid "Sessione scaduta, accedi di nuovo."
+msgstr "Session expired, please log in again."
+
+#: apps/accounts/emails.py
+msgid ""
+"— App-apply\n"
+"Email automatica: non rispondere a questo messaggio."
+msgstr ""
+"— App-apply\n"
+"Automated email: please do not reply to this message."
+
+#: apps/accounts/emails.py
+msgid "Conferma il tuo indirizzo email"
+msgstr "Confirm your email address"
+
+#: apps/accounts/emails.py
+#, python-brace-format
+msgid ""
+"Ciao,\n"
+"\n"
+"per completare la registrazione ad App-apply conferma il tuo indirizzo "
+"aprendo questo link (valido 3 giorni):\n"
+"\n"
+"{link}\n"
+"\n"
+"Se non sei stato tu a registrarti, ignora questa email: senza conferma "
+"l'account non è utilizzabile."
+msgstr ""
+"Hi,\n"
+"\n"
+"to complete your App-apply registration please confirm your address by "
+"opening this link (valid for 3 days):\n"
+"\n"
+"{link}\n"
+"\n"
+"If you did not sign up, ignore this email: the account cannot be used "
+"without confirmation."
+
+#: apps/accounts/emails.py
+msgid "Tentativo di registrazione con il tuo indirizzo"
+msgstr "Sign-up attempt with your address"
+
+#: apps/accounts/emails.py
+#, python-brace-format
+msgid ""
+"Ciao,\n"
+"\n"
+"qualcuno ha provato a registrarsi ad App-apply con questo indirizzo email, "
+"che ha già un account.\n"
+"\n"
+"Se sei stato tu, accedi da {login_link} oppure, se non ricordi la password, "
+"recuperala da {forgot_link}.\n"
+"\n"
+"Se non sei stato tu, puoi ignorare questa email: il tuo account non è stato "
+"modificato."
+msgstr ""
+"Hi,\n"
+"\n"
+"someone tried to sign up to App-apply with this email address, which already "
+"has an account.\n"
+"\n"
+"If it was you, log in at {login_link} or, if you forgot your password, reset "
+"it at {forgot_link}.\n"
+"\n"
+"If it wasn't you, you can ignore this email: your account has not been "
+"changed."
+
+#: apps/accounts/emails.py
+msgid "Recupero della password"
+msgstr "Password reset"
+
+#: apps/accounts/emails.py
+#, python-brace-format
+msgid ""
+"Ciao,\n"
+"\n"
+"abbiamo ricevuto una richiesta di recupero della password del tuo account "
+"App-apply. Per sceglierne una nuova apri questo link (valido 3 giorni, "
+"utilizzabile una sola volta):\n"
+"\n"
+"{link}\n"
+"\n"
+"Dopo il cambio sarai disconnesso da tutti i dispositivi.\n"
+"\n"
+"Se non hai chiesto tu il recupero, ignora questa email: la password resta "
+"invariata."
+msgstr ""
+"Hi,\n"
+"\n"
+"we received a request to reset the password of your App-apply account. To "
+"choose a new one open this link (valid for 3 days, single use):\n"
+"\n"
+"{link}\n"
+"\n"
+"After the change you will be logged out of all devices.\n"
+"\n"
+"If you did not request it, ignore this email: your password stays the same."
+
+#: apps/accounts/emails.py
+msgid "Conferma il nuovo indirizzo email"
+msgstr "Confirm your new email address"
+
+#: apps/accounts/emails.py
+#, python-brace-format
+msgid ""
+"Ciao,\n"
+"\n"
+"è stato chiesto di usare questo indirizzo come nuova email di accesso di un "
+"account App-apply. Per confermare apri questo link (valido 3 giorni):\n"
+"\n"
+"{link}\n"
+"\n"
+"Finché non confermi, l'email di accesso resta quella di prima. Se non sei "
+"stato tu, ignora questa email."
+msgstr ""
+"Hi,\n"
+"\n"
+"someone asked to use this address as the new login email of an App-apply "
+"account. To confirm open this link (valid for 3 days):\n"
+"\n"
+"{link}\n"
+"\n"
+"Until you confirm, the login email stays the same. If it wasn't you, ignore "
+"this email."
+
+#: apps/accounts/emails.py
+msgid "Richiesta di cambio dell'email di accesso"
+msgstr "Login email change requested"
+
+#: apps/accounts/emails.py
+#, python-brace-format
+msgid ""
+"Ciao,\n"
+"\n"
+"è stato chiesto di cambiare l'email di accesso del tuo account App-apply. "
+"Abbiamo inviato un link di conferma al nuovo indirizzo: l'email di accesso "
+"cambia solo dopo la conferma, fino ad allora resta questa.\n"
+"\n"
+"Se non sei stato tu, qualcuno conosce la tua password: cambiala subito dalle "
+"Impostazioni dell'app ({settings_link})."
+msgstr ""
+"Hi,\n"
+"\n"
+"someone asked to change the login email of your App-apply account. We sent a "
+"confirmation link to the new address: the login email changes only after it "
+"is confirmed, until then it stays this one.\n"
+"\n"
+"If it wasn't you, someone knows your password: change it right away from the "
+"app Settings ({settings_link})."
+
+#: apps/accounts/emails.py
+msgid "Il tuo account è stato eliminato"
+msgstr "Your account has been deleted"
+
+#: apps/accounts/emails.py
+msgid ""
+"Ciao,\n"
+"\n"
+"ti confermiamo che il tuo account App-apply e tutti i dati collegati "
+"(profilo, offerte, documenti, bozze, chat, file) sono stati eliminati. Le "
+"copie di backup che li contengono vengono cancellate automaticamente entro 7 "
+"giorni.\n"
+"\n"
+"Se non hai chiesto tu la cancellazione, rispondi al titolare indicato "
+"nell'informativa privacy."
+msgstr ""
+"Hi,\n"
+"\n"
+"we confirm that your App-apply account and all related data (profile, jobs, "
+"documents, drafts, chats, files) have been deleted. Backup copies containing "
+"them are automatically erased within 7 days.\n"
+"\n"
+"If you did not request the deletion, contact the controller listed in the "
+"privacy policy."
+
+#: apps/accounts/permissions.py
+msgid ""
+"Per continuare devi accettare l'informativa privacy e i termini di servizio."
+msgstr ""
+"To continue you must accept the privacy policy and the terms of service."
+
+#: apps/accounts/serializers.py
+msgid "Registrazione non consentita: codice di invito mancante o non valido."
+msgstr "Registration not allowed: invite code missing or invalid."
+
+#: apps/accounts/serializers.py
+msgid "Un utente con questa email esiste già."
+msgstr "A user with this email already exists."
+
+#: apps/accounts/serializers.py
+msgid "Devi dichiarare di aver letto l'informativa privacy."
+msgstr "You must declare that you have read the privacy policy."
+
+#: apps/accounts/serializers.py
+msgid "Devi accettare i termini di servizio."
+msgstr "You must accept the terms of service."
+
+#: apps/accounts/serializers.py
+#, python-format
+msgid "Per usare l'app devi avere almeno %(age)s anni."
+msgstr "You must be at least %(age)s years old to use the app."
+
+#: apps/accounts/serializers.py
+msgid "Credenziali non valide."
+msgstr "Invalid credentials."
+
+#: apps/accounts/serializers.py
+msgid "Fuso orario non valido."
+msgstr "Invalid time zone."
+
+#: apps/accounts/serializers.py
+msgid "Password non corretta."
+msgstr "Incorrect password."
+
+#: apps/accounts/serializers.py
+msgid "Password attuale non corretta."
+msgstr "Current password is incorrect."
+
+#: apps/accounts/serializers.py
+msgid "Conferma esplicita richiesta."
+msgstr "Explicit confirmation required."
+
+#: apps/accounts/serializers.py
+msgid "È già la tua email di accesso."
+msgstr "This is already your login email."
+
+#: apps/accounts/views.py
+msgid "L'invio di email non è disponibile."
+msgstr "Sending emails is not available."
+
+#: apps/accounts/views.py
+msgid "Conferma il tuo indirizzo email con il link che ti abbiamo inviato."
+msgstr "Confirm your email address with the link we sent you."
+
+#: apps/accounts/views.py
+msgid "Link scaduto."
+msgstr "Link expired."
+
+#: apps/accounts/views.py
+msgid "Link non valido."
+msgstr "Invalid link."
+
+#: apps/accounts/views.py
+msgid "Link non valido o scaduto."
+msgstr "Invalid or expired link."
+
+#: apps/accounts/views.py
+msgid "Questo indirizzo è già usato da un altro account."
+msgstr "This address is already used by another account."
+
+#: apps/common/exceptions.py
+msgid "Troppe richieste: riprova più tardi."
+msgstr "Too many requests: please try again later."
+
+#: apps/common/exceptions.py
+#, python-format
+msgid "Troppe richieste: riprova tra %(count)d secondo."
+msgid_plural "Troppe richieste: riprova tra %(count)d secondi."
+msgstr[0] "Too many requests: please try again in %(count)d second."
+msgstr[1] "Too many requests: please try again in %(count)d seconds."
+
+#: apps/common/exceptions.py
+#, python-format
+msgid "Troppe richieste: riprova tra %(count)d minuto."
+msgid_plural "Troppe richieste: riprova tra %(count)d minuti."
+msgstr[0] "Too many requests: please try again in %(count)d minute."
+msgstr[1] "Too many requests: please try again in %(count)d minutes."
+
+#: apps/common/exceptions.py
+#, python-format
+msgid "Troppe richieste: riprova tra %(count)d ora."
+msgid_plural "Troppe richieste: riprova tra %(count)d ore."
+msgstr[0] "Too many requests: please try again in %(count)d hour."
+msgstr[1] "Too many requests: please try again in %(count)d hours."
+
+#: apps/common/files.py
+msgid "La foto non può superare i 5 MB."
+msgstr "The photo cannot exceed 5 MB."
+
+#: apps/common/files.py
+msgid "Formato non supportato: usa JPEG, PNG o WebP."
+msgstr "Unsupported format: use JPEG, PNG or WebP."
+
+#: apps/common/files.py
+#, python-format
+msgid "La foto non può superare %(max)s×%(max)s pixel."
+msgstr "The photo cannot exceed %(max)s×%(max)s pixels."
+
+#: apps/common/files.py
+msgid "Immagine non valida."
+msgstr "Invalid image."
+
+#: apps/cv/cover_letter_draft.py
+msgid "Genera prima una cover letter per questo job."
+msgstr "Generate a cover letter for this job first."
+
+#: apps/cv/cover_letter_draft.py apps/cv/cover_letter_draft_chat.py
+msgid "Apri prima l'editor per questa cover letter."
+msgstr "Open the editor for this cover letter first."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py
+msgid "Saldo credito insufficiente per questo messaggio."
+msgstr "Insufficient credit balance for this message."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py
+msgid "L'assistente non è riuscito a rispondere."
+msgstr "The assistant could not reply."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py
+msgid "Decisione non valida."
+msgstr "Invalid decision."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py apps/jobs/views.py
+msgid "Nessuna bozza per questo job."
+msgstr "No draft for this job."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py
+msgid "Messaggio non valido."
+msgstr "Invalid message."
+
+#: apps/cv/cover_letter_draft_chat.py apps/cv/draft_chat.py
+msgid "Azione non valida."
+msgstr "Invalid action."
+
+#: apps/cv/cover_letter_manual_generation.py
+msgid ""
+"Hai raggiunto il limite giornaliero di generazioni di cover letter e il "
+"saldo credito non è sufficiente."
+msgstr ""
+"You have reached the daily cover letter generation limit and your credit "
+"balance is not sufficient."
+
+#: apps/cv/cover_letter_manual_generation.py apps/cv/manual_generation.py
+#: apps/cv/referral_message_manual_generation.py
+msgid "Generazione già in corso per questo job."
+msgstr "Generation already in progress for this job."
+
+#: apps/cv/cover_letter_manual_generation.py
+msgid "Impossibile creare la cover letter per questo job."
+msgstr "Could not create the cover letter for this job."
+
+#: apps/cv/draft.py
+msgid "Genera prima un CV per questo job."
+msgstr "Generate a CV for this job first."
+
+#: apps/cv/draft.py apps/cv/draft_chat.py
+msgid "Apri prima l'editor per questo CV."
+msgstr "Open the editor for this CV first."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: deve essere un testo."
+msgstr "%(path)s: must be a text."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: massimo %(max)s caratteri."
+msgstr "%(path)s: at most %(max)s characters."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: deve essere vero/falso."
+msgstr "%(path)s: must be true/false."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: deve essere un numero intero."
+msgstr "%(path)s: must be an integer."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: deve essere una lista."
+msgstr "%(path)s: must be a list."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: massimo %(max)s elementi."
+msgstr "%(path)s: at most %(max)s items."
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: formato non valido."
+msgstr "%(path)s: invalid format."
+
+#: apps/cv/draft_validation.py
+msgid "contenuto"
+msgstr "content"
+
+#: apps/cv/draft_validation.py
+#, python-format
+msgid "%(path)s: campi non validi."
+msgstr "%(path)s: invalid fields."
+
+#: apps/cv/draft_validation.py apps/jobs/views.py
+msgid "Formato non valido."
+msgstr "Invalid format."
+
+#: apps/cv/draft_validation.py
+msgid "Contenuto troppo grande."
+msgstr "Content too large."
+
+#: apps/cv/manual_generation.py
+msgid ""
+"Hai raggiunto il limite giornaliero di generazioni manuali e il saldo "
+"credito non è sufficiente."
+msgstr ""
+"You have reached the daily CV generation limit and your credit balance is "
+"not sufficient."
+
+#: apps/cv/manual_generation.py
+msgid ""
+"Completa il profilo (almeno un titolo di studio) prima di generare un CV."
+msgstr ""
+"Complete your profile (at least one education entry) before generating a CV."
+
+#: apps/cv/manual_generation.py
+msgid "Impossibile creare il CV per questo job."
+msgstr "Could not create the CV for this job."
+
+#: apps/cv/referral_message_manual_generation.py
+msgid ""
+"Hai raggiunto il limite giornaliero di messaggi di networking e il saldo "
+"credito non è sufficiente."
+msgstr ""
+"You have reached the daily networking message limit and your credit balance "
+"is not sufficient."
+
+#: apps/cv/referral_message_manual_generation.py
+msgid "Impossibile creare il messaggio per questo job."
+msgstr "Could not create the message for this job."
+
+#: apps/jobs/application.py
+msgid "Questo job è già stato marcato come candidatura fatta."
+msgstr "This job is already marked as applied."
+
+#: apps/jobs/application.py
+msgid "Questo job non è marcato come candidatura fatta."
+msgstr "This job is not marked as applied."
+
+#: apps/jobs/import_service.py
+msgid ""
+"Hai raggiunto il limite giornaliero di import e il saldo credito non è "
+"sufficiente."
+msgstr ""
+"You have reached the daily import limit and your credit balance is not "
+"sufficient."
+
+#: apps/jobs/import_service.py
+msgid "L'import manuale di job è riservato al piano Pro."
+msgstr "Manual job import is reserved for the Pro plan."
+
+#: apps/jobs/import_service.py
+msgid "Impossibile importare quel job."
+msgstr "Could not import that job."
+
+#: apps/jobs/import_service.py
+msgid "Questo job è già nella tua lista."
+msgstr "This job is already in your list."
+
+#: apps/jobs/manual_job_service.py
+msgid ""
+"Hai raggiunto il limite giornaliero di job creati manualmente e il saldo "
+"credito non è sufficiente."
+msgstr ""
+"You have reached the daily limit of manually created jobs and your credit "
+"balance is not sufficient."
+
+#: apps/jobs/manual_job_service.py
+msgid "Impossibile creare il job. Riprova più tardi."
+msgstr "Could not create the job. Please try again later."
+
+#: apps/jobs/scoring.py
+#, python-format
+msgid ""
+"Punteggio limitato a %(cap)s/10: lingua richiesta (%(language)s) assente dal "
+"profilo."
+msgstr ""
+"Score capped at %(cap)s/10: required language (%(language)s) missing from "
+"the profile."
+
+#: apps/jobs/serializers.py
+msgid "Il nome non può essere vuoto."
+msgstr "The name cannot be empty."
+
+#: apps/jobs/serializers.py
+msgid "Deve essere una lista di punteggi interi."
+msgstr "Must be a list of integer scores."
+
+#: apps/jobs/serializers.py
+#, python-format
+msgid "Valori ammessi: %(values)s."
+msgstr "Allowed values: %(values)s."
+
+#: apps/jobs/serializers.py
+msgid "Deve essere una lista di \"none\" e/o id (stringa) di ricerche salvate."
+msgstr "Must be a list of \"none\" and/or saved search ids (strings)."
+
+#: apps/jobs/serializers.py
+msgid "Deve essere \"\", \"yes\" o \"no\"."
+msgstr "Must be \"\", \"yes\" or \"no\"."
+
+#: apps/jobs/tasks.py
+msgid "Raccolta già in corso per questo account."
+msgstr "Collection already in progress for this account."
+
+#: apps/jobs/tasks.py
+msgid "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
+msgstr "You have already used the manual collection today. At most 1 per day."
+
+#: apps/jobs/tasks.py
+msgid "Raccolta non riuscita. Riprova più tardi."
+msgstr "Collection failed. Please try again later."
+
+#: apps/jobs/views.py
+msgid "Messaggio vuoto."
+msgstr "Empty message."
+
+#: apps/jobs/views.py
+msgid "Indici non validi."
+msgstr "Invalid indexes."
+
+#: apps/jobs/views.py
+msgid "Canale non valido."
+msgstr "Invalid channel."
+
+#: apps/jobs/views.py
+#, python-format
+msgid "Sezione non valida. Valori ammessi: %(values)s."
+msgstr "Invalid section. Allowed values: %(values)s."
+
+#: apps/jobs/views.py
+msgid "Il parametro date_from deve essere una data in formato YYYY-MM-DD."
+msgstr "The date_from parameter must be a date in YYYY-MM-DD format."
+
+#: apps/jobs/views.py
+msgid "Il parametro date_to deve essere una data in formato YYYY-MM-DD."
+msgstr "The date_to parameter must be a date in YYYY-MM-DD format."
+
+#: apps/jobs/views.py
+msgid "Il filtro score deve essere una lista di interi separati da virgola."
+msgstr "The score filter must be a comma-separated list of integers."
+
+#: apps/jobs/views.py
+#, python-format
+msgid "Il filtro stato ammette solo: %(values)s."
+msgstr "The status filter only allows: %(values)s."
+
+#: apps/jobs/views.py
+msgid ""
+"Il filtro ricerca deve essere una lista di \"none\" e/o id di ricerche "
+"salvate separati da virgola."
+msgstr ""
+"The search filter must be a comma-separated list of \"none\" and/or saved "
+"search ids."
+
+#: apps/jobs/views.py
+#, python-format
+msgid "Il filtro candidati ammette solo: %(values)s."
+msgstr "The applicants filter only allows: %(values)s."
+
+#: apps/jobs/views.py
+msgid "Il filtro recruiter deve essere \"yes\", \"no\" o \"all\"."
+msgstr "The recruiter filter must be \"yes\", \"no\" or \"all\"."
+
+#: apps/jobs/views.py
+#, python-format
+msgid "Hai raggiunto il numero massimo di %(max)s filtri salvati."
+msgstr "You have reached the maximum of %(max)s saved filters."
+
+#: apps/notifications/serializers.py
+msgid "Endpoint di notifica non supportato."
+msgstr "Unsupported notification endpoint."
+
+#: apps/notifications/serializers.py
+msgid "Richiede le chiavi 'p256dh' e 'auth'."
+msgstr "The 'p256dh' and 'auth' keys are required."
+
+#: apps/notifications/tasks.py
+msgid "Nuovi job pronti"
+msgstr "New jobs ready"
+
+#: apps/notifications/tasks.py
+msgid "Ci sono nuove offerte da valutare nella tua lista."
+msgstr "There are new job offers to review in your list."
+
+#: apps/notifications/tasks.py
+msgid "Non ti candidi da un po'"
+msgstr "You haven't applied in a while"
+
+#: apps/notifications/tasks.py
+msgid "Entra nell'app e valuta le offerte in attesa."
+msgstr "Open the app and review the pending job offers."
+
+#: apps/profiles/cv_import.py
+msgid "Il file non può superare i 5 MB."
+msgstr "The file cannot exceed 5 MB."
+
+#: apps/profiles/cv_import.py
+msgid "Formato non supportato: solo PDF e Word (.docx) sono accettati."
+msgstr "Unsupported format: only PDF and Word (.docx) files are accepted."
+
+#: apps/profiles/cv_import.py
+#, python-format
+msgid "Il CV non può superare le %(max)s pagine."
+msgstr "The CV cannot exceed %(max)s pages."
+
+#: apps/profiles/cv_import.py
+msgid "Il file Word è troppo grande."
+msgstr "The Word file is too large."
+
+#: apps/profiles/serializers.py
+msgid "Deve essere una lista di testi."
+msgstr "Must be a list of texts."
+
+#: apps/profiles/serializers.py
+#, python-format
+msgid "Massimo %(max)s elementi."
+msgstr "At most %(max)s items."
+
+#: apps/profiles/serializers.py
+#, python-format
+msgid "Ogni elemento può avere al massimo %(max)s caratteri."
+msgstr "Each item can have at most %(max)s characters."
+
+#: apps/profiles/views.py
+#, python-format
+msgid "Hai raggiunto il numero massimo di voci per questa sezione (%(max)s)."
+msgstr ""
+"You have reached the maximum number of entries for this section (%(max)s)."
+
+#: apps/profiles/views.py
+msgid "non siamo riusciti a leggere il CV, compila il profilo manualmente"
+msgstr "we could not read the CV, please fill in the profile manually"
+
+#: apps/profiles/views.py
+msgid "Nessun file caricato."
+msgstr "No file uploaded."
+
+#: apps/profiles/views.py
+#, python-format
+msgid "Hai raggiunto il limite di %(max)s import del CV per oggi."
+msgstr "You have reached the limit of %(max)s CV imports for today."
+
+#: apps/profiles/views.py
+msgid ""
+"Il servizio di lettura del CV non è disponibile in questo momento: riprova "
+"più tardi."
+msgstr ""
+"The CV reading service is not available right now: please try again later."
+
+#: apps/searches/services.py
+msgid "Hai raggiunto il numero massimo di ricerche salvate per il tuo piano."
+msgstr "You have reached the maximum number of saved searches for your plan."
+
+#: apps/searches/services.py
+msgid "Hai raggiunto il numero massimo di ricerche attive per il tuo piano."
+msgstr "You have reached the maximum number of active searches for your plan."

@@ -2,6 +2,7 @@ from datetime import date
 
 from django.conf import settings
 from django.http import HttpResponse
+from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
@@ -169,7 +170,7 @@ class CvDraftView(APIView):
         try:
             return Response(load_cv_draft(job).content_json)
         except CVDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -184,11 +185,11 @@ class CvDraftView(APIView):
     def patch(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         if not isinstance(request.data, dict):
-            return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Formato non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         try:
             draft = load_cv_draft(job)
         except CVDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
         try:
             content = clean_cv_draft_content(request.data)
         except InvalidDraftContent as exc:
@@ -213,7 +214,7 @@ class CvDraftPreviewView(APIView):
         try:
             draft = load_cv_draft(job)
         except CVDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
         try:
@@ -267,7 +268,7 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
         try:
             history = load_cv_draft(job).chat_history
         except CVDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
         return Response({"history": history, **_chat_pricing(request, settings.PRICE_CV_DRAFT_CHAT_MESSAGE)})
 
     def post(self, request, pk):
@@ -276,7 +277,7 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
         params.is_valid(raise_exception=True)
         message = (params.validated_data["message"] or "").strip()
         if not message:
-            return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Messaggio vuoto.")}, status=status.HTTP_400_BAD_REQUEST)
         raw_focus_bullets = params.validated_data["focus_bullets"]
         # Sprint 69: riferimento per `bullet_id`; `bullet_index` resta
         # accettato dalle schede aperte prima dell'aggiornamento.
@@ -313,7 +314,7 @@ class CvDraftChatView(PostOnlyScopeMixin, APIView):
         action_index = request.data.get("action_index")
         decision = request.data.get("decision")
         if not isinstance(message_index, int) or not isinstance(action_index, int):
-            return Response({"detail": "Indici non validi."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Indici non validi.")}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             record_action_decision(job, message_index, action_index, decision)
@@ -359,7 +360,7 @@ class CoverLetterDraftView(APIView):
         try:
             return Response(load_cover_letter_draft(job).content_json)
         except CoverLetterDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
@@ -374,11 +375,11 @@ class CoverLetterDraftView(APIView):
     def patch(self, request, pk):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         if not isinstance(request.data, dict):
-            return Response({"detail": "Formato non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Formato non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         try:
             draft = load_cover_letter_draft(job)
         except CoverLetterDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
         try:
             content = clean_cover_letter_draft_content(request.data)
         except InvalidDraftContent as exc:
@@ -399,7 +400,7 @@ class CoverLetterDraftPreviewView(APIView):
         try:
             draft = load_cover_letter_draft(job)
         except CoverLetterDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
 
         draft_content = request.data if isinstance(request.data, dict) and request.data else draft.content_json
         try:
@@ -444,7 +445,7 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
         try:
             history = load_cover_letter_draft(job).chat_history
         except CoverLetterDraft.DoesNotExist:
-            return Response({"detail": "Nessuna bozza per questo job."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _("Nessuna bozza per questo job.")}, status=status.HTTP_404_NOT_FOUND)
         return Response(
             {"history": history, **_chat_pricing(request, settings.PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE)}
         )
@@ -455,7 +456,7 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
         params.is_valid(raise_exception=True)
         message = (params.validated_data["message"] or "").strip()
         if not message:
-            return Response({"detail": "Messaggio vuoto."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Messaggio vuoto.")}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             reply, actions, balance = send_cover_letter_chat_message(job, message)
@@ -472,7 +473,7 @@ class CoverLetterDraftChatView(PostOnlyScopeMixin, APIView):
         action_index = request.data.get("action_index")
         decision = request.data.get("decision")
         if not isinstance(message_index, int) or not isinstance(action_index, int):
-            return Response({"detail": "Indici non validi."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Indici non validi.")}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             record_cover_letter_action_decision(job, message_index, action_index, decision)
@@ -519,7 +520,7 @@ class GenerateReferralMessageView(APIView):
         job = get_object_or_404(Job, pk=pk, user=request.user)
         channel = request.data.get("channel", "")
         if channel not in ReferralMessageDocument.Channel.values:
-            return Response({"detail": "Canale non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _("Canale non valido.")}, status=status.HTTP_400_BAD_REQUEST)
         params = ReferralMessageInputSerializer(data=request.data)
         params.is_valid(raise_exception=True)
 
@@ -646,7 +647,7 @@ class JobListView(APIView):
         section = request.query_params.get("section", "main")
         if section not in SECTION_FILTERS:
             return Response(
-                {"detail": f"Sezione non valida. Valori ammessi: {', '.join(SECTION_FILTERS)}."},
+                {"detail": _("Sezione non valida. Valori ammessi: %(values)s.") % {"values": ", ".join(SECTION_FILTERS)}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -657,7 +658,7 @@ class JobListView(APIView):
                 date_from = date.fromisoformat(raw_date_from)
             except ValueError:
                 return Response(
-                    {"detail": "Il parametro date_from deve essere una data in formato YYYY-MM-DD."},
+                    {"detail": _("Il parametro date_from deve essere una data in formato YYYY-MM-DD.")},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -668,7 +669,7 @@ class JobListView(APIView):
                 date_to = date.fromisoformat(raw_date_to)
             except ValueError:
                 return Response(
-                    {"detail": "Il parametro date_to deve essere una data in formato YYYY-MM-DD."},
+                    {"detail": _("Il parametro date_to deve essere una data in formato YYYY-MM-DD.")},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -681,7 +682,7 @@ class JobListView(APIView):
                 scores = [int(value) for value in raw_scores.split(",") if value]
             except ValueError:
                 return Response(
-                    {"detail": "Il filtro score deve essere una lista di interi separati da virgola."},
+                    {"detail": _("Il filtro score deve essere una lista di interi separati da virgola.")},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -692,10 +693,8 @@ class JobListView(APIView):
             if not set(statuses) <= set(FILTERABLE_STATUSES):
                 return Response(
                     {
-                        "detail": (
-                            "Il filtro stato ammette solo: "
-                            f"{', '.join(FILTERABLE_STATUSES)}."
-                        )
+                        "detail": _("Il filtro stato ammette solo: %(values)s.")
+                        % {"values": ", ".join(FILTERABLE_STATUSES)}
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -708,7 +707,7 @@ class JobListView(APIView):
             search_ids = [value for value in raw_search.split(",") if value]
             if not all(value == "none" or value.isdigit() for value in search_ids):
                 return Response(
-                    {"detail": 'Il filtro ricerca deve essere una lista di "none" e/o id di ricerche salvate separati da virgola.'},
+                    {"detail": _('Il filtro ricerca deve essere una lista di "none" e/o id di ricerche salvate separati da virgola.')},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -718,7 +717,7 @@ class JobListView(APIView):
             applicants_ranges = [value for value in raw_applicants.split(",") if value]
             if not set(applicants_ranges) <= set(APPLICANTS_RANGES):
                 return Response(
-                    {"detail": f"Il filtro candidati ammette solo: {', '.join(APPLICANTS_RANGES)}."},
+                    {"detail": _("Il filtro candidati ammette solo: %(values)s.") % {"values": ", ".join(APPLICANTS_RANGES)}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -730,7 +729,7 @@ class JobListView(APIView):
             has_recruiter = False
         elif raw_recruiter and raw_recruiter != "all":
             return Response(
-                {"detail": 'Il filtro recruiter deve essere "yes", "no" o "all".'},
+                {"detail": _('Il filtro recruiter deve essere "yes", "no" o "all".')},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -769,7 +768,7 @@ class JobFilterPresetListCreateView(APIView):
     def post(self, request):
         if JobFilterPreset.objects.filter(user=request.user).count() >= MAX_JOB_FILTER_PRESETS:
             return Response(
-                {"detail": f"Hai raggiunto il numero massimo di {MAX_JOB_FILTER_PRESETS} filtri salvati."},
+                {"detail": _("Hai raggiunto il numero massimo di %(max)s filtri salvati.") % {"max": MAX_JOB_FILTER_PRESETS}},
                 status=status.HTTP_409_CONFLICT,
             )
 

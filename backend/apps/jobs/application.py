@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from .models import Job
 
@@ -19,7 +20,7 @@ def mark_application_done(job):
     riparte a ogni candidatura)."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
     if locked_job.status == Job.Status.APPLICATION_DONE:
-        raise ApplicationMarkRejected("Questo job è già stato marcato come candidatura fatta.")
+        raise ApplicationMarkRejected(_("Questo job è già stato marcato come candidatura fatta."))
 
     now = timezone.now()
     locked_job.status = Job.Status.APPLICATION_DONE
@@ -44,7 +45,7 @@ def undo_application_done(job):
     l'unico effetto di lasciarlo è un promemoria che arriva più tardi)."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
     if locked_job.status != Job.Status.APPLICATION_DONE:
-        raise ApplicationUndoRejected("Questo job non è marcato come candidatura fatta.")
+        raise ApplicationUndoRejected(_("Questo job non è marcato come candidatura fatta."))
 
     has_cv = locked_job.cv_documents.exists()
     locked_job.status = Job.Status.CV_GENERATED if has_cv else Job.Status.NEW

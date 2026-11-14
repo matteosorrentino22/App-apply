@@ -8,6 +8,7 @@ import copy
 
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.utils.translation import gettext as _
 
 from .cover_letter_content import COVER_LETTER_LABELS
 from .cover_letter_generation import _build_contact_line
@@ -55,7 +56,7 @@ def seed_cover_letter_draft_for_job(job):
     risemina sovrascrivendo contenuto e chat."""
     latest = latest_cover_letter_document(job)
     if latest is None or not latest.content_json:
-        raise NoCoverLetterDocumentToEdit("Genera prima una cover letter per questo job.")
+        raise NoCoverLetterDocumentToEdit(_("Genera prima una cover letter per questo job."))
 
     content = copy.deepcopy(latest.content_json)
     ensure_cover_letter_paragraph_ids(content)
@@ -116,7 +117,7 @@ def finalize_cover_letter_draft(job, content=None):
     try:
         draft = load_cover_letter_draft(job)
     except CoverLetterDraft.DoesNotExist as exc:
-        raise NoCoverLetterDraftToFinalize("Apri prima l'editor per questa cover letter.") from exc
+        raise NoCoverLetterDraftToFinalize(_("Apri prima l'editor per questa cover letter.")) from exc
 
     if content is not None:
         draft.content_json = content

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.jobs.models import DailyQuota, Job, RunLog, is_generation_active
 from apps.profiles.models import Profile
@@ -38,7 +39,7 @@ def _reserve_quota_or_credit(user):
     ('quota' o 'credit') usata, per poter restituire la riserva su
     fallimento. Solleva ManualGenerationRejected senza scrivere nulla se né
     il massimale né il credito coprono la richiesta."""
-    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
 
     limit = MANUAL_CV_PLAN_LIMITS[user.plan]
@@ -55,15 +56,14 @@ def _reserve_quota_or_credit(user):
         return "credit"
 
     raise ManualGenerationRejected(
-        "Hai raggiunto il limite giornaliero di generazioni manuali e il saldo "
-        "credito non è sufficiente."
+        _("Hai raggiunto il limite giornaliero di generazioni manuali e il saldo credito non è sufficiente.")
     )
 
 
 @transaction.atomic
 def _refund(user, charge_mode):
     if charge_mode == "quota":
-        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
         quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
         quota.manual_cv_count = max(0, quota.manual_cv_count - 1)
         quota.save(update_fields=["manual_cv_count"])
@@ -83,12 +83,12 @@ def _guard_and_reserve(job):
     arrivare alla riserva di quota/credito (nessun doppio addebito)."""
     locked_job = Job.objects.select_for_update().get(pk=job.pk)
     if is_generation_active(locked_job.cv_generation_in_progress, locked_job.cv_generation_started_at):
-        raise ManualGenerationRejected("Generazione già in corso per questo job.")
+        raise ManualGenerationRejected(_("Generazione già in corso per questo job."))
 
     profile = Profile.objects.filter(user=locked_job.user).first()
     if profile is None or not profile.is_complete:
         raise ManualGenerationRejected(
-            "Completa il profilo (almeno un titolo di studio) prima di generare un CV."
+            _("Completa il profilo (almeno un titolo di studio) prima di generare un CV.")
         )
 
     charge_mode = _reserve_quota_or_credit(locked_job.user)
@@ -145,7 +145,7 @@ def request_manual_cv_generation(job, extra_instructions=""):
         )
         if isinstance(exc, SystemExit):
             raise
-        raise ManualGenerationFailed("Impossibile creare il CV per questo job.") from exc
+        raise ManualGenerationFailed(_("Impossibile creare il CV per questo job.")) from exc
 
     Job.objects.filter(pk=job.pk).exclude(status=Job.Status.APPLICATION_DONE).update(
         status=Job.Status.CV_GENERATED

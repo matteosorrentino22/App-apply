@@ -5,6 +5,8 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone as dj_timezone
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from rest_framework import serializers
 
 from apps.profiles.models import Profile
@@ -14,8 +16,8 @@ from .legal import MIN_AGE, missing_acceptances
 from .models import User
 
 
-INVALID_INVITE_MESSAGE = "Registrazione non consentita: codice di invito mancante o non valido."
-EMAIL_TAKEN_MESSAGE = "Un utente con questa email esiste già."
+INVALID_INVITE_MESSAGE = gettext_lazy("Registrazione non consentita: codice di invito mancante o non valido.")
+EMAIL_TAKEN_MESSAGE = gettext_lazy("Un utente con questa email esiste già.")
 
 
 def is_valid_timezone(value):
@@ -32,17 +34,17 @@ class LegalConsentFields(serializers.Serializer):
 
     def validate_accept_privacy(self, value):
         if value is not True:
-            raise serializers.ValidationError("Devi dichiarare di aver letto l'informativa privacy.")
+            raise serializers.ValidationError(_("Devi dichiarare di aver letto l'informativa privacy."))
         return value
 
     def validate_accept_terms(self, value):
         if value is not True:
-            raise serializers.ValidationError("Devi accettare i termini di servizio.")
+            raise serializers.ValidationError(_("Devi accettare i termini di servizio."))
         return value
 
     def validate_confirm_age(self, value):
         if value is not True:
-            raise serializers.ValidationError(f"Per usare l'app devi avere almeno {MIN_AGE} anni.")
+            raise serializers.ValidationError(_("Per usare l'app devi avere almeno %(age)s anni.") % {"age": MIN_AGE})
         return value
 
 
@@ -108,7 +110,7 @@ class LoginSerializer(serializers.Serializer):
             username=user.username if user else attrs["email"], password=attrs["password"]
         )
         if authenticated is None:
-            raise serializers.ValidationError("Credenziali non valide.")
+            raise serializers.ValidationError(_("Credenziali non valide."))
         attrs["user"] = authenticated
         return attrs
 
@@ -177,7 +179,7 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
 
     def validate_timezone(self, value):
         if not is_valid_timezone(value):
-            raise serializers.ValidationError("Fuso orario non valido.")
+            raise serializers.ValidationError(_("Fuso orario non valido."))
         return value
 
     def update(self, instance, validated_data):
@@ -204,7 +206,7 @@ class PasswordCheckMixin:
     def validate_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
-            raise serializers.ValidationError("Password non corretta.")
+            raise serializers.ValidationError(_("Password non corretta."))
         return value
 
 
@@ -214,7 +216,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 
     def validate_old_password(self, value):
         if not self.context["request"].user.check_password(value):
-            raise serializers.ValidationError("Password attuale non corretta.")
+            raise serializers.ValidationError(_("Password attuale non corretta."))
         return value
 
     def validate(self, attrs):
@@ -228,7 +230,7 @@ class DeleteAccountSerializer(PasswordCheckMixin, serializers.Serializer):
 
     def validate_confirm(self, value):
         if value is not True:
-            raise serializers.ValidationError("Conferma esplicita richiesta.")
+            raise serializers.ValidationError(_("Conferma esplicita richiesta."))
         return value
 
 
@@ -238,7 +240,7 @@ class EmailChangeSerializer(PasswordCheckMixin, serializers.Serializer):
 
     def validate_new_email(self, value):
         if value.strip().lower() == self.context["request"].user.email.lower():
-            raise serializers.ValidationError("È già la tua email di accesso.")
+            raise serializers.ValidationError(_("È già la tua email di accesso."))
         return value.strip()
 
 

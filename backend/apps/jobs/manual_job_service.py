@@ -3,6 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from apps.accounts.models import User
 
@@ -32,7 +33,7 @@ def _today_europe_rome():
 
 @transaction.atomic
 def _reserve_quota_or_credit(user):
-    quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+    quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
     quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
 
     if quota.manual_job_count < MANUAL_JOB_DAILY_LIMIT:
@@ -48,15 +49,14 @@ def _reserve_quota_or_credit(user):
         return "credit"
 
     raise ManualJobRejected(
-        "Hai raggiunto il limite giornaliero di job creati manualmente e il "
-        "saldo credito non è sufficiente."
+        _("Hai raggiunto il limite giornaliero di job creati manualmente e il saldo credito non è sufficiente.")
     )
 
 
 @transaction.atomic
 def _refund(user, charge_mode):
     if charge_mode == "quota":
-        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota, _created = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
         quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
         quota.manual_job_count = max(0, quota.manual_job_count - 1)
         quota.save(update_fields=["manual_job_count"])
@@ -93,6 +93,6 @@ def create_manual_job(user, data):
         )
     except Exception as exc:
         _refund(user, charge_mode)
-        raise ManualJobFailed("Impossibile creare il job. Riprova più tardi.") from exc
+        raise ManualJobFailed(_("Impossibile creare il job. Riprova più tardi.")) from exc
     score_job(job)
     return job
