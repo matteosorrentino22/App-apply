@@ -35,24 +35,26 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ showToast, dismiss }}>
       {children}
+      {/* Toast scuro con azione facoltativa (Sprint 74, mockup `toast-archived`):
+          a tutta larghezza su mobile, sopra la barra di tab. */}
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--app-bottom-bar)+1rem)] z-50 flex flex-col items-center gap-2 px-4">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             role="status"
-            className="pointer-events-auto flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground shadow-md"
+            className="pointer-events-auto flex min-h-[52px] w-full max-w-[480px] items-center justify-between gap-3 rounded-button bg-[#2b2317] py-1.5 pl-4 pr-2 text-sm text-white shadow-toast"
           >
-            <span>{toast.message}</span>
+            <span className="min-w-0 py-1.5">{toast.message}</span>
             {toast.action && (
               <Button
                 type="button"
-                variant="ghost"
+                variant="text"
                 size="sm"
                 onClick={() => {
                   toast.action.onClick()
                   dismiss(toast.id)
                 }}
-                className="text-primary"
+                className="min-h-10 shrink-0 text-[15px] font-bold text-[#f3e8d6] hover:bg-white/10"
               >
                 {toast.action.label}
               </Button>

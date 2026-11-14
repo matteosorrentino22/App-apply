@@ -53,7 +53,7 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
   await page.getByRole('button', { name: 'Vai alla lista' }).click()
 
   await expect(page).toHaveURL(/\/list$/)
-  await expect(page.getByRole('heading', { name: 'I tuoi job' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Jobs', level: 1 })).toBeVisible()
 
   expect(consoleErrors, `Errori console rilevati: ${consoleErrors.join('\n')}`).toHaveLength(0)
 })

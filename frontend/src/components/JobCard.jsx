@@ -1,146 +1,96 @@
 import { Link } from 'react-router-dom'
-import { Heart, UserRound } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Heart } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { ScoreChip } from '@/components/ui/score-chip'
 import SwipeToArchive from '@/components/SwipeToArchive'
+import RecruiterIcon from '@/components/RecruiterIcon'
 import { useLanguage } from '../i18n/LanguageContext'
 import { scoreItemLabel } from '../utils/scoreItems'
-import { scoreStyle } from '../utils/scoreStyle'
 import { formatShortDate } from '../utils/date'
 import { applicantsLabel, isLowApplicants } from '../utils/applicants'
 
-export default function JobCard({ job, onSwipe, swipeLabel, onGenerateCv, onToggleFavorite, generating }) {
+const VISIBLE_GAPS = 2
+
+// Card ridotta della lista (Sprint 74, mockup `jobs-lista`, SPEC-DELTA A2/A7):
+// stato e candidati, titolo, azienda · località con icona del recruiter, i
+// primi 2 gap, data e cuoricino. Tutta la card porta al dettaglio (link
+// "stirato" sul titolo); il cuoricino e il profilo del recruiter restano
+// controlli separati. Niente più Dettagli / Archivia / Genera CV: si genera
+// dal dettaglio, si archivia con lo swipe (e dal dettaglio dallo Sprint 75).
+export default function JobCard({ job, onSwipe, swipeLabel, onToggleFavorite }) {
   const { t, lang } = useLanguage()
 
-  const statusBadge =
-    job.status === 'new' ? (
-      <Badge variant="neutral">{t('jobs.status_new')}</Badge>
-    ) : (
-      <Badge variant="primary">{t(`jobs.status_${job.status}`)}</Badge>
-    )
-
   const applicantsText = applicantsLabel(job, t)
-  const lowApplicants = isLowApplicants(job)
+  const gaps = job.score_gaps || []
+  const hiddenGaps = gaps.length - VISIBLE_GAPS
 
   const card = (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-sm">
+    <article className="relative flex flex-col gap-3 rounded-card border border-border bg-card p-4 shadow-card outline-none has-[a[data-card-link]:focus-visible]:ring-3 has-[a[data-card-link]:focus-visible]:ring-ring/30">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            {statusBadge}
-            {job.matched_search && <Badge variant="neutral">{job.matched_search}</Badge>}
-            {applicantsText && (
-              <span
-                className={
-                  'rounded-full px-2 py-0.5 text-xs font-medium ' +
-                  (lowApplicants
-                    ? 'bg-success-soft text-success font-semibold'
-                    : 'bg-secondary text-muted-foreground')
-                }
-              >
-                {applicantsText}
-              </span>
-            )}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={job.status === 'new' ? 'neutral' : 'primary'}>{t(`jobs.status_${job.status}`)}</Badge>
+            {applicantsText && <Badge variant={isLowApplicants(job) ? 'success' : 'neutral'}>{applicantsText}</Badge>}
           </div>
-          <h3 className="mt-2 text-base font-semibold text-foreground">{job.title}</h3>
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <span>
-              {job.company}
-              {job.location && (
-                <>
-                  <span className="mx-1.5 text-muted-foreground/60">·</span>
-                  {job.location}
-                </>
-              )}
-            </span>
-            {job.recruiter_name && (
-              job.recruiter_profile_url ? (
-                <a
-                  href={job.recruiter_profile_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
-                  className="text-muted-foreground/70 hover:text-foreground"
-                >
-                  <UserRound className="h-3.5 w-3.5" />
-                </a>
-              ) : (
-                <span
-                  title={`${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`}
-                  className="text-muted-foreground/70"
-                >
-                  <UserRound className="h-3.5 w-3.5" />
-                </span>
-              )
-            )}
-          </p>
-          {job.date_collected && (
-            <p className="mt-0.5 text-xs text-muted-foreground/70">
-              {t('jobs.importedOnPrefix')} {formatShortDate(job.date_collected, lang)}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onToggleFavorite(job)}
-            aria-label={job.is_favorite ? t('jobs.unfavorite') : t('jobs.favorite')}
-            aria-pressed={job.is_favorite}
-            className="text-muted-foreground hover:text-rose-500"
-          >
-            <Heart className={`h-5 w-5 ${job.is_favorite ? 'fill-rose-500 text-rose-500' : ''}`} />
-          </button>
-          {job.score != null && (
-            <div
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl font-bold tabular-nums ${scoreStyle(job.score)}`}
+          <h3 className="text-base leading-snug font-[650] text-foreground">
+            <Link
+              to={`/jobs/${job.id}`}
+              data-card-link
+              draggable={false}
+              className="outline-none after:absolute after:inset-0 after:content-['']"
             >
-              {job.score}
-            </div>
-          )}
+              {job.title}
+            </Link>
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {job.company}
+            {job.location && <> · {job.location}</>}
+            <RecruiterIcon job={job} />
+          </p>
         </div>
+        {job.score != null && <ScoreChip score={job.score} />}
       </div>
 
-      {job.score_gaps?.length > 0 && (
-        <div className="rounded-md bg-secondary px-3 py-2">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t('jobs.gaps')}
-          </p>
-          <ul className="flex flex-col gap-1 text-sm text-foreground">
-            {job.score_gaps.slice(0, 4).map((item, index) => (
-              <li key={index} className="flex gap-1.5">
-                <span className="shrink-0 text-destructive">−</span>
-                <span className="line-clamp-1">{scoreItemLabel(item)}</span>
+      {gaps.length > 0 && (
+        <div className="rounded-field bg-tint px-3.5 py-3">
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">{t('jobs.gaps')}</p>
+          <ul className="flex flex-col gap-1 text-[15px] leading-snug text-foreground">
+            {gaps.slice(0, VISIBLE_GAPS).map((item, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="shrink-0 font-bold text-destructive" aria-hidden="true">
+                  —
+                </span>
+                <span className="line-clamp-2">{scoreItemLabel(item)}</span>
               </li>
             ))}
           </ul>
+          {hiddenGaps > 0 && (
+            <p className="mt-1.5 text-sm font-semibold text-primary">
+              {hiddenGaps === 1 ? t('jobs.gapsMoreOne') : t('jobs.gapsMoreMany').replace('{count}', hiddenGaps)}
+            </p>
+          )}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 pt-1">
-        <div className="flex items-center gap-2">
-          <Button asChild variant="secondary" size="sm">
-            <Link to={`/jobs/${job.id}`}>{t('jobs.details')}</Link>
-          </Button>
-          {onSwipe && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onSwipe(job)}>
-              {swipeLabel}
-            </Button>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-muted-foreground">
+          {job.date_collected && (
+            <>
+              {t('jobs.importedOnPrefix')} {formatShortDate(job.date_collected, lang)}
+            </>
           )}
-        </div>
-        <Button
+        </p>
+        <button
           type="button"
-          size="sm"
-          disabled={generating || job.cv_generation_in_progress}
-          onClick={() => onGenerateCv(job)}
+          onClick={() => onToggleFavorite(job)}
+          aria-label={job.is_favorite ? t('jobs.unfavorite') : t('jobs.favorite')}
+          aria-pressed={job.is_favorite}
+          className="relative z-10 -m-2.5 flex h-11 w-11 items-center justify-center rounded-full text-primary outline-none hover:text-destructive focus-visible:ring-3 focus-visible:ring-ring/30"
         >
-          {generating || job.cv_generation_in_progress
-            ? t('jobs.generating')
-            : job.cv_pdf_url
-              ? t('jobs.regenerateCv')
-              : t('jobs.generateCv')}
-        </Button>
+          <Heart className={`h-[22px] w-[22px] ${job.is_favorite ? 'fill-destructive text-destructive' : ''}`} aria-hidden="true" />
+        </button>
       </div>
-    </div>
+    </article>
   )
 
   if (!onSwipe) return card

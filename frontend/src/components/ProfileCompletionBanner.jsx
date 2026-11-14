@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
+import { Banner } from '@/components/ui/banner'
 
 // Profilo incompleto (Sprint 70, §8.A punto 41): un banner fisso con il
 // link, invece di un rimando automatico all'onboarding, per non disturbare
@@ -21,17 +22,11 @@ export default function ProfileCompletionBanner() {
 
   const empty = user.profile_status === 'empty'
   return (
-    <div
-      role="status"
-      data-testid="profile-completion-banner"
-      className="mx-auto mt-3 flex max-w-2xl flex-wrap items-center justify-between gap-2 px-4"
-    >
-      <p className="flex-1 rounded-md bg-primary-soft px-3 py-2 text-sm text-primary">
-        {t(empty ? 'profileBanner.empty' : 'profileBanner.incomplete')}{' '}
-        <Link to={empty ? '/onboarding' : '/profile'} className="font-semibold underline">
-          {t(empty ? 'profileBanner.emptyLink' : 'profileBanner.incompleteLink')}
-        </Link>
-      </p>
-    </div>
+    <Banner variant="info" data-testid="profile-completion-banner">
+      {t(empty ? 'profileBanner.empty' : 'profileBanner.incomplete')}{' '}
+      <Link to={empty ? '/onboarding' : '/profile'} className="font-bold underline">
+        {t(empty ? 'profileBanner.emptyLink' : 'profileBanner.incompleteLink')}
+      </Link>
+    </Banner>
   )
 }

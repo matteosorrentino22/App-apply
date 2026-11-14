@@ -19,8 +19,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ConfirmEmailChangePage from './pages/ConfirmEmailChangePage'
 import AppShell from './components/AppShell'
-import AppUpdateBanner from './components/AppUpdateBanner'
-import ProfileCompletionBanner from './components/ProfileCompletionBanner'
+import SystemBanner from './components/SystemBanner'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -45,7 +44,7 @@ export default function App() {
         <ToastProvider>
           <AccountLanguageSync />
           <BrowserRouter>
-            <AppShell banner={<ProfileCompletionBanner />}>
+            <AppShell banner={<SystemBanner />}>
               <Routes>
                 <Route path="/" element={<Navigate to="/list" replace />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -116,7 +115,6 @@ export default function App() {
                 />
               </Routes>
             </AppShell>
-            <AppUpdateBanner />
           </BrowserRouter>
         </ToastProvider>
       </AuthProvider>

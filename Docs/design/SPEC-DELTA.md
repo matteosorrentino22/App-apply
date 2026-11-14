@@ -8,16 +8,16 @@
 | # | Cambio | Specifiche toccate |
 |---|---|---|
 | A1 | **Navigazione a 3 voci** (Jobs · Profilo · Impostazioni). La Home (`/home`) viene eliminata; `/` e il login portano a `/list`. Statistiche e "Raccogli ora" passano in Jobs *(fatto nello Sprint 73; statistiche e raccolta in un pannello ponte della lista fino allo Sprint 74)* | 01 §4.x Home/Jobs; 02 §12 (nessuna API da rimuovere: l'API statistiche resta) |
-| A2 | **"Genera CV" solo nel dettaglio del job**, con ▾ per cover letter e messaggio. Sulla card di lista non ci sono più azioni di generazione, archivio o dettagli | 01 lista job, dettaglio |
+| A2 | **"Genera CV" solo nel dettaglio del job**, con ▾ per cover letter e messaggio. Sulla card di lista non ci sono più azioni di generazione, archivio o dettagli *(fatto nello Sprint 74)* | 01 lista job, dettaglio |
 | A3 | **"Colma i gap"** è un passo facoltativo che precede la generazione del CV (pannello dal basso), non una funzione separata | 01 §4.x CV |
 | A4 | **Raccolta automatica Pro.** Gli utenti **Pro** hanno **una raccolta automatica al giorno all'orario scelto**; **sostituisce** la raccolta notturna delle 02:00 | 01 §4.14, §4.x raccolta notturna, §piani; 02 §5.1 Beat, `run_nightly_cycle`, migrazione `0003_schedule_nightly_cycle`, `CLAUDE.md` (premessa "ciclo notturno") |
 | A5 | **Utenti Free: nessuna raccolta automatica, nemmeno quella delle 02:00.** Possono raccogliere **solo manualmente, 1 volta al giorno** (`COLLECTION_DAILY_LIMIT`); l'opzione automatica compare bloccata con invito al Pro. *(Confermato dal committente il 2026-11-14.)* | 01 piani (oggi "la raccolta notturna è uguale per entrambi"), 01 §4.14, 02 §5.1 |
 | A6 | Il raccoglitore prende **solo offerte delle ultime 24 ore** (già così oggi: resta, ma il testo in UI lo dice esplicitamente) | nessuno |
-| A7 | **Icona recruiter** in lista e dettaglio quando l'annuncio ha un recruiter; **2 gap principali** sulla card ("+N altri"); riga descrizione annuncio a fisarmonica; **archivio** anche dal menu ⋯ del dettaglio | 01 lista/dettaglio (solo presentazione) |
-| A8 | **Filtri salvati** (§4.21) e **filtri in URL** (Sprint 68) restano com'è: cambia solo la presentazione (pannello + pillole) | nessuno |
+| A7 | **Icona recruiter** in lista e dettaglio quando l'annuncio ha un recruiter; **2 gap principali** sulla card ("+N altri"); riga descrizione annuncio a fisarmonica; **archivio** anche dal menu ⋯ del dettaglio *(lista fatta nello Sprint 74; dettaglio e menu ⋯ nello Sprint 75)* | 01 lista/dettaglio (solo presentazione) |
+| A8 | **Filtri salvati** (§4.21) e **filtri in URL** (Sprint 68) restano com'è: cambia solo la presentazione (pannello + pillole) *(fatto nello Sprint 74)* | nessuno |
 | A9 | **Logout spostato in Impostazioni**, con finestra di conferma (oggi è nella barra in alto) *(fatto nello Sprint 73)* | 01 account |
 | A10 | **Login Google non mostrato** (il codice allauth resta, non configurato in produzione) | 01 §accesso |
-| A11 | **Conferma costo in un `Modal` dell'app** al posto di `window.confirm` (Sprint 68–70) | 01 §costi, 02 flussi |
+| A11 | **Conferma costo in un `Modal` dell'app** al posto di `window.confirm` (Sprint 68–70) *(lista fatta nello Sprint 74; dettaglio ed editor negli sprint 75–76)* | 01 §costi, 02 flussi |
 | A12 | **Impostazioni a sottopagine**: Ricerche, Notifiche, Account (email, fuso, limiti, privacy, password, elimina), Lingua, Esci | 01 impostazioni |
 | A13 | Nuovo **logo** e icone PWA (`Docs/design/logo/`) | 02 PWA/manifest |
 | A14 | Fuori ambito: template PDF del CV (Sprint 52–58), job con soli 3 stati stabili + transitorio, niente cache offline | — |

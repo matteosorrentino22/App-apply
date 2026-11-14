@@ -127,7 +127,9 @@ export default function AppShell({ children, banner }) {
       )}
     >
       {showNav ? <DesktopTopBar /> : <PublicHeader />}
-      {showNav ? banner : null}
+      {/* Avvisi di sistema (nuova versione, profilo incompleto): in cima alla
+          colonna, anche nelle pagine senza navigazione (la nuova versione). */}
+      <div className="mx-auto w-full max-w-2xl px-4 pt-4 empty:hidden">{banner}</div>
       <main className="flex-1">{children}</main>
       <LegalFooter />
       {showNav ? <BottomTabBar /> : null}

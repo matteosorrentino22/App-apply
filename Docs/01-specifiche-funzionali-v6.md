@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci del redesign UI)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci e Sprint 74 lista Jobs del redesign UI)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -326,37 +326,43 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 
 La sezione dipende da origine, preferito e archiviazione, **non** dallo stato del job. All'apertura dal menu la lista mostra **Raccolti**. Sezione e filtri sono scritti nell'indirizzo della pagina (Sprint 68): tornando dal dettaglio di un job (link "Torna alla lista" o tasto indietro del browser) la lista riparte dalla stessa sezione con gli stessi filtri, e l'indirizzo si può condividere.
 
-Nella sezione **Importati** c'è un riquadro con:
-- il form di import da link per il Pro, oppure il messaggio "L'import manuale di job è riservato al piano Pro" per il Free;
-- per tutti, il pulsante **"Aggiungi manualmente"** (§4.15).
+**Testata della lista** (Sprint 74, redesign UI): titolo "Jobs", pulsante **Raccogli** (icona di aggiornamento, apre il pannello della raccolta manuale, §4.14), campo di **ricerca testuale**, pulsante **Filtri** con il numero dei filtri attivi e, nella sezione Raccolti, il **riepilogo delle statistiche** (§4.13). Sotto le pillole delle sezioni, se ci sono filtri attivi, la riga **"N filtri attivi · Cancella"**: "Cancella" riporta tutti i filtri ai valori di default (date di oggi, nessun altro filtro) lasciando sezione e ricerca testuale.
+
+Nella sezione **Importati** c'è un riquadro "Importa un job" con:
+- il form di import da link per il Pro (link, "Importa", indicazione del costo della prossima richiesta), oppure il messaggio "L'import manuale di job è riservato al piano Pro" con il badge PRO per il Free;
+- per tutti, il pulsante **"Aggiungi manualmente"**, che apre un pannello con il form (§4.15).
 
 **Ordinamento.** Sempre per **punteggio decrescente**, con i job senza punteggio in fondo, e a parità di punteggio per data di raccolta decrescente. L'utente non può cambiarlo.
 
-**Filtri** (tutti visibili in linea, senza pannello separato). Si combinano in AND tra loro; dentro un filtro a scelta multipla le opzioni valgono in OR.
+**Filtri** (dallo Sprint 74 in un **pannello "Filtri"** dal basso, finestra centrale da 1024 px; prima erano in linea nella pagina). Si applicano subito (restano nell'indirizzo della pagina) e "Mostra risultati" chiude il pannello; "Azzera filtri" li riporta ai valori di default. Si combinano in AND tra loro; dentro un filtro a scelta multipla le opzioni valgono in OR. Il numero di filtri attivi conta un gruppo per filtro (le date solo se diverse da oggi–oggi).
 - **Intervallo di date** "Dal" / "Al", sulla data di raccolta, nel fuso dell'utente, estremi inclusi.
   - **Default: oggi–oggi**, con "oggi" nel fuso dell'utente (dallo Sprint 70; prima era la data del dispositivo).
   - Il link "Tutte le date" toglie il limite e mostra tutto lo storico.
   - Sostituisce i vecchi periodi preimpostati (Sprint 46).
 - **Location:** testo libero, cercato come sottostringa nella località del job.
 - **Ricerca** (di provenienza): scelta multipla tra tutte le ricerche salvate, attive e non, più "Nessuna ricerca" (Sprint 40, multi-selezione dallo Sprint 63). È **nascosto e ignorato nella sezione Importati**. Dallo Sprint 68 un job resta associato alla sua ricerca anche se questa viene modificata; per i job raccolti prima e non attribuibili con certezza vale ancora il confronto con i valori attuali della ricerca.
-- **Punteggio:** scelta multipla sui valori **1–10**.
+- **Punteggio:** scelta multipla sui valori **1–10** (pillole).
 - **Stato:** scelta multipla tra **nuovo**, **CV generato**, **candidatura fatta**. Lo stato transitorio non è selezionabile.
 - **Candidati:** scelta multipla tra le fasce **<25**, **25–50**, **51–100**, **101–200**, **>200**. I job senza questo dato (importati, manuali) non rientrano in nessuna fascia.
-- **Recruiter:** tutti / con recruiter / senza recruiter.
+- **Recruiter:** tutti / con recruiter / senza recruiter (controllo a segmenti).
 
-Sotto i filtri ci sono i **filtri preferiti** salvati, come pillole cliccabili, e il pulsante "Salva filtri attuali" (§4.21).
+In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la ✕ per eliminarli, e il pulsante "Salva filtri attuali", che apre una finestra con il nome (§4.21). Ogni ricerca di provenienza è una pillola "parole chiave · città".
 
 **Ricerca testuale.**
 - Cerca per keyword in **titolo, azienda e località** (non nella descrizione), su tutto lo storico **della sezione corrente**, senza attraversare le altre.
-- **Quando è attiva, tutti gli altri filtri vengono ignorati**: i controlli si disattivano e compare la scritta "Filtri disattivati durante la ricerca testuale". Lo stesso vale per i filtri preferiti.
+- **Quando è attiva, tutti gli altri filtri vengono ignorati**: il pulsante Filtri si disattiva e compare la scritta "Filtri disattivati durante la ricerca testuale". Lo stesso vale per i filtri preferiti.
 
-**Scheda del job nella lista.**
-- **Badge:** stato, ricerca di provenienza, numero di candidati (in verde e in grassetto se sotto i 25).
-- **Dati:** titolo; azienda · località; icona del recruiter (con link al profilo se disponibile); data di raccolta ("Importato: …").
-- **Punteggio:** cuoricino dei preferiti e riquadro del punteggio, colorato per fasce di 2 valori.
-- **"Da colmare":** i **primi 4 gap**, solo l'etichetta.
-- **Pulsanti:** "Dettagli", "Archivia" (o "Rimuovi da archivio") e "Genera CV" / "Rigenera CV", che durante la lavorazione diventa "Generazione…".
+**Scheda del job nella lista** (ridotta dallo Sprint 74, SPEC-DELTA A2/A7).
+- **Tutta la scheda è cliccabile** e apre il dettaglio (il link è sul titolo); il cuoricino e il profilo del recruiter restano controlli separati.
+- **Badge:** stato e numero di candidati (in verde se sotto i 25). La ricerca di provenienza è nel dettaglio.
+- **Dati:** titolo; azienda · località con l'**icona del recruiter** in un cerchietto (con link al profilo se disponibile); data di raccolta ("Importato: …").
+- **Punteggio:** riquadro del punteggio in alto a destra, colorato per fasce di 2 valori.
+- **"Da colmare":** i **primi 2 gap**, solo l'etichetta, più "+N altri · vedi nel dettaglio".
+- **Cuoricino** dei preferiti in basso a destra.
+- **Nessun pulsante** di dettaglio, archiviazione o generazione: il CV si genera dal dettaglio (§4.7), l'archiviazione si fa con lo swipe.
 - La scheda **non** mostra i match né la motivazione del punteggio.
+
+**Stato vuoto:** icona, il messaggio della sezione e, in Raccolti, "Raccogli ora"; con filtri attivi "Nessun job con questi filtri." e "Azzera filtri".
 
 **Dettaglio job.**
 - **Intestazione:**
@@ -378,8 +384,8 @@ Sotto i filtri ci sono i **filtri preferiti** salvati, come pillole cliccabili, 
 - **Messaggi di networking** già generati per quel job (§4.20).
 
 **Archiviazione e swipe.**
-- Fuori dalla sezione Archiviati, lo **swipe a sinistra** (o il pulsante "Archivia") archivia il job. Un avviso offre **"Annulla"**.
-- Nella sezione Archiviati, swipe e pulsante diventano **"Rimuovi da archivio"**: il job torna nella sua sezione d'origine con lo stato che aveva.
+- Fuori dalla sezione Archiviati, lo **swipe a sinistra** (dito o trascinamento del mouse) archivia il job. Un avviso scuro in basso offre **"Annulla"**. Dallo Sprint 74 non c'è più il pulsante "Archivia" sulla scheda; l'archiviazione dal menu del dettaglio arriva con lo Sprint 75 (SPEC-DELTA A7): fino ad allora non è possibile archiviare **da tastiera**.
+- Nella sezione Archiviati lo swipe diventa **"Rimuovi da archivio"**: il job torna nella sua sezione d'origine con lo stato che aveva.
 - **Uscita automatica dall'archivio:** se si **genera o rigenera un CV** per un job archiviato, il job esce dall'archivio. Cover letter, messaggi e modifiche dall'editor invece **non** lo fanno uscire.
 
 ### 4.6 Stati e sezioni del job
@@ -559,7 +565,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 - Il credito è un **saldo unico in euro** sull'account. Copre tutte le azioni della tabella, sia sul Free sia sul Pro, tranne l'import, che resta precluso al Free.
 - Un'azione **fallita** non consuma nulla: l'unità di massimale o l'importo scalato vengono restituiti.
 - **Contatori e prezzi visibili** (Sprint 70): in Impostazioni il riquadro **"I tuoi limiti di oggi"** mostra per ogni azione a massimale usate oggi / massimale del piano e prezzo oltre il massimale ("Solo piano Pro" per l'import sul Free, "Non disponibile" per raccolta manuale e import CV), più il prezzo a messaggio delle due chat e l'ora in cui i contatori ripartono. Sotto i pulsanti di import da link, "Aggiungi manualmente" (anche nel popup) e "Raccogli ora" un'indicazione dice cosa succede alla prossima richiesta: "Incluso nel piano: ne restano N su M oggi", "Massimale di oggi raggiunto: questa azione costa X € (saldo Y €)" oppure, se il saldo non basta, che l'azione è bloccata.
-- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e generazione del CV dalla lista chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"). Nella pagina del job (CV, cover letter, messaggi) e nelle chat degli editor il costo non è ancora mostrato né confermato: i dati sono disponibili, l'integrazione è rinviata (§8.A punto 29). I prezzi sono valori di default configurati dall'amministratore, non "da definire".
+- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e generazione del CV dalla lista chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"). Nella pagina del job (CV, cover letter, messaggi) e nelle chat degli editor il costo non è ancora mostrato né confermato: i dati sono disponibili, l'integrazione è rinviata (§8.A punto 29). I prezzi sono valori di default configurati dall'amministratore, non "da definire". Dallo Sprint 74 nella lista la conferma è una **finestra dell'app** ("Costo dell'azione", Procedi / Annulla, mockup `confirm-cost`, SPEC-DELTA A11) per import e job manuale; la generazione del CV non parte più dalla lista. Nel dettaglio e negli editor resta la finestra di sistema del browser fino agli sprint 75–76.
 - Le **chat** degli editor sono utilizzabili **solo con credito disponibile**.
 - I massimali si **azzerano a mezzanotte (Europe/Rome)**, per tutti gli utenti.
 
@@ -598,45 +604,45 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 - i testi sono in italiano o in inglese secondo la **lingua dell'interfaccia** salvata sull'account al momento dell'invio (Sprint 71; prima solo in italiano);
 - l'"ora locale" è quella del fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
 
-### 4.13 Statistiche e raccolta (Sprint 44; dallo Sprint 73 in Jobs)
+### 4.13 Statistiche e raccolta (Sprint 44; dallo Sprint 73–74 in Jobs)
 
-Dallo Sprint 73 la pagina Home non esiste più. Statistiche e raccolta manuale sono in un **pannello "Raccogli nuovi job"** aperto dal pulsante con l'icona di aggiornamento accanto al titolo della lista job (soluzione ponte: lo Sprint 74 le ridisegna nella lista). Il pannello contiene:
-- **"Le tue statistiche"**: tre schede, ciascuna con le colonne **Oggi / Ultima settimana / Totali**:
-  - **Job trovati**, con la riga "di cui manuali: N". Contano tutti i job dell'utente per data di raccolta, a prescindere da sezione e archiviazione. "Manuali" comprende sia i job importati da link sia quelli creati a mano.
+Dallo Sprint 73 la pagina Home non esiste più. Dallo Sprint 74 (mockup `jobs-lista`, `jobs-stats`) le statistiche sono un **riepilogo espandibile** nella sezione Raccolti della lista, sotto la ricerca: chiuso mostra i **job trovati oggi** ("nuovi oggi") e **negli ultimi 7 giorni** ("questa settimana"); "Statistiche ▾" lo apre su **"Le tue statistiche"**, con tre gruppi e i valori **Oggi / Settimana / Totali**:
+  - **Job trovati**, con la riga "di cui manuali: N oggi · N in settimana · N in totale". Contano tutti i job dell'utente per data di raccolta, a prescindere da sezione e archiviazione. "Manuali" comprende sia i job importati da link sia quelli creati a mano.
   - **CV generati**: ogni CV prodotto, incluse le generazioni e ogni PDF finale prodotto dall'editor. Le cover letter non sono contate.
   - **Candidature fatte**: job marcati "candidatura fatta", per data di marcatura.
-- **"Raccogli ora"**: la raccolta manuale (§4.14), con l'indicazione del costo/limite della prossima richiesta.
+
+La raccolta manuale (§4.14) è in un pannello a parte, aperto dal pulsante Raccogli accanto al titolo.
 
 **Definizioni dei periodi:**
 - "Oggi" parte dalla mezzanotte nel fuso dell'utente;
 - "Ultima settimana" sono gli **ultimi 7 giorni mobili**, non la settimana di calendario;
 - "Totali" è tutto lo storico.
 
-Le statistiche si caricano all'apertura del pannello e si ricaricano dopo una raccolta manuale riuscita, insieme alla lista. Non ci sono altre metriche.
+Le statistiche si caricano all'apertura della lista e si ricaricano dopo una raccolta manuale riuscita, insieme alla lista. Non ci sono altre metriche.
 
 ### 4.14 Raccolta manuale "Raccogli ora"
 
-- Dal pannello "Raccogli nuovi job" della lista (§4.13), il pulsante **"Raccogli ora"** esegue subito, per il solo utente, la stessa raccolta + scoring della notte, sulle sue ricerche attive (con la finestra delle 24 ore).
-- Al termine l'app mostra **"Job trovati"** e **"Tenuti dopo scoring"**, con l'avviso "Raccolta completata.".
+- Dal pannello **"Raccogli nuovi job"** (pulsante Raccogli accanto al titolo della lista, o "Raccogli ora" nello stato vuoto di Raccolti), il pulsante **"Raccogli ora"** esegue subito, per il solo utente, la stessa raccolta + scoring della notte, sulle sue ricerche attive (con la finestra delle 24 ore).
+- Al termine l'avviso "Raccolta completata." e, nel pannello, "Ultima raccolta: N job trovati, M tenuti dopo lo scoring"; la lista e le statistiche si ricaricano. Sotto il pulsante l'indicazione del limite ("Incluso nel piano: ne restano X su 1 oggi").
 - **Limite:** **1 al giorno** (azzeramento a mezzanotte Europe/Rome), uguale per tutti i piani, **senza estensione a credito**. Oltre: "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
 - **Una sola raccolta per volta.** Se ne è già in corso una: "Raccolta già in corso per questo account." Un blocco rimasto appeso si considera scaduto dopo **2 ore**.
 - **Fallimento:** "Raccolta non riuscita. Riprova più tardi.", con il tentativo giornaliero restituito. Se fallisce solo una parte dei gruppi di ricerche, la raccolta conta come riuscita con le offerte degli altri gruppi.
-- **Testo della card** (Sprint 68): spiega che la raccolta manuale cerca subito le offerte delle ultime 24 ore senza aspettare la notte, e che la raccolta notturna gira comunque.
+- **Testi del pannello** (Sprint 74, mockup `collect-free` senza il riquadro della raccolta automatica, che arriva con lo Sprint 77): avvia subito la ricerca sulle ricerche attive; un riquadro spiega che il raccoglitore prende **solo i job pubblicati nelle ultime 24 ore**; la raccolta notturna gira comunque.
 - Per concedere una seconda raccolta lo stesso giorno l'amministratore usa un'azione dedicata in Django Admin (Sprint 68).
-- **Attesa:** la raccolta avviene mentre l'utente aspetta sulla pagina e può durare minuti.
+- **Attesa:** la raccolta avviene mentre l'utente aspetta sulla pagina e può durare minuti: il pannello mostra un indicatore con "Raccolta in corso…" e non si chiude finché non finisce (mockup `collect-running`).
 - La raccolta manuale **non sostituisce** quella notturna, che gira comunque per tutte le ricerche attive.
 
 ### 4.15 Creazione manuale di un job (Sprint 43)
 
 - Nella sezione **Importati**, il pulsante **"Aggiungi manualmente"** è disponibile sia sul **Free** sia sul **Pro**.
-- Apre un modulo con:
+- Apre un **pannello** (Sprint 74, mockup `add-manual`) con:
   - campi obbligatori: **titolo**, **azienda**, **località** (con autocompletamento), **descrizione**, **data e ora di riferimento** (usata come data di pubblicazione);
   - campo facoltativo: **link di candidatura**.
 
   Gli errori di validazione sono mostrati campo per campo.
 - Il job viene **valutato subito**, compare in **Importati** in stato "nuovo" e da lì si comporta come gli altri. Non ha dati su candidati e recruiter.
 - Se la creazione fallisce, il massimale o il credito vengono restituiti. Se fallisce solo la valutazione, il job resta (senza punteggio) e la valutazione viene ritentata di notte come per i job raccolti, senza restituzione (Sprint 68).
-- **Limite:** **3 al giorno**, con contatore separato da quello dell'import. Oltre, **0,50 €** a credito (`PRICE_MANUAL_JOB_EXTRA`).
+- **Limite:** **3 al giorno**, con contatore separato da quello dell'import. Oltre, **0,50 €** a credito (`PRICE_MANUAL_JOB_EXTRA`). In fondo al pannello l'indicazione del costo della prossima richiesta; se il massimale è raggiunto e il saldo non basta, "Aggiungi" è disattivato (Sprint 74).
 - Non c'è controllo di duplicati: lo stesso job inserito due volte crea due job.
 
 ### 4.16 Editor del CV (Sprint 51; ritocchi grafici 52–58)
@@ -989,8 +995,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Se lo scoring di un job fallisce, il job resta visibile senza punteggio, in fondo alla lista.
 
 ### Statistiche e raccolta manuale
-- ☐ Il pannello "Raccogli nuovi job" della lista mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, ultima settimana e totali.
-- ☐ "Raccogli ora" esegue raccolta + scoring sulle ricerche attive e mostra i job trovati e quelli tenuti.
+- ☐ Nella sezione Raccolti il riepilogo mostra i job trovati oggi e in settimana; aperto mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, settimana e totali (Sprint 74).
+- ☐ "Raccogli ora" (pannello aperto dal pulsante Raccogli) esegue raccolta + scoring sulle ricerche attive, mostra i job trovati e quelli tenuti e ricarica lista e statistiche.
 - ☐ Una seconda raccolta manuale nello stesso giorno è rifiutata con "Massimo 1 al giorno", su tutti i piani e senza estensione a credito.
 - ☐ Una raccolta manuale fallita non consuma il tentativo giornaliero.
 
@@ -998,17 +1004,18 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Esistono quattro sezioni: Raccolti, Importati, Preferiti, Archiviati.
 - ☐ All'apertura la lista mostra la sezione Raccolti con i job di oggi, ordinati per punteggio decrescente (i job senza punteggio in fondo).
 - ☐ L'intervallo di date filtra per data di raccolta, estremi inclusi; "Tutte le date" mostra tutto lo storico.
-- ☐ I filtri location, ricerca (multi), punteggio (1–10, multi), stato (multi), candidati (fasce, multi) e recruiter si combinano in AND, con OR dentro ciascun filtro multiplo.
+- ☐ I filtri location, ricerca (multi), punteggio (1–10, multi), stato (multi), candidati (fasce, multi) e recruiter, nel pannello "Filtri", si combinano in AND, con OR dentro ciascun filtro multiplo, e si applicano subito; il pulsante Filtri mostra quanti gruppi sono attivi e "Cancella" / "Azzera filtri" li riportano ai valori di default (Sprint 74).
 - ☐ Il filtro Ricerca non compare nella sezione Importati.
 - ☐ La ricerca testuale trova job per titolo, azienda o località nella sola sezione corrente e, quando è attiva, ignora tutti gli altri filtri.
-- ☐ La scheda mostra stato, provenienza, candidati, titolo, azienda, località, recruiter, data di raccolta, preferito, punteggio e i primi 4 gap.
+- ☐ La scheda mostra stato, candidati, titolo, azienda, località, icona del recruiter, data di raccolta, preferito, punteggio e i primi 2 gap con "+N altri"; tutta la scheda apre il dettaglio e non ha pulsanti di dettaglio, archiviazione o generazione (Sprint 74).
 - ☐ Il dettaglio mostra la motivazione del punteggio, match e gap con "Espandi motivazioni" e la descrizione completa.
-- ☐ Lo swipe archivia, con possibilità di annullare. In Archiviati lo swipe riporta il job alla sezione d'origine con il suo stato.
+- ☐ Lo swipe archivia, con possibilità di annullare; uno swipe non apre il dettaglio. In Archiviati lo swipe riporta il job alla sezione d'origine con il suo stato.
 - ☐ Generare o rigenerare un CV per un job archiviato lo fa uscire dall'archivio.
 
 ### Preferiti e filtri salvati
 - ☐ Il cuoricino aggiunge o toglie un job dai preferiti. Un preferito archiviato compare solo in Archiviati.
-- ☐ "Salva filtri attuali" salva, con un nome, tutti i filtri tranne le date e la sezione.
+- ☐ "Salva filtri attuali" (nel pannello Filtri) salva, con un nome, tutti i filtri tranne le date e la sezione.
+- ☐ Import e job manuale oltre il massimale chiedono conferma del costo in una finestra dell'app; con saldo insufficiente "Aggiungi" è disattivato (Sprint 74).
 - ☐ Applicare un filtro salvato copia i valori nei filtri correnti, che restano modificabili senza alterare il filtro salvato.
 - ☐ Una ricerca eliminata dentro un filtro salvato non filtra nulla, mentre il resto del filtro continua a valere.
 - ☐ Non si possono salvare più di 50 filtri.

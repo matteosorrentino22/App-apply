@@ -50,14 +50,40 @@ function cardFor(page, title) {
   return page.locator('[data-testid="swipe-row"]', { hasText: title })
 }
 
-// Dal filtro a bottoni 1–5 si è passati a una tendina a selezione multipla
-// con caselle 1–10 (Sprint 47): si apre "Punteggio", si spunta il valore e
-// si richiude, così il pannello non copre gli altri filtri.
+// Dallo Sprint 74 i filtri sono nel pannello "Filtri" (prima in pagina; il
+// punteggio era una tendina dallo Sprint 47): si apre il pannello, si agisce
+// sui controlli e lo si chiude con "Mostra risultati". I filtri si applicano
+// subito e restano nella query string, come prima.
+async function inFilters(page, action) {
+  await page.getByRole('button', { name: /^Filtri/ }).click()
+  const sheet = page.getByRole('dialog', { name: 'Filtri' })
+  await expect(sheet).toBeVisible()
+  await action(sheet)
+  await sheet.getByRole('button', { name: 'Mostra risultati' }).click()
+  await expect(sheet).not.toBeVisible()
+}
+
 async function toggleScore(page, value) {
-  const trigger = page.getByRole('button', { name: /^Punteggio/ })
-  await trigger.click()
-  await page.getByRole('checkbox', { name: value, exact: true }).click()
-  await trigger.click()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: value, exact: true }).click())
+}
+
+// Dallo Sprint 74 la card è tutta cliccabile (link sul titolo) e non ha più
+// i pulsanti "Dettagli" / "Archivia" / "Genera CV".
+async function openCard(page, title) {
+  await cardFor(page, title).getByRole('link', { name: title }).click()
+  await page.waitForURL(/jobs\//)
+}
+
+async function swipeCard(page, title) {
+  const card = cardFor(page, title)
+  // La card può essere sotto la piega del viewport (720 px): il mouse fuori
+  // schermo non genera eventi.
+  await card.scrollIntoViewIfNeeded()
+  const box = await card.boundingBox()
+  await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x - 120, box.y + box.height / 2, { steps: 10 })
+  await page.mouse.up()
 }
 
 test('sezioni: raccolti/importati/archiviati mostrano i job attesi', async ({ page, request, baseURL }) => {
@@ -93,7 +119,7 @@ test('filtro punteggio mostra solo i job con lo score selezionato', async ({ pag
 test('filtro stato mostra solo i job nello stato selezionato', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await page.getByRole('button', { name: 'CV generato' }).click()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'CV generato' }).click())
 
   await expect(cardFor(page, 'Head of Operations')).toBeVisible()
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
@@ -110,7 +136,7 @@ test('la ricerca testuale ignora gli altri filtri e resta nella sezione corrente
   await toggleScore(page, '5')
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
-  await page.getByPlaceholder('Cerca per titolo, azienda, località…').fill('backend')
+  await page.getByPlaceholder('Cerca titolo, azienda, località').fill('backend')
   await page.waitForTimeout(400)
 
   // La ricerca ignora il filtro punteggio attivo: il job torna visibile.
@@ -131,10 +157,10 @@ test('archiviare un job mostra l\'opzione annulla e il ripristino funziona', asy
 
   const card = cardFor(page, 'Backend Developer')
   await expect(card).toBeVisible()
-  await card.getByRole('button', { name: 'Archivia' }).click()
+  await swipeCard(page, 'Backend Developer')
 
   await expect(card).not.toBeVisible()
-  const undoButton = page.getByRole('button', { name: 'Annulla' })
+  const undoButton = page.getByRole('status').getByRole('button', { name: 'Annulla' })
   await expect(undoButton).toBeVisible()
   await undoButton.click()
 
@@ -144,15 +170,7 @@ test('archiviare un job mostra l\'opzione annulla e il ripristino funziona', asy
 test('swipe reale (drag) archivia un job', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  const card = cardFor(page, 'Project Manager')
-  // Con i filtri aggiunti negli ultimi sprint la card può essere sotto la
-  // piega del viewport (720 px): il mouse fuori schermo non genera eventi.
-  await card.scrollIntoViewIfNeeded()
-  const box = await card.boundingBox()
-  await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(box.x - 120, box.y + box.height / 2, { steps: 10 })
-  await page.mouse.up()
+  await swipeCard(page, 'Project Manager')
 
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
   await expect(page.getByText('Job archiviato.')).toBeVisible()
@@ -169,12 +187,12 @@ test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ p
   })
   expect(education.ok()).toBe(true)
 
-  const card = cardFor(page, 'Project Manager')
-  const generateButton = card.getByRole('button', { name: 'Genera CV' })
-  await generateButton.click()
+  // Dallo Sprint 74 si genera solo dal dettaglio (SPEC-DELTA A2).
+  await openCard(page, 'Project Manager')
+  await page.getByRole('button', { name: 'Genera CV', exact: true }).click()
 
   // Durante l'attesa il pulsante è disabilitato e mostra l'indicatore.
-  await expect(card.getByRole('button', { name: 'Generazione…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Generazione…' }).first()).toBeDisabled()
 
   // Senza ANTHROPIC_API_KEY in questo ambiente la generazione fallisce lato
   // server (gestito, 502): verifichiamo che l'errore sia mostrato e che il
@@ -184,7 +202,7 @@ test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ p
   await expect(page.getByText('Non siamo riusciti a generare il CV. Riprova.')).toBeVisible({
     timeout: 20000,
   })
-  await expect(card.getByRole('button', { name: 'Genera CV' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Genera CV', exact: true })).toBeEnabled()
 })
 
 test('apply link e "segna candidatura fatta" sono disponibili anche senza CV generato', async ({
@@ -197,7 +215,7 @@ test('apply link e "segna candidatura fatta" sono disponibili anche senza CV gen
   // "Project Manager" è seedato con stato "new" (nessun CV generato): sia il
   // link diretto all'annuncio sia "segna candidatura fatta" devono comunque
   // essere disponibili.
-  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
   await expect(page.getByRole('link', { name: "Vai all'annuncio" })).toBeVisible()
 
@@ -212,7 +230,7 @@ test('apply link e "segna candidatura fatta" sono disponibili anche senza CV gen
 test('segnare la candidatura come fatta aggiorna lo stato in dettaglio', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await cardFor(page, 'Head of Operations').getByRole('link', { name: 'Dettagli' }).click()
+  await openCard(page, 'Head of Operations')
   await page.waitForURL(/jobs\//)
 
   const statusBadge = page.getByTestId('job-status-badge')
@@ -230,7 +248,7 @@ test('il pulsante "espandi motivazioni" rivela la motivazione di match/gap', asy
 }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
 
   await expect(page.getByText('5+ anni PM')).toBeVisible()
@@ -252,8 +270,10 @@ test('il filtro location mostra solo i job la cui località contiene il testo ce
 }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await page.getByPlaceholder('Filtra per città o paese…').fill('Torino')
-  await page.waitForTimeout(400)
+  await inFilters(page, async (sheet) => {
+    await sheet.getByPlaceholder('Filtra per città o paese…').fill('Torino')
+    await page.waitForTimeout(400)
+  })
 
   await expect(cardFor(page, 'Head of Operations')).toBeVisible()
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
@@ -265,36 +285,41 @@ test('salvare, applicare e rimuovere un filtro preferito', async ({ page, reques
 
   // Imposta punteggio 4 e stato "Nuovo": isola "Project Manager" (score 4,
   // nuovo) escludendo "Head of Operations" (score 5, CV generato).
-  await toggleScore(page, '4')
-  await page.getByRole('button', { name: 'Nuovo', exact: true }).click()
+  await inFilters(page, async (sheet) => {
+    await sheet.getByRole('button', { name: '4', exact: true }).click()
+    await sheet.getByRole('button', { name: 'Nuovo', exact: true }).click()
+  })
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
 
-  await page.getByRole('button', { name: 'Salva filtri attuali' }).click()
-  await page.getByLabel('Nome').fill('Nuovi a punteggio 4')
-  await page.getByRole('button', { name: 'Salva', exact: true }).click()
-
-  const presetPill = page.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true })
-  await expect(presetPill).toBeVisible()
+  // "Salva filtri attuali" è nel pannello e apre una finestra con il nome.
+  await page.getByRole('button', { name: /^Filtri/ }).click()
+  await page.getByRole('dialog', { name: 'Filtri' }).getByRole('button', { name: 'Salva filtri attuali' }).click()
+  const saveDialog = page.getByRole('dialog', { name: 'Salva filtri attuali' })
+  await saveDialog.getByLabel('Nome').fill('Nuovi a punteggio 4')
+  await saveDialog.getByRole('button', { name: 'Salva', exact: true }).click()
+  await expect(saveDialog).not.toBeVisible()
 
   // Cambia i filtri: il preset salvato non cambia. Si toglie anche "Nuovo":
   // "Head of Operations" (score 5) è "CV generato" nei dati di prova.
-  await toggleScore(page, '4')
-  await toggleScore(page, '5')
-  await page.getByRole('button', { name: 'Nuovo', exact: true }).click()
+  await inFilters(page, async (sheet) => {
+    await expect(sheet.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true })).toBeVisible()
+    await sheet.getByRole('button', { name: '4', exact: true }).click()
+    await sheet.getByRole('button', { name: '5', exact: true }).click()
+    await sheet.getByRole('button', { name: 'Nuovo', exact: true }).click()
+  })
   await expect(cardFor(page, 'Head of Operations')).toBeVisible()
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
 
   // Riapplicando il preset torna la combinazione salvata (punteggio 4 + nuovo).
-  await presetPill.click()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true }).click())
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
 
-  await page
-    .locator('span', { has: presetPill })
-    .getByRole('button', { name: 'Elimina filtro salvato' })
-    .click()
-  await expect(presetPill).not.toBeVisible()
+  await inFilters(page, async (sheet) => {
+    await sheet.getByRole('button', { name: 'Elimina filtro salvato: Nuovi a punteggio 4' }).click()
+    await expect(sheet.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true })).not.toBeVisible()
+  })
 })
 
 test('il filtro ricerca è multi-selezione: più spunte contemporanee e contatore nel trigger', async ({
@@ -314,24 +339,30 @@ test('il filtro ricerca è multi-selezione: più spunte contemporanee e contator
   })
   await page.reload()
 
-  const trigger = page.getByRole('button', { name: 'Ricerca', exact: true })
-  await expect(trigger).toBeVisible()
-  await trigger.click()
-
-  const firstOption = page.getByText('Business analyst — Zurich, Switzerland')
-  const secondOption = page.getByText('IT Project manager — Geneva, Switzerland')
-  await expect(firstOption).toBeVisible()
-  await expect(secondOption).toBeVisible()
+  // Dallo Sprint 74 le ricerche di provenienza sono pillole nel pannello
+  // "Filtri" (prima una tendina "Ricerca (N)"): si combinano in OR.
+  await page.getByRole('button', { name: /^Filtri/ }).click()
+  const sheet = page.getByRole('dialog', { name: 'Filtri' })
+  const firstOption = sheet.getByRole('button', { name: 'Business analyst · Zurich' })
+  const secondOption = sheet.getByRole('button', { name: 'IT Project manager · Geneva' })
+  await expect(firstOption).toHaveAttribute('aria-pressed', 'false')
+  await expect(secondOption).toHaveAttribute('aria-pressed', 'false')
 
   await firstOption.click()
-  await expect(page.getByRole('button', { name: 'Ricerca (1)' })).toBeVisible()
+  await expect(firstOption).toHaveAttribute('aria-pressed', 'true')
+  await expect(page).toHaveURL(/search=\d+/)
 
   await secondOption.click()
-  await expect(page.getByRole('button', { name: 'Ricerca (2)' })).toBeVisible()
+  await expect(firstOption).toHaveAttribute('aria-pressed', 'true')
+  await expect(secondOption).toHaveAttribute('aria-pressed', 'true')
+  await expect(page).toHaveURL(/search=\d+%2C\d+|search=\d+,\d+/)
 
-  // Rimuovendo una delle due spunte il contatore scende, l'altra resta selezionata.
+  // Rimuovendo una delle due selezioni l'altra resta selezionata.
   await firstOption.click()
-  await expect(page.getByRole('button', { name: 'Ricerca (1)' })).toBeVisible()
+  await expect(firstOption).toHaveAttribute('aria-pressed', 'false')
+  await expect(secondOption).toHaveAttribute('aria-pressed', 'true')
+  await sheet.getByRole('button', { name: 'Mostra risultati' }).click()
+  await expect(page.getByRole('button', { name: 'Filtri (1)' })).toBeVisible()
 })
 
 test('il badge candidati evidenzia i job con meno di 25 candidati e mostra il numero esatto quando disponibile', async ({
@@ -357,7 +388,7 @@ test('l\'icona recruiter è visibile solo per i job con un nome recruiter', asyn
 test('il filtro candidati mostra solo i job nella fascia selezionata', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await page.getByRole('button', { name: '<25', exact: true }).click()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: '<25', exact: true }).click())
 
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
@@ -366,8 +397,8 @@ test('il filtro candidati mostra solo i job nella fascia selezionata', async ({ 
 test('il filtro recruiter mostra solo i job con (o senza) un recruiter', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await page.getByLabel('Recruiter').click()
-  await page.getByRole('option', { name: 'Con recruiter' }).click()
+  // Segmento Tutti / Con recruiter / Senza recruiter: radio nascosti, si clicca l'etichetta.
+  await inFilters(page, (sheet) => sheet.getByText('Con recruiter', { exact: true }).click())
 
   await expect(cardFor(page, 'Backend Developer')).toBeVisible()
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
@@ -406,7 +437,7 @@ test('i filtri restano nell\'URL: tornando dal dettaglio la lista è ancora filt
   await expect(page).toHaveURL(/score=4/)
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
-  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
   await page.goBack()
 
@@ -448,7 +479,7 @@ test('navigazione a 3 voci in alto su desktop e /home reindirizza a /list', asyn
   await expect(nav.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
 
   // Jobs resta la voce attiva anche nel dettaglio di un job.
-  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await openCard(page, 'Project Manager')
   await page.waitForURL(/jobs\//)
   await expect(nav.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
 

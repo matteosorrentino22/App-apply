@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 // Nuova versione della PWA (Sprint 70, §11.33 tecniche). Il service worker
 // nuovo si attiva subito (`skipWaiting` + `clients.claim` in sw.js), ma la
 // scheda aperta continua a eseguire il bundle già caricato: invece di
@@ -46,4 +47,16 @@ export function registerServiceWorker() {
       })
     })
     .catch(() => {})
+}
+
+// Disponibilità di una nuova versione come stato React (Sprint 74,
+// SystemBanner): la pagina si ricarica solo quando l'utente preme "Aggiorna".
+export function useAppUpdateAvailable() {
+  const [available, setAvailable] = useState(isAppUpdateAvailable)
+  useEffect(() => {
+    const show = () => setAvailable(true)
+    window.addEventListener(APP_UPDATE_EVENT, show)
+    return () => window.removeEventListener(APP_UPDATE_EVENT, show)
+  }, [])
+  return available
 }

@@ -5,29 +5,29 @@ const THRESHOLD = 88
 
 // Swipe verso sinistra per archiviare (pattern standard mobile "swipe to
 // delete"), con pointer events (funziona sia a dito sia con drag del mouse,
-// utile anche per i test e2e). Resta comunque disponibile un bottone
-// esplicito nella card per chi non usa il gesto (tastiera, desktop).
+// utile anche per i test e2e).
+//
+// Dallo Sprint 74 la card è tutta cliccabile (link "stirato" sul titolo,
+// marcato `data-card-link`): il gesto può partire anche da lì. Per non
+// rompere il tocco semplice sul link, la pointer capture si prende solo
+// quando il movimento è davvero orizzontale; dopo uno swipe il click che il
+// browser genera al rilascio viene annullato, così non si apre il dettaglio.
+// Bottoni e altri link (cuoricino, profilo del recruiter) non avviano lo swipe.
 export default function SwipeToArchive({ onSwipe, actionLabel, children }) {
   const [dragX, setDragX] = useState(0)
   const dragging = useRef(false)
   const startX = useRef(0)
   const startY = useRef(0)
   const isHorizontal = useRef(null)
+  const suppressClick = useRef(false)
 
   function handlePointerDown(event) {
-    // Un pointerdown che parte da un bottone/link (Dettagli, Archivia,
-    // Genera CV...) non deve avviare uno swipe: la pointer capture sotto
-    // spezzerebbe il click nativo di quell'elemento.
-    if (event.target.closest('button, a')) return
-
+    if (event.target.closest('button, a:not([data-card-link])')) return
     dragging.current = true
     isHorizontal.current = null
+    suppressClick.current = false
     startX.current = event.clientX
     startY.current = event.clientY
-    // Senza pointer capture, se il drag esce dai confini dell'elemento (il
-    // caso normale per uno swipe ampio) i successivi pointermove smettono di
-    // arrivare qui: il gesto si "perde" a metà.
-    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   function handlePointerMove(event) {
@@ -37,6 +37,13 @@ export default function SwipeToArchive({ onSwipe, actionLabel, children }) {
     if (isHorizontal.current === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
       isHorizontal.current = Math.abs(dx) > Math.abs(dy)
+      if (isHorizontal.current) {
+        suppressClick.current = true
+        // Senza pointer capture, se il drag esce dai confini dell'elemento (il
+        // caso normale per uno swipe ampio) i successivi pointermove smettono
+        // di arrivare qui: il gesto si "perde" a metà.
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }
     }
     if (!isHorizontal.current) return
     event.preventDefault()
@@ -56,12 +63,19 @@ export default function SwipeToArchive({ onSwipe, actionLabel, children }) {
     isHorizontal.current = null
   }
 
+  function handleClickCapture(event) {
+    if (!suppressClick.current) return
+    suppressClick.current = false
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   const revealWidth = Math.min(Math.abs(dragX), 160)
 
   return (
-    <div className="relative overflow-hidden rounded-xl" data-testid="swipe-row">
+    <div className="relative overflow-hidden rounded-card" data-testid="swipe-row">
       <div
-        className="absolute inset-y-0 right-0 flex items-center justify-end gap-2 rounded-xl bg-destructive px-5 text-sm font-medium text-destructive-foreground"
+        className="absolute inset-y-0 right-0 flex items-center justify-end gap-2 rounded-card bg-destructive px-5 text-sm font-semibold text-destructive-foreground"
         style={{ width: revealWidth }}
         aria-hidden="true"
       >
@@ -77,6 +91,8 @@ export default function SwipeToArchive({ onSwipe, actionLabel, children }) {
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onClickCapture={handleClickCapture}
+        onDragStart={(event) => event.preventDefault()}
         style={{
           transform: `translateX(${dragX}px)`,
           transition: dragging.current ? 'none' : 'transform 150ms ease',
