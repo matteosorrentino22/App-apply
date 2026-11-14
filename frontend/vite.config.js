@@ -45,12 +45,16 @@ export default defineConfig({
         short_name: 'App-apply',
         description: 'Centralizza e automatizza la ricerca di lavoro',
         theme_color: '#6b4a2e',
-        background_color: '#fbf8f2',
+        background_color: '#fdfbf7',
         display: 'standalone',
         start_url: '/',
+        // Logo del redesign (Sprint 72, Docs/design/logo/): icona su tessera
+        // bruna; la variante maskable ha l'area sicura per le icone adattive
+        // di Android.
         icons: [
           { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       devOptions: {

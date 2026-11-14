@@ -77,7 +77,10 @@ function Topbar() {
   return (
     <div
       className={cn(
-        'mx-auto flex max-w-2xl items-center gap-4 px-4 pt-4',
+        // flex-wrap: su schermi stretti lingua ed Esci vanno sotto le voci
+        // invece di uscire dallo schermo (difetto dallo Sprint 70; la barra
+        // viene sostituita da AppShell nello Sprint 73).
+        'mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4',
         showNav ? 'justify-between' : 'justify-end',
       )}
     >

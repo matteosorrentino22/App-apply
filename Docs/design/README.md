@@ -1,6 +1,6 @@
 # Redesign UI di App-apply — documentazione di design
 
-> **Stato:** proposta di design, **non ancora implementata**. Le specifiche in `Docs/01…03` descrivono l'app **as-is** e restano il riferimento finché uno sprint non le aggiorna (regola in `CLAUDE.md`).
+> **Stato:** in implementazione a sprint (`IMPLEMENTATION-PLAN.md`): **Sprint 72 (fondamenta) fatto** — token, componenti `ui/`, logo e icone PWA. Le specifiche in `Docs/01…03` descrivono l'app **as-is** e restano il riferimento finché uno sprint non le aggiorna (regola in `CLAUDE.md`).
 > **Data:** 2026-11-14 · **As-is di partenza:** Sprint 71 (branch `design/redesign-ui`, mai su `main`).
 
 ## Obiettivo

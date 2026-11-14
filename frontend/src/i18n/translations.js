@@ -646,6 +646,10 @@ export const translations = {
       genericError: 'Qualcosa è andato storto. Riprova.',
       tooManyRequests: 'Troppi tentativi. Attendi qualche minuto e riprova.',
       or: 'oppure',
+      close: 'Chiudi',
+      cancel: 'Annulla',
+      scoreLabel: 'Punteggio {score} su 10',
+      scoreNone: 'Punteggio non disponibile',
     },
   },
   en: {
@@ -1281,6 +1285,10 @@ export const translations = {
       genericError: 'Something went wrong. Please try again.',
       tooManyRequests: 'Too many attempts. Wait a few minutes and try again.',
       or: 'or',
+      close: 'Close',
+      cancel: 'Cancel',
+      scoreLabel: 'Score {score} out of 10',
+      scoreNone: 'Score not available',
     },
   },
 }

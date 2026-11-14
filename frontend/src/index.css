@@ -1,9 +1,12 @@
 @import "tailwindcss";
 
-/* Token del design system (beige/sabbia + accento bruno caldo), condivisi
-   fra le utility Tailwind e i componenti shadcn/ui. Nomi shadcn canonici
-   (background/foreground/primary/...) più le varianti "soft" (badge, score
-   chip, focus ring) usate dai componenti custom. */
+/* Token del design system (sabbia + accento bruno), condivisi fra le
+   utility Tailwind e i componenti shadcn/ui. Valori del redesign (Sprint 72,
+   Docs/design/DESIGN.md §3): sfondo più chiaro, card bianche, testi
+   secondari scuriti per il contrasto (≥ 4.5:1 su bianco), nuovi token
+   tint/note/chip, raggi e ombre per ruolo. Si usano come le altre utility:
+   bg-tint, bg-note, bg-chip, text-destructive-text, rounded-card,
+   shadow-modal, ecc. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -18,11 +21,23 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-label: var(--label);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-text: var(--destructive-text);
+  --color-destructive-border: var(--destructive-border);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-tint: var(--tint);
+  --color-note: var(--note);
+  --color-note-border: var(--note-border);
+  --color-note-foreground: var(--note-foreground);
+  --color-chip: var(--chip);
+  --color-chip-foreground: var(--chip-foreground);
+  --color-overlay: var(--overlay);
+  --color-grabber: var(--grabber);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -36,48 +51,79 @@
   --color-score-4-soft: var(--score-4-soft);
   --color-score-5: var(--score-5);
   --color-score-5-soft: var(--score-5-soft);
+
+  /* Scala storica (usata dalle pagine non ancora ridisegnate). */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* Raggi per ruolo (DESIGN.md §3.3): rounded-card, rounded-button, ... */
+  --radius-card: 16px;
+  --radius-button: 14px;
+  --radius-field: 12px;
+  --radius-modal: 20px;
+  --radius-sheet: 24px;
+
+  --shadow-card: 0 1px 2px rgb(43 35 23 / 0.04);
+  --shadow-popover: 0 12px 32px rgb(43 35 23 / 0.16);
+  --shadow-modal: 0 16px 40px rgb(43 35 23 / 0.25);
+  --shadow-toast: 0 10px 28px rgb(43 35 23 / 0.3);
 }
 
 :root {
   --radius: 0.625rem;
 
-  --background: #fbf8f2;
+  --background: #fdfbf7;
   --foreground: #2b2317;
-  --card: #fbf8f2;
+  --card: #ffffff;
   --card-foreground: #2b2317;
 
   --primary: #6b4a2e;
   --primary-foreground: #ffffff;
-  --primary-soft: #f1e1c8;
+  --primary-soft: #f3e8d6;
 
   --secondary: #f3ecdf;
   --secondary-foreground: #2b2317;
   --muted: #f3ecdf;
-  --muted-foreground: #7c6f58;
+  --muted-foreground: #6f6350;
   --accent: #ece2d0;
   --accent-foreground: #2b2317;
+  /* Etichette dei campi e testo dei riquadri "note" (mockup: #4a3a26). */
+  --label: #4a3a26;
 
   --destructive: #b3473c;
   --destructive-foreground: #ffffff;
   --destructive-soft: #fbeeea;
-  --success: #3e7a52;
+  --destructive-text: #9a3a30;
+  --destructive-border: #ecc9c3;
+  --success: #2f6a45;
   --success-soft: #e7f1e9;
+  --success-border: #cfe3d4;
 
-  --border: #e2d5be;
-  --input: #cbb58c;
+  --tint: #f8f3e9;
+  --note: #f7efe0;
+  --note-border: #eadcc0;
+  --note-foreground: #4a3a26;
+  --chip: #f1e8d8;
+  --chip-foreground: #5a4a36;
+  --overlay: rgb(43 35 23 / 0.5);
+  --grabber: #d9cdb6;
+
+  --border: #ebe2d1;
+  --input: #e0d4bd;
   --ring: #6b4a2e;
 
-  --score-1: #b3473c; --score-1-soft: #fbeeea;
-  --score-2: #bd7a3c; --score-2-soft: #fbf1e6;
-  --score-3: #a88a2e; --score-3-soft: #f7f1de;
-  --score-4: #7a8f3c; --score-4-soft: #f0f3e2;
-  --score-5: #3e7a52; --score-5-soft: #e7f1e9;
+  /* Punteggio a fasce (utils/scoreStyle.js, ceil(score/2)): testo / sfondo. */
+  --score-1: #9a3a30; --score-1-soft: #fbeeea;
+  --score-2: #8a4f17; --score-2-soft: #fbf1e6;
+  --score-3: #7a6212; --score-3-soft: #f7f0da;
+  --score-4: #566b22; --score-4-soft: #eef2de;
+  --score-5: #2f6a45; --score-5-soft: #e7f1e9;
 }
 
+/* Tema scuro: il redesign non lo disegna (DESIGN.md §7, SPEC-DELTA B8 da
+   decidere). Restano i valori scuri esistenti; i token nuovi hanno solo un
+   equivalente scuro coerente, perché nessuna superficie resti chiara. */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #17130e;
@@ -95,12 +141,25 @@
     --muted-foreground: #b7a98c;
     --accent: #2b2318;
     --accent-foreground: #f2e9d8;
+    --label: #e2d6bf;
 
     --destructive: #e08171;
     --destructive-foreground: #1c1409;
     --destructive-soft: #3a211c;
+    --destructive-text: #f0a597;
+    --destructive-border: #5a3029;
     --success: #6fae84;
     --success-soft: #1e3226;
+    --success-border: #2f4a38;
+
+    --tint: #241d14;
+    --note: #2a2116;
+    --note-border: #43361f;
+    --note-foreground: #e2d6bf;
+    --chip: #2e2518;
+    --chip-foreground: #d9cbb0;
+    --overlay: rgb(0 0 0 / 0.6);
+    --grabber: #4e4029;
 
     --border: #382d1d;
     --input: #4e4029;
@@ -121,11 +180,40 @@
   body {
     background: var(--color-background);
     color: var(--color-foreground);
+    /* Solo font di sistema (Sprint 66, DESIGN.md §3.2): nessun file né
+       servizio esterno. Un font di marca andrebbe incluso nel repository. */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Segoe UI Variable", Roboto,
       "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   #root {
     min-height: 100svh;
+  }
+}
+
+/* Animazioni di finestre e pannelli (Sprint 72): solo CSS, nessun plugin.
+   Radix Dialog attende la fine dell'animazione di chiusura (data-state).
+   Le keyframe animano solo `transform`: la centratura delle finestre usa la
+   proprietà `translate` di Tailwind v4 e non va sovrascritta. */
+@keyframes app-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes app-fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes app-sheet-in { from { transform: translateY(100%) } to { transform: translateY(0) } }
+@keyframes app-sheet-out { from { transform: translateY(0) } to { transform: translateY(100%) } }
+@keyframes app-pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98) } to { opacity: 1; transform: none } }
+@keyframes app-pop-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(8px) scale(0.98) } }
+
+@layer components {
+  .app-overlay[data-state='open'] { animation: app-fade-in 160ms ease-out }
+  .app-overlay[data-state='closed'] { animation: app-fade-out 120ms ease-in }
+  .app-modal[data-state='open'] { animation: app-pop-in 180ms ease-out }
+  .app-modal[data-state='closed'] { animation: app-pop-out 120ms ease-in }
+  .app-sheet[data-state='open'] { animation: app-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) }
+  .app-sheet[data-state='closed'] { animation: app-sheet-out 160ms ease-in }
+  @media (min-width: 1024px) {
+    .app-sheet[data-state='open'] { animation: app-pop-in 180ms ease-out }
+    .app-sheet[data-state='closed'] { animation: app-pop-out 120ms ease-in }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-overlay, .app-modal, .app-sheet { animation: none !important }
   }
 }

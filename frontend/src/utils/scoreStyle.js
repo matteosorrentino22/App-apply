@@ -1,8 +1,9 @@
 // Colore a fasce (non un colore per valore esatto): con lo score 1-10
 // (Sprint 46, prima 1-5) 10 colori distinti sarebbero poco distinguibili a
 // colpo d'occhio. Ogni fascia raggruppa 2 valori consecutivi sugli stessi 5
-// colori già esistenti (--color-score-1..5 in index.css), senza bisogno di
-// nuove variabili CSS.
+// colori (--color-score-1..5 in index.css; valori ridefiniti nello Sprint 72
+// per il contrasto, DESIGN.md §3.1: 9–10 verde, 7–8 oliva, 5–6 ocra, 3–4
+// arancio, 1–2 rosso). Il componente è ui/score-chip.jsx.
 const BAND_STYLE = {
   1: 'bg-score-1-soft text-score-1',
   2: 'bg-score-2-soft text-score-2',

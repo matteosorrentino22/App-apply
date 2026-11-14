@@ -420,7 +420,7 @@ export default function JobListPage() {
         <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
       </header>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {SECTIONS.map((value) => (
           <button
             key={value}
@@ -483,7 +483,7 @@ export default function JobListPage() {
       />
 
       <div className={'flex flex-wrap items-center gap-4' + (searching ? ' opacity-40' : '')}>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Label htmlFor="date-from" className="text-xs font-medium text-muted-foreground">
             {t('jobs.dateFromLabel')}
           </Label>
