@@ -34,3 +34,6 @@ frontend/playwright-report/
 .vscode/
 .idea/
 .DS_Store
+# File di swap di vim (lo swap di .env si chiama ..env.swp e contiene i segreti)
+*.swp
+.*.swp

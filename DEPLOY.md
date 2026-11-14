@@ -86,6 +86,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml up -d --force-recreate web worker beat
 ```
 
+Procedura completa con le verifiche in §7.6.
+
 ### 4.3 Verifica di coerenza dello stack (prima e dopo ogni intervento)
 
 ```
@@ -293,7 +295,23 @@ Dallo Sprint 68 questo percorso usa la stessa guardia della raccolta manuale (se
 ### 7.5 Cambiare piano o credito di un utente
 Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da shell (`u.plan = User.Plan.PRO; u.save(update_fields=['plan'])`). Il passaggio Pro→Free disattiva tutte le ricerche (regola di downgrade, specifiche funzionali §4.2).
 
-### 7.6 Diagnosi rapida
+### 7.6 Dopo aver cambiato `.env` (codice di invito, credenziali email, chiavi, prezzi)
+Un `restart` **non basta**: i container leggono `.env` solo quando vengono creati. Procedura:
+1. Verificare la coerenza dello stack (§4.3): tutti i container `app-apply-*` devono riportare `docker-compose.prod.yml`. Se no, fermarsi.
+2. Ricreare solo i servizi applicativi, **senza rebuild**, dal file di produzione (mai `docker-compose.yml`; `caddy`, `db`, `redis` e `frontend-build` non vanno toccati):
+   ```
+   docker compose -f docker-compose.prod.yml up -d --force-recreate web worker beat
+   ```
+   Le immagini restano quelle in uso: non serve che il checkout sia su `main`, purché `docker-compose.prod.yml` non differisca (`git diff main -- docker-compose.prod.yml` vuoto).
+3. Verificare che i valori siano caricati **senza stamparli** (né in chiaro, né in un log): per ogni variabile solo "impostato / non impostato", per esempio
+   ```
+   docker compose -f docker-compose.prod.yml exec -T worker python -c "import os; print('REGISTRATION_INVITE_CODE', bool(os.environ.get('REGISTRATION_INVITE_CODE')))"
+   ```
+   Per confermare che il container abbia il valore **nuovo** si può confrontare un hash (`sha256`) del valore nel container con quello del `.env`, stampando solo "coincide sì/no". Le email partono dal `worker` (Celery): è lì che vanno controllate le credenziali email. `GET /api/legal/` espone `email_enabled`.
+4. Controllare che i servizi rispondano e che i log siano puliti: `curl -s -o /dev/null -w '%{http_code}' https://<dominio>/api/legal/` → 200; `docker compose -f docker-compose.prod.yml exec -T worker celery -A config inspect ping` → `pong`; `docker compose -f docker-compose.prod.yml logs --since 5m web worker beat | grep -i -E "error|exception|traceback"` → vuoto. `web`, `worker` e `beat` non hanno un healthcheck nel compose (solo `db` e `redis`).
+5. Se il `.env` è stato modificato con vim, controllare che non sia rimasto il file di swap (`..env.swp`, contiene i segreti) e che nessun editor sia ancora aperto prima di cancellarlo.
+
+### 7.7 Diagnosi rapida
 - Log applicativi: `docker compose -f docker-compose.prod.yml logs --tail 200 web|worker|beat|caddy` (errori 5xx di Django, warning, invii push falliti; mai token o query string).
 - Access log HTTP (JSON, 14 giorni): `docker compose -f docker-compose.prod.yml exec caddy tail -n 50 /var/log/caddy/access.log`.
 - Utente con "sessione scaduta" o da disconnettere da un dispositivo: Django Admin → Auth tokens (eliminare la riga del dispositivo); da shell `from apps.accounts.tokens import revoke_all_tokens; revoke_all_tokens(User.objects.get(pk=<id>))` lo disconnette ovunque.
