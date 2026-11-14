@@ -77,6 +77,13 @@ VPS per debug rapido, va sempre riportato a `docker-compose.prod.yml` con
 - Nuovi dati personali raccolti, nuovi fornitori che li ricevono o nuove conservazioni vanno riportati nell'informativa (`frontend/src/legal/`, copia in `Docs/legal/`) aumentandone la versione in `apps/accounts/legal.py` (gli utenti la riaccettano al prossimo accesso), e coperti da export e cancellazione account.
 - Testi liberi che finiscono al modello AI o nei PDF hanno sempre un `max_length` lato server.
 
+## Redesign UI in corso (branch `design/redesign-ui`)
+Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS.md`, `SPEC-DELTA.md`, `IMPLEMENTATION-PLAN.md`; sprint da 72). Finché uno sprint non lo implementa, **le specifiche in `Docs/01…03` e il codice restano l'as-is**. Decisioni già prese che cambieranno il comportamento (sprint 77, non prima):
+- **Utenti Free: nessuna raccolta automatica** (nemmeno quella notturna delle 02:00); solo raccolta manuale, 1 volta al giorno.
+- **Utenti Pro: una raccolta automatica al giorno all'orario scelto**, che sostituisce la raccolta notturna delle 02:00.
+- Fino allo sprint 77 il ciclo notturno e le sue regole (sezioni Progetto/Stack sopra) restano valide. Le voci ancora **da decidere** sono in `SPEC-DELTA.md §B`: in caso di dubbio chiedere, non assumere.
+- Il template PDF del CV è fuori dal redesign; nessun font o risorsa da servizi esterni.
+
 ## Cosa NON fare
 - Non introdurre dipendenze/librerie non necessarie senza chiedere
 - Non modificare l'architettura decisa nelle specifiche tecniche
