@@ -100,8 +100,30 @@ Note: registrazioni e login via API presuppongono **nessuna email configurata** 
   - **larghezza del documento** = larghezza dello schermo a 360, 390 e 1280 px su `/login`, `/register`, `/privacy`, `/forgot-password` (non autenticato) e `/list`, `/profile`, `/settings`, `/onboarding`, `/privacy`, `/jobs/:id` (autenticato): nessuna pagina sborda;
   - `/home` → `/list` alle tre larghezze; nessun errore JavaScript in pagina;
   - screenshot: lista (barra di tab a 360/390, barra in alto a 1280 come `desk-jobs`), pannello "Raccogli nuovi job" (dal basso su mobile, finestra centrale a 1280), fondo delle Impostazioni con "Esci" e finestra "Vuoi uscire?", dettaglio, profilo, onboarding, login/registrazione con logo e lingua.
-- **E2e**: aggiornati, **non eseguiti** (vedi sopra); da lanciare prima del merge su `main`.
+- **E2e**: aggiornati ed eseguiti il 2026-11-14 su stack di prova: 35/35 (sezione "Esecuzione degli e2e").
 - Backend non toccato: test backend non necessari.
+
+## Esecuzione degli e2e (2026-11-14, prima dello Sprint 74)
+Eseguiti sul VPS senza installare nulla e senza toccare la produzione: copia di lavoro separata `/root/App-apply-dev` (clone del branch, senza `.env`), immagini dedicate `appapply-e2e-*`, rete Docker usa e getta con Postgres e Redis temporanei, backend con `DEBUG=true`, `e2e_settings_local.py`, codice di invito ed email vuoti; dev server (5173) e build di anteprima (5174) nello stesso spazio di rete del runner, così che `localhost` sia un contesto sicuro per service worker e push; Playwright dall'immagine `mcr.microsoft.com/playwright:v1.62.0-noble`; `backend/.venv/bin/python` sostituito da uno script che esegue `manage.py` nel container del backend di prova.
+
+- **Prima esecuzione:** 23 passati, 12 falliti. La stessa suite sul codice di `main` (Sprint 71) dava **gli stessi 12 fallimenti** (21 passati su 33): nessuno era causato dagli sprint 72–73, la suite era ferma a sprint precedenti e non veniva eseguita.
+- **Dopo l'allineamento degli spec:** **35 passati su 35**.
+
+| Test | Errore | Causa | Correzione |
+|---|---|---|---|
+| `auth-onboarding` › registrazione, onboarding manuale… e › esperienze: più ruoli… | "Avanti" non porta al passo 2; poi "Salva profilo" non porta al passo 3 | Nome e Cognome obbligatori dallo Sprint 32; Città e Paese del profilo richiesti dall'interfaccia dallo Sprint 33 | Lo spec compila Nome, Cognome, Città e Paese (vedi segnalazione 2 sotto) |
+| `account` › crea, attiva, disattiva ed elimina una ricerca salvata | strict mode: "Elimina" trova 2 bottoni | "Elimina account" (Sprint 67) | Nome esatto |
+| `account` › su iOS senza installazione… | testo iOS assente | ambiente di prova: origine non `localhost` → nessun service worker | Nessuna (passa in contesto sicuro); vedi segnalazione 1 |
+| `job-list` › filtro punteggio…, ricerca testuale…, filtro preferito…, filtri nell'URL… | bottoni "4"/"5" inesistenti | filtro punteggio a tendina con caselle 1–10 dallo Sprint 47 | Helper `toggleScore` (apre "Punteggio", spunta, richiude) |
+| `job-list` › salvare, applicare e rimuovere un filtro preferito | "Head of Operations" non visibile | passo del test sbagliato da quando è stato scritto (Sprint 64): con lo stato "Nuovo" attivo un job "CV generato" non può comparire | Il passo toglie anche "Nuovo" |
+| `job-list` › swipe reale (drag) archivia un job | la card resta visibile | la card è sotto la piega del viewport (720 px) dopo l'aggiunta dei filtri: il mouse fuori schermo non genera eventi | `scrollIntoViewIfNeeded()` prima del trascinamento (swipe verificato funzionante) |
+| `job-list` › generare il CV disabilita il pulsante… | "Generazione…" non compare | dagli Sprint 26/70 serve un profilo completo: il server risponde subito 409 | Lo spec crea un titolo di studio via API prima di generare |
+| `job-list` › il cuoricino… Preferiti | strict mode: "Preferiti" trova 5 bottoni | i cuoricini si chiamano "Aggiungi ai preferiti" (Sprint 46) | Nome esatto |
+| `push-subscription` › completando il flusso… | prima: "Attiva notifiche" assente (ambiente non sicuro); poi la verifica lato backend dava falso | Django 5.2 (Sprint 66): `manage.py shell` stampa prima "N objects imported automatically" | Si legge solo l'ultima riga dell'output |
+
+**Bug veri segnalati (non corretti):**
+1. **Istruzione iPhone mai mostrata su un iPhone reale (probabile).** In Impostazioni il controllo "push non supportate" viene prima di "iPhone non installato sulla Home" (ordine dallo Sprint 20). In Safari su iPhone, prima dell'aggiunta alla Home, `PushManager` e `Notification` non esistono: l'utente vede "Le notifiche push non sono supportate" invece dell'istruzione "aggiungi questa app alla schermata Home". L'e2e non lo rileva perché Chromium con user agent iOS espone le API push.
+2. **Città e Paese del profilo obbligatori solo nell'interfaccia.** `CityAutocomplete` (nato per le ricerche salvate) ha `required` fisso ed è usato anche per la città del profilo in onboarding e nella pagina Profilo (dallo Sprint 33): il browser blocca il salvataggio del profilo senza città/paese, mentre backend (`Profile.city` facoltativa) e specifiche la trattano come facoltativa. Gli spec ora compilano i campi; se si decide che sono facoltativi, togliere quelle righe dagli spec dopo la correzione.
 
 ## Cosa manca / note
 - Statistiche e raccolta stanno nel pannello ponte fino allo Sprint 74 (`StatsSummary`, `collect-pro`/`collect-free`/`collect-running`).

@@ -50,6 +50,16 @@ function cardFor(page, title) {
   return page.locator('[data-testid="swipe-row"]', { hasText: title })
 }
 
+// Dal filtro a bottoni 1–5 si è passati a una tendina a selezione multipla
+// con caselle 1–10 (Sprint 47): si apre "Punteggio", si spunta il valore e
+// si richiude, così il pannello non copre gli altri filtri.
+async function toggleScore(page, value) {
+  const trigger = page.getByRole('button', { name: /^Punteggio/ })
+  await trigger.click()
+  await page.getByRole('checkbox', { name: value, exact: true }).click()
+  await trigger.click()
+}
+
 test('sezioni: raccolti/importati/archiviati mostrano i job attesi', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
 
@@ -73,7 +83,7 @@ test('filtro punteggio mostra solo i job con lo score selezionato', async ({ pag
 
   // Il filtro data di default è "oggi-oggi": i job seed hanno date_collected
   // a ora, quindi restano visibili senza dover cambiare intervallo.
-  await page.getByRole('button', { name: '4', exact: true }).click()
+  await toggleScore(page, '4')
 
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
@@ -97,7 +107,7 @@ test('la ricerca testuale ignora gli altri filtri e resta nella sezione corrente
   await loginAsSeededUser(page, request, baseURL)
 
   // Attiva un filtro punteggio che escluderebbe "Backend Developer" (score 2)
-  await page.getByRole('button', { name: '5', exact: true }).click()
+  await toggleScore(page, '5')
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
   await page.getByPlaceholder('Cerca per titolo, azienda, località…').fill('backend')
@@ -135,6 +145,9 @@ test('swipe reale (drag) archivia un job', async ({ page, request, baseURL }) =>
   await loginAsSeededUser(page, request, baseURL)
 
   const card = cardFor(page, 'Project Manager')
+  // Con i filtri aggiunti negli ultimi sprint la card può essere sotto la
+  // piega del viewport (720 px): il mouse fuori schermo non genera eventi.
+  await card.scrollIntoViewIfNeeded()
   const box = await card.boundingBox()
   await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2)
   await page.mouse.down()
@@ -146,7 +159,15 @@ test('swipe reale (drag) archivia un job', async ({ page, request, baseURL }) =>
 })
 
 test('generare il CV disabilita il pulsante e mostra il caricamento', async ({ page, request, baseURL }) => {
-  await loginAsSeededUser(page, request, baseURL)
+  const { token } = await loginAsSeededUser(page, request, baseURL)
+  // Dagli Sprint 26/70 la generazione richiede un profilo completo (almeno un
+  // titolo di studio): senza, il server risponde subito 409 e il caricamento
+  // non si vede. Si aggiunge un titolo di studio via API.
+  const education = await request.post(`${baseURL}/api/educations/`, {
+    headers: { Authorization: `Token ${token}` },
+    data: { institution: 'Politecnico di Milano', title: 'Laurea in Informatica', end_date: '2020-07-01' },
+  })
+  expect(education.ok()).toBe(true)
 
   const card = cardFor(page, 'Project Manager')
   const generateButton = card.getByRole('button', { name: 'Genera CV' })
@@ -244,7 +265,7 @@ test('salvare, applicare e rimuovere un filtro preferito', async ({ page, reques
 
   // Imposta punteggio 4 e stato "Nuovo": isola "Project Manager" (score 4,
   // nuovo) escludendo "Head of Operations" (score 5, CV generato).
-  await page.getByRole('button', { name: '4', exact: true }).click()
+  await toggleScore(page, '4')
   await page.getByRole('button', { name: 'Nuovo', exact: true }).click()
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
@@ -256,9 +277,11 @@ test('salvare, applicare e rimuovere un filtro preferito', async ({ page, reques
   const presetPill = page.getByRole('button', { name: 'Nuovi a punteggio 4', exact: true })
   await expect(presetPill).toBeVisible()
 
-  // Cambia i filtri: il preset salvato non cambia.
-  await page.getByRole('button', { name: '4', exact: true }).click()
-  await page.getByRole('button', { name: '5', exact: true }).click()
+  // Cambia i filtri: il preset salvato non cambia. Si toglie anche "Nuovo":
+  // "Head of Operations" (score 5) è "CV generato" nei dati di prova.
+  await toggleScore(page, '4')
+  await toggleScore(page, '5')
+  await page.getByRole('button', { name: 'Nuovo', exact: true }).click()
   await expect(cardFor(page, 'Head of Operations')).toBeVisible()
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
 
@@ -359,7 +382,8 @@ test('il cuoricino aggiunge/rimuove un job dalla sezione Preferiti', async ({ pa
     card.getByRole('button', { name: 'Aggiungi ai preferiti' }).click(),
   ])
 
-  await page.getByRole('button', { name: 'Preferiti' }).click()
+  // "Preferiti" è anche nel nome dei cuoricini ("Aggiungi ai preferiti", Sprint 46).
+  await page.getByRole('button', { name: 'Preferiti', exact: true }).click()
   await expect(cardFor(page, 'Project Manager')).toBeVisible()
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
@@ -378,7 +402,7 @@ test('i filtri restano nell\'URL: tornando dal dettaglio la lista è ancora filt
 }) => {
   await loginAsSeededUser(page, request, baseURL)
 
-  await page.getByRole('button', { name: '4', exact: true }).click()
+  await toggleScore(page, '4')
   await expect(page).toHaveURL(/score=4/)
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 

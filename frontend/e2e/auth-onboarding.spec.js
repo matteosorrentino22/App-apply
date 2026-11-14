@@ -29,13 +29,19 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
 
   await expect(page).toHaveURL(/\/onboarding$/)
 
-  // Step 1: preferenze
+  // Step 1: preferenze (Nome e Cognome obbligatori dallo Sprint 32)
+  await page.getByLabel('Nome', { exact: true }).fill('Mario')
+  await page.getByLabel('Cognome').fill('Rossi')
   await page.getByRole('button', { name: 'Avanti' }).click()
   // Sprint 73: "Profilo" è anche una voce della barra di navigazione: si cerca nel contenuto della pagina.
   await expect(page.getByRole('main').getByText('Profilo', { exact: true })).toBeVisible()
 
   // Step 2: profilo compilato manualmente (nessun upload CV, per non dipendere da Claude)
   await page.getByLabel('Sommario professionale').fill('Sviluppatore software con 5 anni di esperienza.')
+  // Città e Paese del profilo: il campo con suggerimenti li richiede (vedi
+  // sprints/sprint-73.md, segnalazione sulla città del profilo obbligatoria).
+  await page.getByLabel('Città', { exact: true }).fill('Milano')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
   await page.getByRole('button', { name: 'Salva profilo' }).click()
 
   await expect(page.getByText('Crea la tua prima ricerca')).toBeVisible()
@@ -67,6 +73,9 @@ test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI'
   await page.getByRole('button', { name: 'Registrati' }).click()
   await expect(page).toHaveURL(/\/onboarding$/)
 
+  // Nome e Cognome obbligatori dallo Sprint 32.
+  await page.getByLabel('Nome', { exact: true }).fill('Mario')
+  await page.getByLabel('Cognome').fill('Rossi')
   await page.getByRole('button', { name: 'Avanti' }).click()
   // Sprint 73: "Profilo" è anche una voce della barra di navigazione: si cerca nel contenuto della pagina.
   await expect(page.getByRole('main').getByText('Profilo', { exact: true })).toBeVisible()
@@ -96,6 +105,10 @@ test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI'
   await expect(page.getByText('Coordinamento team')).toBeVisible()
   await expect(page.getByText('Gestione stakeholder')).toBeVisible()
 
+  // Città e Paese del profilo: il campo con suggerimenti li richiede (vedi
+  // sprints/sprint-73.md, segnalazione sulla città del profilo obbligatoria).
+  await page.getByLabel('Città', { exact: true }).fill('Milano')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
   await page.getByRole('button', { name: 'Salva profilo' }).click()
   await expect(page.getByText('Crea la tua prima ricerca')).toBeVisible()
 })

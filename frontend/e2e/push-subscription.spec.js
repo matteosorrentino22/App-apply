@@ -30,7 +30,9 @@ function pushSubscriptionExists(email, endpoint) {
     cwd: BACKEND_DIR,
     env: BACKEND_ENV,
   })
-  return output.toString().trim() === 'True'
+  // Django 5.2 (Sprint 66): `manage.py shell` stampa prima "N objects imported
+  // automatically": conta solo l'ultima riga.
+  return output.toString().trim().split('\n').pop().trim() === 'True'
 }
 
 // Codice di invito del backend di prova (Sprint 66), vuoto se la registrazione è aperta.

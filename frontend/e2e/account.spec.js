@@ -77,7 +77,8 @@ test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, re
   await page.getByRole('button', { name: 'Disattiva' }).click()
   await expect(page.getByText('In uso')).not.toBeVisible()
 
-  await page.getByRole('button', { name: 'Elimina' }).click()
+  // Dallo Sprint 67 in pagina c'è anche "Elimina account": serve il nome esatto.
+  await page.getByRole('button', { name: 'Elimina', exact: true }).click()
   await expect(page.getByText('Milano, Italia')).not.toBeVisible()
   await expect(page.getByText('Nessuna ricerca salvata.')).toBeVisible()
 })

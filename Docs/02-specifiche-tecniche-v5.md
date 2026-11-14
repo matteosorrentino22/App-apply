@@ -1266,7 +1266,7 @@ In `frontend/e2e/` (`npm run test:e2e`, configurazione `playwright.config.js`, b
 
 Dallo Sprint 67 le registrazioni via API degli spec inviano `accept_privacy`, `accept_terms`, `confirm_age` e usano il token della risposta: presuppongono quindi un backend **senza invio email configurato** (con l'email attiva la registrazione non restituisce token). Dallo Sprint 70 le registrazioni (via API e dal modulo) inviano il codice di invito letto da `E2E_INVITE_CODE` (vuoto = registrazione aperta). Gli e2e non sono stati rilanciati negli Sprint 67–70.
 
-L'esecuzione degli e2e non è documentata negli ultimi sprint. Dallo Sprint 73 i comandi per lanciarli su un computer di sviluppo (backend con `.venv`, Postgres locale, variabili d'ambiente) sono in `sprints/sprint-73.md`; sul VPS non c'è l'ambiente per eseguirli.
+L'esecuzione degli e2e non è documentata negli ultimi sprint. Dallo Sprint 73 i comandi per lanciarli su un computer di sviluppo (backend con `.venv`, Postgres locale, variabili d'ambiente) sono in `sprints/sprint-73.md`, insieme alla procedura usata sul VPS con uno stack Docker usa e getta. Ultima esecuzione: 2026-11-14, **35/35** (dopo l'allineamento degli spec rimasti indietro dagli sprint 32–67). Requisiti dell'ambiente: limiti di frequenza alzati (`e2e_settings_local.py`), nessun codice di invito né email, app servita su `localhost` (contesto sicuro per service worker e push).
 
 ### 13.3 Cosa non è coperto
 
