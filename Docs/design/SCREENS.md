@@ -49,7 +49,7 @@
 | `settings-fuso` | `TimezoneSelect.jsx` | Sottopagina |
 | `settings-privacy`, `settings-password`, `settings-delete` | `AccountDataActions.jsx` | Export ZIP, notifiche, cambio password, eliminazione account con `Modal` |
 | `notifications-ios` | `AccountPage.jsx` (push) | Istruzioni per iPhone/iPad (Home → notifiche) |
-| *(logout)* | `App.jsx` `Topbar` | **[decisione]** Logout in Impostazioni (finestra di conferma), non più nella barra |
+| `logout-confirm` | `App.jsx` `Topbar` (Sprint 73: ora in `AccountPage`) | **[deciso, A9]** Logout in fondo alle Impostazioni con `Modal` di conferma; lo sfondo del mockup è una versione precedente di Impostazioni, vale solo la finestra |
 
 ## 5. Accesso, onboarding, legale
 | Mockup | Codice | Cosa cambia |
