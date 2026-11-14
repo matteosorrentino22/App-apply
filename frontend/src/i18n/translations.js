@@ -319,8 +319,6 @@ export const translations = {
       manualJobError: 'Non siamo riusciti ad aggiungere il job. Riprova.',
     },
     home: {
-      navLink: 'Home',
-      title: 'Home',
       statsTitle: 'Le tue statistiche',
       statsToday: 'Oggi',
       statsWeek: 'Ultima settimana',
@@ -520,6 +518,9 @@ export const translations = {
       notificationsOffHint:
         'Notifiche disattivate: non riceverai notifiche su nessun dispositivo. Disattivandole abbiamo rimosso anche le sottoscrizioni dei tuoi dispositivi.',
       logout: 'Esci',
+      logoutConfirmTitle: 'Vuoi uscire?',
+      logoutConfirmBody:
+        'Uscirai da App-apply su questo dispositivo e qui non riceverai più notifiche push. Gli altri dispositivi restano collegati.',
     },
     // Sprint 70: contatori e prezzi, fuso orario, nuova versione, profilo
     // incompleto, cambio email, pagina Profilo, errori dell'import CV.
@@ -639,6 +640,10 @@ export const translations = {
       success: 'Password aggiornata. Sei stato disconnesso da tutti i dispositivi: accedi con la nuova password.',
       invalidLink: 'Il link non è valido o è scaduto: chiedine uno nuovo.',
       requestNew: 'Chiedi un nuovo link',
+    },
+    nav: {
+      main: 'Navigazione principale',
+      homeLink: 'App-apply: vai ai job',
     },
     common: {
       aiNotice: 'Contenuto generato con l’AI: verificalo prima di usarlo.',
@@ -962,8 +967,6 @@ export const translations = {
       manualJobError: "We couldn't add the job. Please try again.",
     },
     home: {
-      navLink: 'Home',
-      title: 'Home',
       statsTitle: 'Your stats',
       statsToday: 'Today',
       statsWeek: 'Last week',
@@ -1162,6 +1165,9 @@ export const translations = {
       notificationsOffHint:
         'Notifications are off: you will not receive notifications on any device. Turning them off also removed your devices’ subscriptions.',
       logout: 'Log out',
+      logoutConfirmTitle: 'Log out?',
+      logoutConfirmBody:
+        'You will be logged out of App-apply on this device and will no longer receive push notifications here. Your other devices stay logged in.',
     },
     usage: {
       title: 'Your limits today',
@@ -1278,6 +1284,10 @@ export const translations = {
       success: 'Password updated. You have been logged out of all devices: log in with your new password.',
       invalidLink: 'The link is not valid or has expired: request a new one.',
       requestNew: 'Request a new link',
+    },
+    nav: {
+      main: 'Main navigation',
+      homeLink: 'App-apply: go to jobs',
     },
     common: {
       aiNotice: 'AI-generated content: check it before using it.',

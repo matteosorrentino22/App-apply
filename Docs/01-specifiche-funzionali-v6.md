@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci del redesign UI)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -30,7 +30,7 @@ La v6 fonde le due versioni divergenti precedenti: la v4 in radice, che aveva re
    - filtri preferiti salvabili;
    - badge candidati e icona recruiter (§4.5, §4.21).
 7. **"Candidatura fatta" marcabile anche senza CV** (Sprint 46) (§4.6, §4.10).
-8. **Home con statistiche e raccolta manuale "Raccogli ora"**, 1 al giorno (Sprint 44) (§4.13, §4.14).
+8. **Statistiche e raccolta manuale "Raccogli ora"**, 1 al giorno (Sprint 44; dallo Sprint 73 in un pannello della lista, la Home è eliminata) (§4.13, §4.14).
 9. **Creazione manuale di un job**, Free e Pro, 3 al giorno (Sprint 43) (§4.15).
 10. **Editor del CV** (Sprint 51) **con chat AI** a proposta e conferma (Sprint 59–62) (§4.16, §4.17).
 11. **Cover letter in PDF** (Sprint 42), con editor e chat (Sprint 63) (§4.18, §4.19).
@@ -134,7 +134,7 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 
 ### Ciclo quotidiano e lista
 - Come utente, voglio **ricevere una notifica alle 10:00** quando ci sono nuovi job.
-- Come utente, voglio **vedere in Home le mie statistiche** (job trovati, CV generati, candidature fatte: oggi, ultima settimana, totali).
+- Come utente, voglio **vedere le mie statistiche** (pannello "Raccogli nuovi job" della lista) (job trovati, CV generati, candidature fatte: oggi, ultima settimana, totali).
 - Come utente, voglio **avviare una raccolta manuale ("Raccogli ora")**, al massimo una volta al giorno, per non aspettare la notte.
 - Come utente, voglio **vedere la lista dei job ordinata per punteggio**, con titolo, azienda, località, punteggio, gap principali, numero di candidati e presenza di un recruiter, per decidere rapidamente cosa approfondire.
 - Come utente, voglio **filtrare la lista** per intervallo di date, località, ricerca di provenienza, punteggio, stato, numero di candidati e presenza di un recruiter.
@@ -200,7 +200,7 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 - **Cambio della password** dalle Impostazioni (§4.22, Sprint 67).
 - **Cambio dell'email di accesso** dalle Impostazioni (§4.22, Sprint 70), solo con l'invio di email configurato: password + nuovo indirizzo, link di conferma (3 giorni) al nuovo indirizzo e avviso a quello attuale; l'email di accesso cambia solo alla conferma.
 - **Login con Google.** È implementato ma **non è configurato in produzione**; dallo Sprint 67 il pulsante "Accedi con Google" **compare solo quando l'amministratore lo configura**, quindi oggi non si vede e l'unico accesso è email e password. Il percorso non è comunque completo (§8).
-- **Logout:** dallo Sprint 70 il pulsante "Esci" (icona in alto a destra, accanto al selettore della lingua) è nella barra di navigazione di **tutte le pagine** riservate agli utenti collegati; resta anche nella schermata di accettazione dei testi legali. Chiude la sessione di quel dispositivo anche sul server (gli altri dispositivi restano collegati) e **disattiva le notifiche push su quel dispositivo** (§4.12).
+- **Logout:** dallo Sprint 73 (redesign UI, decisione A9) il pulsante **"Esci"** è in fondo alla pagina **Impostazioni** e chiede conferma in una finestra ("Vuoi uscire?", Esci / Annulla); non è più nella barra di navigazione. Resta anche nella schermata di accettazione dei testi legali. Chiude la sessione di quel dispositivo anche sul server (gli altri dispositivi restano collegati) e **disattiva le notifiche push su quel dispositivo** (§4.12).
 - **Accettazione dei testi aggiornati** (Sprint 67). Chi non ha accettato le **versioni correnti** di informativa, termini e dichiarazione d'età vede, al posto di qualunque pagina riservata agli utenti collegati, una **schermata bloccante** "Informativa privacy e termini di servizio" con le stesse tre caselle e il pulsante "Continua". È successo una volta a tutti gli utenti registrati prima dello Sprint 67 e succederà di nuovo a tutti quando un testo cambierà versione. Dalla schermata, senza accettare, si può comunque **esportare i dati**, **eliminare l'account** o **uscire**; finché non si accetta la barra di navigazione resta nascosta e nessuna altra funzione è disponibile.
 - **Pagine legali** (Sprint 67): **Informativa privacy** (`/privacy`) e **Termini di servizio** (`/terms`) sono pagine pubbliche, leggibili anche senza account, in italiano o in inglese secondo la lingua dell'interfaccia, con versione e data di entrata in vigore. Un piccolo footer con i due link è presente in tutte le pagine dell'app. I dati del titolare del trattamento (nome, email e, facoltativo, indirizzo) li imposta l'amministratore nella configurazione; finché mancano nome o email le pagine mostrano l'avviso "Dati del titolare del trattamento da completare: questa pagina non è ancora nella sua versione definitiva." Una copia di riferimento dei testi è in `Docs/legal/`.
 - **Export ed eliminazione dell'account**: dalle Impostazioni (§4.22) e dalla schermata di accettazione (Sprint 67).
@@ -313,7 +313,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 
 ### 4.5 Vista lista e navigazione
 
-**Navigazione generale.** Dopo il login una barra in alto offre **Home**, **Jobs**, **Profilo** e **Impostazioni**, più il selettore della lingua dell'interfaccia. L'app si apre sulla **lista job** (Jobs), non sulla Home.
+**Navigazione generale** (Sprint 73, redesign UI). Dopo il login la navigazione ha **tre voci: Jobs, Profilo, Impostazioni** (la pagina Home non esiste più: l'indirizzo `/home` porta alla lista). Su telefono e tablet (sotto i 1024 px) è una **barra di tab in basso** con icona ed etichetta, voce attiva in colore primario, che rispetta l'area sicura dell'iPhone; da 1024 px è una **barra in alto** con logo e nome dell'app, le tre voci e il selettore della lingua. Jobs resta la voce attiva anche nel dettaglio e negli editor di un job. L'app si apre sulla **lista job**. Le pagine senza navigazione (accesso, pagine legali, verifica email, schermata di accettazione) mostrano in alto logo e selettore della lingua. "Esci" è in Impostazioni (§4.1).
 
 **Sezioni.** La lista organizza i job in **quattro sezioni** (pillole in alto):
 
@@ -598,25 +598,25 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 - i testi sono in italiano o in inglese secondo la **lingua dell'interfaccia** salvata sull'account al momento dell'invio (Sprint 71; prima solo in italiano);
 - l'"ora locale" è quella del fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
 
-### 4.13 Home e statistiche (Sprint 44)
+### 4.13 Statistiche e raccolta (Sprint 44; dallo Sprint 73 in Jobs)
 
-La pagina **Home** contiene:
+Dallo Sprint 73 la pagina Home non esiste più. Statistiche e raccolta manuale sono in un **pannello "Raccogli nuovi job"** aperto dal pulsante con l'icona di aggiornamento accanto al titolo della lista job (soluzione ponte: lo Sprint 74 le ridisegna nella lista). Il pannello contiene:
 - **"Le tue statistiche"**: tre schede, ciascuna con le colonne **Oggi / Ultima settimana / Totali**:
   - **Job trovati**, con la riga "di cui manuali: N". Contano tutti i job dell'utente per data di raccolta, a prescindere da sezione e archiviazione. "Manuali" comprende sia i job importati da link sia quelli creati a mano.
   - **CV generati**: ogni CV prodotto, incluse le generazioni e ogni PDF finale prodotto dall'editor. Le cover letter non sono contate.
   - **Candidature fatte**: job marcati "candidatura fatta", per data di marcatura.
-- **"Raccogli nuovi job"**: la raccolta manuale (§4.14).
+- **"Raccogli ora"**: la raccolta manuale (§4.14), con l'indicazione del costo/limite della prossima richiesta.
 
 **Definizioni dei periodi:**
 - "Oggi" parte dalla mezzanotte nel fuso dell'utente;
 - "Ultima settimana" sono gli **ultimi 7 giorni mobili**, non la settimana di calendario;
 - "Totali" è tutto lo storico.
 
-Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono altre metriche.
+Le statistiche si caricano all'apertura del pannello e si ricaricano dopo una raccolta manuale riuscita, insieme alla lista. Non ci sono altre metriche.
 
 ### 4.14 Raccolta manuale "Raccogli ora"
 
-- Dalla Home, il pulsante **"Raccogli ora"** esegue subito, per il solo utente, la stessa raccolta + scoring della notte, sulle sue ricerche attive (con la finestra delle 24 ore).
+- Dal pannello "Raccogli nuovi job" della lista (§4.13), il pulsante **"Raccogli ora"** esegue subito, per il solo utente, la stessa raccolta + scoring della notte, sulle sue ricerche attive (con la finestra delle 24 ore).
 - Al termine l'app mostra **"Job trovati"** e **"Tenuti dopo scoring"**, con l'avviso "Raccolta completata.".
 - **Limite:** **1 al giorno** (azzeramento a mezzanotte Europe/Rome), uguale per tutti i piani, **senza estensione a credito**. Oltre: "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
 - **Una sola raccolta per volta.** Se ne è già in corso una: "Raccolta già in corso per questo account." Un blocco rimasto appeso si considera scaduto dopo **2 ore**.
@@ -676,7 +676,7 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 - Il nuovo PDF diventa quello scaricabile.
 - Lo stato del job non cambia.
 - La bozza resta disponibile.
-- Il PDF finale conta tra i "CV generati" della Home.
+- Il PDF finale conta tra i "CV generati" delle statistiche (§4.13).
 
 ### 4.17 Chat AI dell'editor CV (Sprint 59–62)
 
@@ -842,7 +842,7 @@ Si salva con il pulsante "Salva". Limiti della pagina:
 1. **Piano e credito:** piano (Free/Pro) e saldo del credito extra, in sola lettura (§4.11).
 2. **I tuoi limiti di oggi** (Sprint 70): contatori, massimali e prezzi (§4.11).
 3. **Ricerche salvate:** creazione, modifica, eliminazione, attivazione e disattivazione (§4.2).
-4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e della Home e l'ora della notifica mattutina), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
+4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e delle statistiche e l'ora della notifica mattutina), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
 5. **Notifiche push:** preferenza "Ricevi notifiche push" (Sprint 67) e attivazione sul dispositivo (§4.12).
 6. **Privacy e sicurezza** (Sprint 67):
    - **Email di accesso** (Sprint 70): email attuale e cambio con nuovo indirizzo + password. Il server invia un link di conferma (valido 3 giorni) al nuovo indirizzo e un avviso a quello attuale ("se non sei stato tu, cambia la password"); l'app mostra "Ti abbiamo inviato un link di conferma a …". L'email di accesso cambia solo quando si apre il link (pagina "Nuova email di accesso", che funziona anche da un dispositivo non collegato); il link vale una volta sola. Se il nuovo indirizzo appartiene già a un altro account la risposta è la stessa ma non parte nessuna email; se lo diventa prima della conferma, la conferma è rifiutata. Senza invio di email configurato il riquadro dice che il cambio non è disponibile. L'email mostrata sul CV (Profilo) è un dato diverso e non cambia;
@@ -855,7 +855,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 
 **Lingua dell'interfaccia.**
 - Disponibile in italiano e inglese.
-- Si cambia anche dal selettore nella barra in alto. La scelta viene salvata sull'account e al login successivo prevale.
+- Si cambia in Impostazioni → Preferenze, dal selettore nella barra in alto su schermi da 1024 px e, prima del login, da quello in alto nelle pagine di accesso. La scelta viene salvata sull'account e al login successivo prevale.
 - Al primo accesso il default è la lingua del dispositivo: italiano se è italiano, altrimenti inglese.
 
 ---
@@ -887,7 +887,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 23. **Scelta del template del CV e della cover letter.** Esiste un template per ciascun documento.
 24. **Personalizzazione di oggetto, saluto, destinatario e chiusura della cover letter.** Sono testi fissi per lingua.
 25. **Modifica e cancellazione dei messaggi di networking** generati.
-26. **Ulteriori metriche in Home** oltre alle tre esistenti (erano state chieste "altre metriche a scelta", nessuna è stata implementata).
+26. **Ulteriori metriche nelle statistiche** oltre alle tre esistenti (erano state chieste "altre metriche a scelta", nessuna è stata implementata).
 27. *(Voce rimossa con lo Sprint 70: l'email di accesso si cambia dalle Impostazioni, §4.22.)*
 28. **Gestione dei consensi oltre i tre obbligatori**: non esistono consensi facoltativi (marketing, profilazione) né la revoca di singoli consensi; chi non accetta i testi può solo esportare i dati, eliminare l'account o uscire (Sprint 67).
 
@@ -911,7 +911,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - **nessun cookie di profilazione, analisi o pubblicità**: sul dispositivo restano solo il token di accesso e la lingua scelta (memoria locale del browser) e i file dell'app installabile;
   - **trasparenza AI**: i punti in cui l'app genera testo con l'AI mostrano l'avviso "Contenuto generato con l'AI: verificalo prima di usarlo." (§4.7).
 - **Fuso orario.**
-  - Il "giorno" della lista e della Home (compreso il default "oggi" del filtro date) e l'orario delle notifiche seguono il fuso dell'utente, impostabile in Impostazioni e in onboarding (Sprint 70). I nuovi account ricevono il fuso del dispositivo; quelli precedenti restano su Europe/Rome finché l'utente non lo cambia.
+  - Il "giorno" della lista e delle statistiche (compreso il default "oggi" del filtro date) e l'orario delle notifiche seguono il fuso dell'utente, impostabile in Impostazioni e in onboarding (Sprint 70). I nuovi account ricevono il fuso del dispositivo; quelli precedenti restano su Europe/Rome finché l'utente non lo cambia.
   - Raccolta notturna e azzeramento dei massimali seguono sempre Europe/Rome.
 - **Freschezza dei dati.** Al mattino si vedono le offerte pubblicate nelle 24 ore precedenti la raccolta notturna (o quella manuale).
 - **Reattività — lista:** si apre senza attesa percepibile. Si intende reattività del server, **non** cache offline (§5.20).
@@ -952,7 +952,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ "Password dimenticata?" risponde allo stesso modo per email registrate e non; il link ricevuto permette una sola volta di scegliere una nuova password e disconnette tutti i dispositivi (Sprint 67).
 - ☐ Il cambio password dalle Impostazioni richiede la password attuale e disconnette gli altri dispositivi, lasciando collegato quello in uso (Sprint 67).
 - ☐ Il cambio dell'email di accesso richiede la password; l'email cambia solo aprendo il link ricevuto al nuovo indirizzo, l'indirizzo attuale riceve un avviso, il link non vale una seconda volta; senza invio di email il cambio non è disponibile (Sprint 70).
-- ☐ "Esci" è raggiungibile da ogni pagina riservata e disattiva le notifiche push del dispositivo (Sprint 70).
+- ☐ "Esci" è in fondo a Impostazioni, chiede conferma (Annulla non esce) e disattiva le notifiche push del dispositivo (Sprint 73).
+- ☐ La navigazione ha tre voci (Jobs, Profilo, Impostazioni): barra di tab in basso sotto i 1024 px, barra in alto con logo da 1024 px; `/home` porta alla lista; nessuna pagina è più larga dello schermo a 360 e 390 px (Sprint 73).
 - ☐ Con il profilo incompleto (nessun titolo di studio) ogni pagina, tranne onboarding e Profilo, mostra il banner con il link per completarlo (Sprint 70).
 - ☐ Un utente che non ha accettato le versioni correnti di informativa e termini vede solo la schermata di accettazione, da cui può accettare, esportare i dati, eliminare l'account o uscire; nessun'altra funzione risponde finché non accetta (Sprint 67).
 - ☐ `/privacy` e `/terms` si aprono senza login, in italiano o in inglese; se mancano i dati del titolare mostrano l'avviso; il footer con i due link è in tutte le pagine (Sprint 67).
@@ -987,8 +988,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Il ciclo notturno non genera alcun CV.
 - ☐ Se lo scoring di un job fallisce, il job resta visibile senza punteggio, in fondo alla lista.
 
-### Home e raccolta manuale
-- ☐ La Home mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, ultima settimana e totali.
+### Statistiche e raccolta manuale
+- ☐ Il pannello "Raccogli nuovi job" della lista mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, ultima settimana e totali.
 - ☐ "Raccogli ora" esegue raccolta + scoring sulle ricerche attive e mostra i job trovati e quelli tenuti.
 - ☐ Una seconda raccolta manuale nello stesso giorno è rifiutata con "Massimo 1 al giorno", su tutti i piani e senza estensione a credito.
 - ☐ Una raccolta manuale fallita non consuma il tentativo giornaliero.
@@ -1155,7 +1156,7 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 40. **Limiti della pagina Profilo:** *(Risolto nello Sprint 70: foto rimovibile, tecnologie e obiettivo modificabili.)* non permette di rimuovere la foto; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
 41. **Onboarding saltabile.** *(Risolto nello Sprint 70: banner fisso con il link finché il profilo non è completo.)* Dopo il login non c'è alcun rimando all'onboarding se il profilo è incompleto: l'utente se ne accorge solo quando la generazione del CV viene rifiutata. Con la verifica dell'email attiva (Sprint 67) l'onboarding è proposto solo se il primo login avviene dal pulsante della pagina di conferma; un login fatto in altro modo porta alla lista.
 42. **Titolo della pagina Impostazioni.** *(Risolto nello Sprint 70.)* Il titolo è ancora "Il tuo account".
-43. **Logout solo dalla lista.** *(Risolto nello Sprint 70: "Esci" nella barra in alto di ogni pagina.)* Il logout si trova solo nella pagina della lista job (e, dallo Sprint 67, nella schermata di accettazione dei testi legali).
+43. **Logout solo dalla lista.** *(Risolto nello Sprint 70: "Esci" nella barra in alto di ogni pagina; dallo Sprint 73 in Impostazioni con conferma.)* Il logout si trova solo nella pagina della lista job (e, dallo Sprint 67, nella schermata di accettazione dei testi legali).
 44. **Tab rimaste aperte dopo un aggiornamento.** *(Risolto nello Sprint 70: avviso "Nuova versione disponibile — Aggiorna", senza ricaricamenti automatici.)* Una scheda dell'app aperta prima di un aggiornamento continua a usare la versione precedente finché non viene ricaricata (es. grassetti mostrati come `**testo**` nell'editor). Non c'è un ricaricamento automatico.
 
 **Privacy, email e backup (Sprint 67)**

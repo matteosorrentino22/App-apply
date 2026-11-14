@@ -35,6 +35,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import JobCard from '@/components/JobCard'
+import CollectJobsSheet from '@/components/CollectJobsSheet'
 import { ActionCostHint } from '@/components/ActionCost'
 import { confirmCreditCharge, useUsage } from '@/lib/usage'
 import MultiSelectFilter from '@/components/MultiSelectFilter'
@@ -416,8 +417,10 @@ export default function JobListPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-10">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
+        {/* Raccolta manuale e statistiche (dalla Home eliminata, Sprint 73). */}
+        <CollectJobsSheet onCollected={load} />
       </header>
 
       <div className="flex flex-wrap gap-2">

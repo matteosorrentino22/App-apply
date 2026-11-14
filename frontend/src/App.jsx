@@ -1,17 +1,12 @@
 import { useEffect } from 'react'
-import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext'
 import ProtectedRoute from './components/ProtectedRoute'
-import LanguageSwitcher from './components/LanguageSwitcher'
 import { ToastProvider } from './components/ToastProvider'
-import { Button, buttonVariants } from './components/ui/button'
-import { cn } from './lib/utils'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/onboarding/OnboardingPage'
-import HomePage from './pages/HomePage'
 import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
 import CvDraftEditorPage from './pages/CvDraftEditorPage'
@@ -23,7 +18,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ConfirmEmailChangePage from './pages/ConfirmEmailChangePage'
-import LegalFooter from './components/LegalFooter'
+import AppShell from './components/AppShell'
 import AppUpdateBanner from './components/AppUpdateBanner'
 import ProfileCompletionBanner from './components/ProfileCompletionBanner'
 
@@ -43,73 +38,6 @@ function AccountLanguageSync() {
   return null
 }
 
-function NavItem({ to, label }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        cn(
-          buttonVariants({ variant: isActive ? 'primary' : 'ghost', size: 'sm' }),
-          'rounded-full px-4',
-        )
-      }
-    >
-      {label}
-    </NavLink>
-  )
-}
-
-function Topbar() {
-  const { user, logout } = useAuth()
-  const { t } = useLanguage()
-  const navigate = useNavigate()
-  // Finché mancano le accettazioni legali (Sprint 67) ogni pagina protetta
-  // mostra la schermata di accettazione: la navigazione non serve.
-  const showNav = user && !user.legal_acceptance_required
-
-  // Esci raggiungibile da ogni pagina autenticata (Sprint 70), non solo
-  // dalla lista.
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
-
-  return (
-    <div
-      className={cn(
-        // flex-wrap: su schermi stretti lingua ed Esci vanno sotto le voci
-        // invece di uscire dallo schermo (difetto dallo Sprint 70; la barra
-        // viene sostituita da AppShell nello Sprint 73).
-        'mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4',
-        showNav ? 'justify-between' : 'justify-end',
-      )}
-    >
-      {showNav && (
-        <nav className="flex items-center gap-1 rounded-full bg-muted p-1">
-          <NavItem to="/home" label={t('home.navLink')} />
-          <NavItem to="/list" label={t('jobs.navLink')} />
-          <NavItem to="/profile" label={t('profile.navLink')} />
-          <NavItem to="/settings" label={t('account.navLink')} />
-        </nav>
-      )}
-      <div className="flex items-center gap-1">
-        <LanguageSwitcher />
-        {showNav && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            aria-label={t('account.logout')}
-            title={t('account.logout')}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export default function App() {
   return (
     <LanguageProvider>
@@ -117,84 +45,77 @@ export default function App() {
         <ToastProvider>
           <AccountLanguageSync />
           <BrowserRouter>
-            <Topbar />
-            <ProfileCompletionBanner />
-            <Routes>
-              <Route path="/" element={<Navigate to="/list" replace />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/privacy" element={<LegalPage document="privacy" />} />
-              <Route path="/terms" element={<LegalPage document="terms" />} />
-              <Route path="/verify-email" element={<VerifyEmailPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute>
-                    <OnboardingPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/home"
-                element={
-                  <ProtectedRoute>
-                    <HomePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/list"
-                element={
-                  <ProtectedRoute>
-                    <JobListPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/jobs/:id"
-                element={
-                  <ProtectedRoute>
-                    <JobDetailPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/jobs/:id/cv-editor"
-                element={
-                  <ProtectedRoute>
-                    <CvDraftEditorPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/jobs/:id/cover-letter-editor"
-                element={
-                  <ProtectedRoute>
-                    <CoverLetterDraftEditorPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <AccountPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <ProfilePage />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-            <LegalFooter />
+            <AppShell banner={<ProfileCompletionBanner />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/list" replace />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/privacy" element={<LegalPage document="privacy" />} />
+                <Route path="/terms" element={<LegalPage document="terms" />} />
+                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <OnboardingPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Home eliminata (Sprint 73, SPEC-DELTA A1): statistiche e raccolta sono in Jobs. */}
+                <Route path="/home" element={<Navigate to="/list" replace />} />
+                <Route
+                  path="/list"
+                  element={
+                    <ProtectedRoute>
+                      <JobListPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/jobs/:id"
+                  element={
+                    <ProtectedRoute>
+                      <JobDetailPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/jobs/:id/cv-editor"
+                  element={
+                    <ProtectedRoute>
+                      <CvDraftEditorPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/jobs/:id/cover-letter-editor"
+                  element={
+                    <ProtectedRoute>
+                      <CoverLetterDraftEditorPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <AccountPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </AppShell>
             <AppUpdateBanner />
           </BrowserRouter>
         </ToastProvider>

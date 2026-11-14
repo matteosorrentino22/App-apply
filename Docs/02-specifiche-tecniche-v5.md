@@ -1,7 +1,7 @@
 # Specifiche Tecniche — App di ricerca lavoro e generazione CV
 
 > **Documento:** 02 — Specifiche tecniche
-> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del backend in it/en, Sprint 72 fondamenta del redesign UI)
+> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del backend in it/en, Sprint 72 fondamenta e Sprint 73 navigazione del redesign UI)
 > **Stato:** documento vivo, va aggiornato nello stesso commit di ogni sprint che cambia il comportamento (regola in `CLAUDE.md`, "Workflow sprint")
 > **Ambito:** *come* è costruita l'applicazione: architettura, stack, modello dati, flussi, generazione dei documenti, deploy, amministrazione, API, test, limiti tecnici. Il *cosa* è in `Docs/01-specifiche-funzionali-v6.md`. Le regole di contenuto e impaginazione del CV sono in `Docs/03-specifiche-funzionali-contenuto-cv-v5.md`, che per quei temi prevale su questo documento. Procedure operative, variabili d'ambiente e runbook: `DEPLOY.md`.
 >
@@ -178,7 +178,7 @@ App Django in `backend/apps/` (una per dominio):
 | `cv` | `CVDocument`, `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument`; pipeline CV (`ai_content`, `selection`, `generation`, `rendering`), gap filling, cover letter, messaggi, editor (`draft*`, `cover_letter_draft*`), template HTML |
 | `notifications` | `PushSubscription`, invio push, task notifiche |
 
-Frontend in `frontend/src/`: `pages/` (Login, Register, Onboarding, Home, JobList, JobDetail, CvDraftEditor, CoverLetterDraftEditor, Account/Impostazioni, Profile; dallo Sprint 67 Legal, LegalAcceptance, VerifyEmail, ForgotPassword, ResetPassword), `components/`, `api/` (client fetch e funzioni per endpoint), `legal/` (testi di informativa e termini in JSX, it/en, Sprint 67), `i18n/` (traduzioni it/en), `sw.js` (service worker).
+Frontend in `frontend/src/`: `pages/` (Login, Register, Onboarding, JobList, JobDetail, CvDraftEditor, CoverLetterDraftEditor, Account/Impostazioni, Profile; dallo Sprint 67 Legal, LegalAcceptance, VerifyEmail, ForgotPassword, ResetPassword), `components/`, `api/` (client fetch e funzioni per endpoint), `legal/` (testi di informativa e termini in JSX, it/en, Sprint 67), `i18n/` (traduzioni it/en), `sw.js` (service worker).
 
 ---
 
@@ -219,7 +219,9 @@ React 19 + React Router 7, build con Vite 7, Tailwind CSS 4, componenti in stile
 
 **Icone e logo** (Sprint 72): `public/favicon.svg`, `favicon-32.png`, `apple-touch-icon.png` (180 px, `<link rel="apple-touch-icon">` in `index.html`), `pwa-192x192.png`, `pwa-512x512.png` e `pwa-maskable-512x512.png` (`purpose: maskable` nel manifest di `vite.config.js`, `background_color` `#fdfbf7`), dal logo "Incontro" di `Docs/design/logo/`.
 
-**Componenti trasversali** (Sprint 70): barra in alto con navigazione, selettore della lingua ed "Esci" su tutte le pagine autenticate (`App.jsx`; dallo Sprint 72 va a capo sugli schermi stretti invece di uscire dallo schermo); banner del profilo incompleto (`ProfileCompletionBanner`, da `profile_status` di `/me`); costi delle azioni a massimale (`lib/usage.js`: `useUsage`, `actionCostText`, `confirmCreditCharge`; componente `ActionCostHint`; riquadro `UsageLimitsCard` in Impostazioni); `TimezoneSelect` (select nativo con `Intl.supportedValuesOf('timeZone')`).
+**Navigazione** (Sprint 73, `components/AppShell.jsx`, al posto della `Topbar` di `App.jsx`): tre voci Jobs (`/list`, attiva anche su `/jobs/*`), Profilo (`/profile`), Impostazioni (`/settings`), con `aria-current="page"` sulla voce attiva. Sotto i 1024 px barra di tab fissa in basso (icona + etichetta, `padding-bottom: max(8px, env(safe-area-inset-bottom))`); da 1024 px barra in alto `sticky` con `BrandLogo` (marchio SVG da `src/assets/brand/`, variante chiara con il tema scuro, + wordmark con font di sistema), voci a pillola e `LanguageSwitcher` compatto. Senza navigazione (non autenticato o accettazioni mancanti) una testata con logo e lingua. `index.html` usa `viewport-fit=cover`; `#root` ha altezza minima `100dvh`; la variabile CSS `--app-bottom-bar` (classe `has-tabbar` su `<html>`, impostata da `AppShell`) vale l'altezza della barra di tab più l'area sicura sotto i 1024 px e 0 altrove: la usano il contenuto (padding inferiore) e gli elementi fissi in basso (`ToastProvider`, `AppUpdateBanner`, pulsante chat degli editor). La rotta `/home` reindirizza a `/list`; `HomePage` è stata rimossa e statistiche e raccolta manuale sono in `components/CollectJobsSheet.jsx` (`Sheet` aperto dal pulsante accanto al titolo della lista: stesse API `GET /api/jobs/stats/` e `POST /api/jobs/collect/`, ponte verso lo Sprint 74). "Esci" è `components/LogoutButton.jsx` in fondo ad `AccountPage` (`Modal` di conferma, stesso `logout()` di `AuthContext`).
+
+**Componenti trasversali** (Sprint 70): banner del profilo incompleto (`ProfileCompletionBanner`, da `profile_status` di `/me`); costi delle azioni a massimale (`lib/usage.js`: `useUsage`, `actionCostText`, `confirmCreditCharge`; componente `ActionCostHint`; riquadro `UsageLimitsCard` in Impostazioni); `TimezoneSelect` (select nativo con `Intl.supportedValuesOf('timeZone')`).
 
 **iPhone.** Le push via web funzionano su iOS solo con la PWA aggiunta alla schermata Home; l'app lo segnala in Impostazioni quando rileva iOS fuori dalla modalità standalone.
 
@@ -620,7 +622,7 @@ Due task Beat ogni 15 minuti iterano sugli utenti attivi con `notifications_enab
 
 I testi sono in italiano o in inglese secondo `User.interface_language` al momento dell'invio (Sprint 71, `notification_payload` con `translation.override`). I timestamp vengono aggiornati anche se l'utente non ha sottoscrizioni o se gli invii falliscono; per un utente con le notifiche disattivate invece non vengono toccati. Dallo Sprint 70, quando la preferenza torna attiva (`PATCH /me` da `false` a `true`, oppure registrazione di una sottoscrizione con la preferenza spenta) `last_notified_at` è riportato a "adesso": la prima notifica mattutina non conta i job creati nel periodo di silenzio. `last_inactivity_notified_at` non cambia. Il logout elimina la sottoscrizione del dispositivo (§3.8). Dallo Sprint 66: `webpush(..., timeout=10)`; una risposta 404/410 del push service elimina la sottoscrizione; qualunque altro errore su una sottoscrizione viene registrato nel log (solo l'id, mai l'endpoint) e si prosegue con le altre; un errore su un utente non interrompe il giro degli utenti successivi.
 
-### 5.6 Raccolta manuale "Collect now" (Home)
+### 5.6 Raccolta manuale "Collect now" (pannello della lista job; Home fino allo Sprint 72)
 
 `POST /api/jobs/collect/` → `run_manual_collection_for_user(user)`, **sincrono nella richiesta**:
 
@@ -1174,7 +1176,7 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 |---|---|---|---|
 | GET | `/api/jobs/` | Lista job (senza paginazione), ordinata per `score` decrescente (nulli in fondo) poi `date_collected` decrescente. Query: `section` (`main` default \| `imported` \| `favorites` \| `archived`), `q` (sottostringa su titolo/azienda/località; se presente ignora gli altri filtri), `date_from`, `date_to` (`YYYY-MM-DD`, fuso utente, estremi inclusi), `location`, `score` (CSV interi), `status` (CSV), `search` (CSV di id `SavedSearch` e/o `none`, in OR; dallo Sprint 68 per FK `matched_saved_search`, con ripiego sull'etichetta per i job senza FK), `applicants` (CSV di fasce), `recruiter` (`yes` \| `no` \| `all`) | 200 lista `JobSerializer`; 400 parametro non valido |
 | GET | `/api/jobs/<id>/` | Dettaglio (`JobDetailSerializer`) | 200; 404 |
-| GET | `/api/jobs/stats/` | Statistiche Home `{jobs:{today, week, total, manual:{…}}, cvs:{…}, applications:{…}}` | 200 |
+| GET | `/api/jobs/stats/` | Statistiche (pannello "Raccogli nuovi job" della lista; Home fino allo Sprint 72) `{jobs:{today, week, total, manual:{…}}, cvs:{…}, applications:{…}}` | 200 |
 | POST | `/api/jobs/collect/` | Raccolta manuale sincrona (§5.6) | 200 `{collected, scored, discarded_scoring, kept, retried, retried_scored, groups_failed}`; 409 in corso (anche il ciclo notturno) o già usata oggi; 502 fallita su tutti i gruppi |
 | POST | `/api/jobs/import/` | Import da link LinkedIn `{url}` (§5.7) | 201 `{job_id, status, score}`; 403 non Pro; 409 URL non valido, offerta non recuperabile, duplicato, quota/credito esauriti |
 | POST | `/api/jobs/manual/` | Creazione manuale (§5.8) | 201 `{job_id, status, score}`; 400 validazione; 409 quota/credito esauriti; 502 creazione fallita (quota/credito restituiti) |
@@ -1259,12 +1261,12 @@ In `frontend/e2e/` (`npm run test:e2e`, configurazione `playwright.config.js`, b
 
 - `auth-onboarding.spec.js`: registrazione (con le tre spunte dei consensi, Sprint 67) e onboarding manuale, raggruppamento esperienze per azienda, login errato, lingua dell'interfaccia (browser it/en, switcher);
 - `account.spec.js`: piano e saldo, ciclo di vita di una ricerca salvata, limite di piano, persistenza delle impostazioni, istruzione iOS per le push; dallo Sprint 70 titolo "Impostazioni" e riquadro "I tuoi limiti di oggi";
-- `job-list.spec.js`: sezioni, filtri (punteggio, stato, location, ricerca multi-selezione, candidati, recruiter), ricerca testuale, archivio con annulla e swipe, generazione CV (pulsante disabilitato), link annuncio e candidatura senza CV, espandi motivazioni, badge candidati e icona recruiter, preferiti, filtri preferiti; dallo Sprint 70 filtri nell'URL conservati tornando dal dettaglio e "Esci" dalla barra in alto (tolto il test dell'arricchimento, funzione rimossa nello Sprint 44);
+- `job-list.spec.js`: sezioni, filtri (punteggio, stato, location, ricerca multi-selezione, candidati, recruiter), ricerca testuale, archivio con annulla e swipe, generazione CV (pulsante disabilitato), link annuncio e candidatura senza CV, espandi motivazioni, badge candidati e icona recruiter, preferiti, filtri preferiti; dallo Sprint 70 filtri nell'URL conservati tornando dal dettaglio e "Esci" dalla barra in alto (tolto il test dell'arricchimento, funzione rimossa nello Sprint 44); Dallo Sprint 73 anche: "Esci" da Impostazioni con finestra di conferma (al posto del test sull'"Esci" della barra in alto), navigazione a 3 voci con voce attiva e redirect di `/home`, barra di tab a 390 px con apertura del pannello di raccolta e nessuna pagina più larga dello schermo.
 - `push-subscription.spec.js`: sottoscrizione push verificata lato backend (endpoint finto su `fcm.googleapis.com`, per passare l'allowlist dello Sprint 66).
 
 Dallo Sprint 67 le registrazioni via API degli spec inviano `accept_privacy`, `accept_terms`, `confirm_age` e usano il token della risposta: presuppongono quindi un backend **senza invio email configurato** (con l'email attiva la registrazione non restituisce token). Dallo Sprint 70 le registrazioni (via API e dal modulo) inviano il codice di invito letto da `E2E_INVITE_CODE` (vuoto = registrazione aperta). Gli e2e non sono stati rilanciati negli Sprint 67–70.
 
-L'esecuzione degli e2e non è documentata negli ultimi sprint.
+L'esecuzione degli e2e non è documentata negli ultimi sprint. Dallo Sprint 73 i comandi per lanciarli su un computer di sviluppo (backend con `.venv`, Postgres locale, variabili d'ambiente) sono in `sprints/sprint-73.md`; sul VPS non c'è l'ambiente per eseguirli.
 
 ### 13.3 Cosa non è coperto
 

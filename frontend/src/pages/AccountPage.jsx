@@ -29,6 +29,7 @@ import UsageLimitsCard from '@/components/UsageLimitsCard'
 import { useUsage } from '@/lib/usage'
 import TimezoneSelect from '@/components/TimezoneSelect'
 import EmailChangeForm from '@/components/EmailChangeForm'
+import LogoutButton from '@/components/LogoutButton'
 import { SUPPORTED_LANGUAGES } from '../i18n/translations'
 
 const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', city: '', country: '' }
@@ -672,6 +673,8 @@ export default function AccountPage() {
           <DeleteAccountButton />
         </CardContent>
       </Card>
+
+      <LogoutButton />
     </div>
   )
 }

@@ -391,19 +391,72 @@ test('i filtri restano nell\'URL: tornando dal dettaglio la lista è ancora filt
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 })
 
-// Sprint 70: "Esci" nella barra in alto, su ogni pagina autenticata.
-test('il pulsante Esci della barra in alto funziona anche dal dettaglio di un job', async ({
-  page,
-  request,
-  baseURL,
-}) => {
+// Sprint 73 (SPEC-DELTA A9): "Esci" non è più nella barra in alto ma in
+// fondo alle Impostazioni, con finestra di conferma.
+test('Esci da Impostazioni chiede conferma e chiude la sessione', async ({ page, request, baseURL }) => {
   await loginAsSeededUser(page, request, baseURL)
-  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
-  await page.waitForURL(/jobs\//)
+  await expect(page.getByRole('button', { name: 'Esci' })).toHaveCount(0)
 
+  await page.getByRole('navigation', { name: 'Navigazione principale' }).getByRole('link', { name: 'Impostazioni' }).click()
+  await page.waitForURL(/\/settings$/)
   await page.getByRole('button', { name: 'Esci' }).click()
 
+  const dialog = page.getByRole('dialog', { name: 'Vuoi uscire?' })
+  await expect(dialog).toBeVisible()
+  // "Annulla" chiude la finestra senza uscire.
+  await dialog.getByRole('button', { name: 'Annulla' }).click()
+  await expect(dialog).not.toBeVisible()
+  await expect(page).toHaveURL(/\/settings$/)
+
+  await page.getByRole('button', { name: 'Esci' }).click()
+  await page.getByRole('dialog', { name: 'Vuoi uscire?' }).getByRole('button', { name: 'Esci' }).click()
   await expect(page).toHaveURL(/\/login$/)
   await page.goto('/list')
   await expect(page).toHaveURL(/\/login$/)
+})
+
+// Sprint 73: navigazione a 3 voci (SPEC-DELTA A1). Da 1024 px barra in alto;
+// la Home non esiste più e /home porta alla lista.
+test('navigazione a 3 voci in alto su desktop e /home reindirizza a /list', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+  const nav = page.getByRole('navigation', { name: 'Navigazione principale' })
+  await expect(nav.getByRole('link')).toHaveText(['Jobs', 'Profilo', 'Impostazioni'])
+  await expect(nav.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
+
+  // Jobs resta la voce attiva anche nel dettaglio di un job.
+  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await page.waitForURL(/jobs\//)
+  await expect(nav.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
+
+  await nav.getByRole('link', { name: 'Profilo' }).click()
+  await expect(page).toHaveURL(/\/profile$/)
+  await expect(nav.getByRole('link', { name: 'Profilo' })).toHaveAttribute('aria-current', 'page')
+
+  await page.goto('/home')
+  await expect(page).toHaveURL(/\/list$/)
+})
+
+test.describe('navigazione su mobile', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+  test('barra di tab in basso con 3 voci e Raccogli raggiungibile dalla lista', async ({ page, request, baseURL }) => {
+    await loginAsSeededUser(page, request, baseURL)
+    const tabs = page.getByRole('navigation', { name: 'Navigazione principale' })
+    await expect(tabs).toHaveCount(1)
+    await expect(tabs.getByRole('link')).toHaveText(['Jobs', 'Profilo', 'Impostazioni'])
+    const box = await tabs.boundingBox()
+    expect(box.y + box.height).toBeGreaterThan(830)
+
+    // La raccolta manuale (prima nella Home) si apre dal pulsante accanto al titolo.
+    await page.getByRole('button', { name: 'Raccogli nuovi job' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Raccogli nuovi job' })
+    await expect(sheet.getByRole('button', { name: 'Raccogli ora' })).toBeVisible()
+    await sheet.getByRole('button', { name: 'Chiudi' }).click()
+    await expect(sheet).not.toBeVisible()
+
+    // Nessuna pagina più larga dello schermo.
+    for (const path of ['/list', '/profile', '/settings']) {
+      await page.goto(path)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    }
+  })
 })

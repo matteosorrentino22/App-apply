@@ -19,6 +19,9 @@ mediafiles/
 postgres-data/
 backend/celerybeat-schedule
 
+# Impostazioni locali per lanciare gli e2e (limiti di frequenza alzati): sprints/sprint-73.md
+backend/e2e_settings_local.py
+
 # Backup locali (pg_dump), mai nel repository
 backups/
 

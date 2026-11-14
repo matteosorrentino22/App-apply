@@ -31,7 +31,8 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
 
   // Step 1: preferenze
   await page.getByRole('button', { name: 'Avanti' }).click()
-  await expect(page.getByText('Profilo', { exact: true })).toBeVisible()
+  // Sprint 73: "Profilo" è anche una voce della barra di navigazione: si cerca nel contenuto della pagina.
+  await expect(page.getByRole('main').getByText('Profilo', { exact: true })).toBeVisible()
 
   // Step 2: profilo compilato manualmente (nessun upload CV, per non dipendere da Claude)
   await page.getByLabel('Sommario professionale').fill('Sviluppatore software con 5 anni di esperienza.')
@@ -67,7 +68,8 @@ test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI'
   await expect(page).toHaveURL(/\/onboarding$/)
 
   await page.getByRole('button', { name: 'Avanti' }).click()
-  await expect(page.getByText('Profilo', { exact: true })).toBeVisible()
+  // Sprint 73: "Profilo" è anche una voce della barra di navigazione: si cerca nel contenuto della pagina.
+  await expect(page.getByRole('main').getByText('Profilo', { exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Aggiungi azienda' }).click()
   await page.getByLabel('Azienda').fill('Acme Srl')

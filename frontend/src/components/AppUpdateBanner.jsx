@@ -20,7 +20,7 @@ export default function AppUpdateBanner() {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 bottom-4 z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-lg"
+      className="fixed inset-x-0 bottom-[calc(var(--app-bottom-bar)+1rem)] z-50 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-lg"
     >
       <span>{t('appUpdate.available')}</span>
       <Button size="sm" className="rounded-full" onClick={() => window.location.reload()}>
