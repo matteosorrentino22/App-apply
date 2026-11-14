@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
+from apps.jobs.admin_actions import reset_today_all_quotas, reset_today_collection_quota
+
 from .models import AuthToken, User
 
 
@@ -23,8 +25,19 @@ class UserAdmin(DjangoUserAdmin):
                 )
             },
         ),
+        (
+            "Raccolta e inattività",
+            {
+                "fields": (
+                    "collection_in_progress",
+                    "collection_started_at",
+                    "last_inactivity_notified_at",
+                )
+            },
+        ),
     )
     list_display = DjangoUserAdmin.list_display + ("plan", "extra_credit")
+    actions = (reset_today_collection_quota, reset_today_all_quotas)
 
 
 @admin.register(AuthToken)

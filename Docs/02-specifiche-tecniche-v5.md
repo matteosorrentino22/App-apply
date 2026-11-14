@@ -1,7 +1,7 @@
 # Specifiche Tecniche — App di ricerca lavoro e generazione CV
 
 > **Documento:** 02 — Specifiche tecniche
-> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66, sicurezza)
+> **Versione:** 5 — descrizione **as-is al 2026-11-14** (Sprint 66, sicurezza; Sprint 68, lista job, scoring e raccolta)
 > **Stato:** documento vivo, va aggiornato nello stesso commit di ogni sprint che cambia il comportamento (regola in `CLAUDE.md`, "Workflow sprint")
 > **Ambito:** *come* è costruita l'applicazione: architettura, stack, modello dati, flussi, generazione dei documenti, deploy, amministrazione, API, test, limiti tecnici. Il *cosa* è in `Docs/01-specifiche-funzionali-v6.md`. Le regole di contenuto e impaginazione del CV sono in `Docs/03-specifiche-funzionali-contenuto-cv-v5.md`, che per quei temi prevale su questo documento. Procedure operative, variabili d'ambiente e runbook: `DEPLOY.md`.
 >
@@ -39,6 +39,7 @@ Novità principali rispetto alle versioni precedenti, per sprint:
 | 63 | Editor e chat della cover letter (`CoverLetterDraft`) | §4.11, §5.12, §5.13 |
 | 64 | Filtri preferiti salvabili (`JobFilterPreset`) | §4.13 |
 | 66 | Sicurezza: download con URL firmati e nomi file casuali, token con scadenza per inattività e logout, throttling, registrazione su invito, limiti di input, header HTTP, push in allowlist, container non-root, log | §3.7, §4.15, §7.1, §8, §12 |
+| 68 | `Job.matched_saved_search` (FK) per il filtro "Ricerca"; eliminazione dei job del vecchio cap e rimozione di `discarded_by_cap`; punteggi 1–5 riscalati ×2; retry dello scoring (`scoring_failures`); raccolta isolata per gruppo Apify con scarti ed esiti nel `RunLog`; guardia condivisa manuale/notturna; limiti di piano sulla `PATCH` del tipo; import e job manuale robusti; località nel prompt di scoring; azioni Admin sui contatori | §4.4, §4.7, §5.1, §5.3, §5.6–§5.9, §9 |
 
 Decisioni delle versioni precedenti **superate dal codice** e quindi tolte da questo documento: limite di raccolta 50/100 job per utente per notte; cap di intake di 15 job/giorno con tie-break; generazione automatica dei CV per i job 4–5; una sola chiamata Apify per utente; scoring fallito = offerta scartata; scala 1–5; "riserva all'accodamento" con task Celery per le generazioni manuali; 3 livelli di compattamento del CV; selezione delle 3 voci di istruzione più recenti; budget bullet 12/10/9 distribuito per peso; arricchimento del profilo salvabile; `Education.end_date` obbligatoria; voucher.
 
@@ -297,7 +298,7 @@ Estende `AbstractUser` (quindi anche `username`, `password`, `first_name`, `last
 | `last_notified_at` | datetime | Ultima notifica mattutina inviata; "nuovi job" = `date_collected > last_notified_at` |
 | `last_inactivity_notified_at` | datetime, null | Ultimo promemoria di inattività; impedisce di rinviarlo a ogni giro finché `last_activity_reset` non cambia |
 | `extra_credit` | `Decimal(8,2)`, default 0 | Saldo del credito in euro; caricato da Admin, scalato e riaccreditato in modo atomico |
-| `collection_in_progress` | bool | Guardia di concorrenza della raccolta manuale (per utente) |
+| `collection_in_progress` | bool | Guardia di concorrenza della raccolta per utente, condivisa da raccolta manuale e ciclo notturno (Sprint 68) |
 | `collection_started_at` | datetime, null | Inizio della raccolta in corso; la guardia è considerata stantia dopo 2 ore o se il timestamp manca |
 
 ### 4.2 `Profile` e sezioni (`apps/profiles/models.py`)
@@ -314,7 +315,7 @@ Un solo profilo master per utente. Non esiste un campo `key_achievements`: le Ar
 
 - `user`, `search_type` (`job_role` "Job role keyword" | `company` "Company", default `job_role`), `keywords`, `city`, `country`, `is_active` (default **false**: una ricerca nuova nasce disattivata e si attiva con l'endpoint dedicato), `created_at`.
 - Non ci sono `name` né un campo `location` unico; città e paese arrivano dall'autocomplete Nominatim.
-- Limiti di piano (`apps/searches/services.py`): Free max 10 salvate e **1 attiva per tipo** (attivandone un'altra dello stesso tipo la precedente si disattiva, l'API la restituisce in `deactivated_previous`); Pro max 100 salvate e 50 attive in totale. Oltre → 400. La `PATCH` che cambia `search_type` di una ricerca attiva non ripassa dai limiti.
+- Limiti di piano (`apps/searches/services.py`): Free max 10 salvate e **1 attiva per tipo** (attivandone un'altra dello stesso tipo la precedente si disattiva, l'API la restituisce in `deactivated_previous`); Pro max 100 salvate e 50 attive in totale. Oltre → 400. Dallo Sprint 68 la `PATCH` che cambia `search_type` di una ricerca **attiva** ripassa da `activate_search` (stessa regola dell'attivazione, in transazione): su Free spegne l'altra attiva del nuovo tipo e la restituisce in `deactivated_previous`; su Pro il pool è unico e non cambia nulla.
 
 ### 4.4 `Job` (`apps/jobs/models.py`)
 
@@ -324,14 +325,15 @@ Un record per offerta e per utente.
 |---|---|---|
 | Identità | `user`, `source` (`linkedin` \| `manual`), `external_id` (255) | Unicità su (`user`, `source`, `external_id`): è la deduplica. Job manuali: `external_id = "manual-<uuid4>"` |
 | Annuncio | `title`, `company`, `location` (255), `description`, `apply_url` (URL 1000, facoltativo), `published_at` (null), `salary` (255) | `published_at` è nullo per gli import da link |
-| Provenienza | `matched_search` (255) | Testo libero, non FK: per le ricerche Job role `"<keywords> - <città>, <paese>"` (dal `searchString` Apify), per le Company il nome azienda; vuoto per import e job manuali |
+| Provenienza | `matched_search` (255), `matched_saved_search` (FK `SavedSearch`, null, `SET_NULL`, `related_name="jobs"`) | `matched_search` è l'etichetta del badge, uno storico mai riscritto: per le ricerche Job role `"<keywords> - <città>, <paese>"` (dal `searchString` Apify), per le Company il nome azienda; vuoto per import e job manuali. La FK (Sprint 68) è valorizzata in raccolta con la ricerca del gruppo che ha prodotto l'offerta (§5.3) ed è il criterio del filtro "Ricerca"; per i job precedenti l'ha valorizzata la migrazione `jobs/0018` dai valori attuali delle ricerche, solo se la corrispondenza era univoca (sul dump del 2026-11-14: 13.568 job su 14.486 con etichetta). Null anche per i job di ricerche poi eliminate |
 | Dati LinkedIn | `applicants_count` (int, null), `applicants_bucket` (`under_25` \| `over_200` \| vuoto), `recruiter_name` (255), `recruiter_profile_url` (URL 500) | Valorizzati solo dalla raccolta Apify; count e bucket mai insieme |
 | Sezione | `origin` (`collected` \| `imported`), `is_archived`, `is_favorite` | Sezioni: Raccolti (`collected`, non archiviati), Importati (`imported`, non archiviati: import da link **e** job manuali), Preferiti (`is_favorite`, non archiviati), Archiviati |
 | Stato | `status` (`new` \| `cv_generated` \| `application_done`, default `new`) | Tre stati stabili. Tutti i job nascono `new` |
 | Guardie | `cv_generation_in_progress`, `cover_letter_generation_in_progress`, `referral_message_generation_in_progress` | Flag transitori indipendenti, guardie di concorrenza (§5.2). Solo il primo corrisponde allo stato visibile "CV in generazione"; nessuno ha un timeout |
-| Storico | `discarded_by_cap` | Residuo del cap di intake rimosso: non più impostato, non filtrato da lista né statistiche, visibile solo in Admin |
-| Scoring | `score` (1–10, null), `score_match`, `score_gaps` (JSON), `score_reasoning` | `score` nullo = scoring fallito o mai eseguito. Match/gap sono liste di `{label, reason}`; i job scorati prima del 09/09/2026 hanno stringhe semplici, quelli prima dello Sprint 47 punteggi su 1–5 (mai riscalati) |
+| Scoring | `score` (1–10, null), `score_match`, `score_gaps` (JSON), `score_reasoning`, `score_rescaled_from_legacy` (bool), `scoring_failures` (int, default 0) | `score` nullo = scoring fallito o mai eseguito: ritentato dal ciclo notturno finché `scoring_failures` < `MAX_SCORING_FAILURES = 3` (Sprint 68). Match/gap sono liste di `{label, reason}`; i job scorati prima del 09/09/2026 hanno stringhe semplici. I punteggi dati su scala 1–5 (prima del 2026-09-24 21:00 UTC) sono riscalati ×2 dal comando `rescale_legacy_scores` e marcati con `score_rescaled_from_legacy` |
 | Date | `date_collected` (auto all'inserimento), `date_scored`, `date_cv_generated`, `date_application_done` | `date_collected` è la base del filtro date, della riga "Importato:", delle statistiche e della notifica mattutina |
+
+Il campo storico `discarded_by_cap` (marcatore del cap di intake rimosso nello Sprint 46) è stato tolto nello Sprint 68: i job marcati si eliminano con `delete_discarded_by_cap_jobs` (dry-run di default, `--confirm`; documenti e bozze in cascata, PDF cancellati dal disco) e la migrazione `jobs/0019` che rimuove la colonna si rifiuta di partire finché ne restano (`DEPLOY.md` §4.6). La `jobs/0017` dà alla colonna un default lato database, così gli INSERT del codice nuovo funzionano anche prima della rimozione.
 
 ### 4.5 `CVDocument` (`apps/cv/models.py`)
 
@@ -394,15 +396,15 @@ Gratuite: import/parsing del CV in onboarding (entro `CV_IMPORT_DAILY_LIMIT = 5`
 
 I massimali sono costanti nel codice (`MANUAL_CV_PLAN_LIMITS`, `COVER_LETTER_PLAN_LIMITS`, `REFERRAL_MESSAGE_PLAN_LIMITS`, `IMPORT_DAILY_LIMIT`, `MANUAL_JOB_DAILY_LIMIT`, `COLLECTION_DAILY_LIMIT`, `CV_IMPORT_DAILY_LIMIT`); i prezzi sono `Decimal` letti dall'ambiente (`config/settings.py`). Con saldo insufficiente l'azione è rifiutata (409, o 402 per le chat). Il controllo di piano dell'import precede quello di quota/credito.
 
-**Riserva e restituzione.** Ogni servizio esegue in una transazione `select_for_update` (sul Job per la guardia, sulla `DailyQuota` e, se serve, sull'`User`): se il contatore è sotto il massimale lo incrementa (modalità `"quota"`), altrimenti scala il prezzo dal saldo (modalità `"credit"`). La modalità è tenuta in memoria per la durata della richiesta; in caso di eccezione `_refund` decrementa il contatore o riaccredita il prezzo. La logica è replicata in ogni servizio (`manual_generation.py`, `cover_letter_manual_generation.py`, `referral_message_manual_generation.py`, `import_service.py`, `manual_job_service.py`, `tasks.py`, `draft_chat.py`, `cover_letter_draft_chat.py`); non esiste un registro delle operazioni di addebito.
+**Riserva e restituzione.** Ogni servizio esegue in una transazione `select_for_update` (sul Job per la guardia, sulla `DailyQuota` e, se serve, sull'`User`): se il contatore è sotto il massimale lo incrementa (modalità `"quota"`), altrimenti scala il prezzo dal saldo (modalità `"credit"`). La modalità è tenuta in memoria per la durata della richiesta; in caso di eccezione `_refund` decrementa il contatore o riaccredita il prezzo (dallo Sprint 68 anche per il job manuale e per l'import che arriva al vincolo di unicità). In Django Admin le azioni "Azzera la quota di raccolta manuale di oggi" e "Azzera tutti i contatori giornalieri di oggi" (lista utenti) e "Azzera tutti i contatori delle righe selezionate" (lista `DailyQuota`) sostituiscono la shell (`apps/jobs/admin_actions.py`). La logica è replicata in ogni servizio (`manual_generation.py`, `cover_letter_manual_generation.py`, `referral_message_manual_generation.py`, `import_service.py`, `manual_job_service.py`, `tasks.py`, `draft_chat.py`, `cover_letter_draft_chat.py`); non esiste un registro delle operazioni di addebito.
 
 ### 4.7 `RunLog` (diario tecnico)
 
-Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `failure`), `message`, `started_at`, `finished_at`. Non visibile all'utente; consultabile da Admin.
+Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `failure` | `skipped`, quest'ultimo dallo Sprint 68), `message`, `started_at`, `finished_at`. Non visibile all'utente; consultabile da Admin.
 
 | `task_type` | Quando viene scritto |
 |---|---|
-| `collection` | SUCCESS a ogni ciclo per utente (notturno e manuale) con `raccolti=N scorati=M scartati_scoring=K`, anche con 0 ricerche; FAILURE se la raccolta di un utente fallisce |
+| `collection` | A ogni ciclo per utente (notturno e manuale), anche con 0 ricerche: prima riga `raccolti=N scorati=M scartati_scoring=K ritentati=R ritentati_scorati=S scartati_campi_mancanti=A scartati_troppo_lunghi=B scartati_duplicati=C gruppi=G gruppi_falliti=F`, poi una riga per gruppo (`gruppo <tipo> · <città>, <paese>: ok, offerte=N` o `ERRORE <eccezione>`). SUCCESS se nessun gruppo è fallito, FAILURE se almeno uno è fallito (gli altri sono comunque raccolti) o se la raccolta fallisce del tutto (messaggio dell'eccezione); SKIPPED se il ciclo notturno salta l'utente per una raccolta manuale in corso (Sprint 68) |
 | `scoring` | FAILURE per ogni job il cui scoring fallisce |
 | `cv_generation` | FAILURE se la generazione manuale fallisce; SUCCESS **solo** se il CV resta multi-pagina dopo il ripiego |
 | `cover_letter_generation` | solo FAILURE |
@@ -410,7 +412,7 @@ Campi: `user` (FK, null), `job` (FK, null), `task_type`, `status` (`success` | `
 | `cv_draft_chat` | solo FAILURE (chiamata AI della chat) |
 | `cover_letter_draft_chat` | solo FAILURE |
 
-Le generazioni riuscite, le anteprime e le finalizzazioni non lasciano traccia nel `RunLog`; le offerte scartate dalla raccolta (campi mancanti o troppo lunghi, duplicati) neppure.
+Le generazioni riuscite, le anteprime e le finalizzazioni non lasciano traccia nel `RunLog`. Le offerte scartate dalla raccolta sono contate (non elencate) nel `RunLog` `collection` dallo Sprint 68.
 
 ### 4.8 `PushSubscription` (`apps/notifications/models.py`)
 
@@ -497,17 +499,18 @@ Task `apps.jobs.tasks.run_nightly_cycle`, eseguito dal worker alle **02:00 Europ
 
 Per ogni utente:
 
-1. **Raccolta** (`apps/jobs/collection.py`, `collect_jobs_for_user`): chiama la fonte (§5.3) con tutte le ricerche attive dell'utente; la fonte fa **una chiamata Apify per gruppo** (tipo × città × paese), finestra "ultime 24 ore" applicata dall'actor, al massimo 150 risultati per chiamata. **Nessun tetto per piano o per notte** e **nessun cap di intake** (rimossi nello Sprint 46). Ogni offerta:
+0. **Guardia** (Sprint 68): `select_for_update` sull'`User`; se `collection_in_progress` è attivo e non stantio (< 2 h, §5.6) l'utente viene **saltato** con `RunLog` `collection`/SKIPPED; altrimenti il ciclo accende la stessa guardia della raccolta manuale e la spegne in `finally`. La quota giornaliera della raccolta manuale non viene toccata.
+1. **Raccolta** (`apps/jobs/collection.py`, `collect_jobs_for_user`): chiama `fetch_groups` della fonte (§5.3) con tutte le ricerche attive dell'utente; la fonte fa **una chiamata Apify per gruppo** (tipo × città × paese), finestra "ultime 24 ore" applicata dall'actor, al massimo 150 risultati per chiamata. Un gruppo che fallisce (dopo i 2 tentativi) non fa perdere gli altri: le sue offerte mancano e l'errore finisce nel `RunLog`; se falliscono **tutti** i gruppi si solleva `CollectionFailed` (raccolta fallita). **Nessun tetto per piano o per notte** e **nessun cap di intake** (rimossi nello Sprint 46). Ogni offerta:
    - è scartata se manca uno dei campi `REQUIRED_FIELDS` (`title`, `company`, `location`, `description`, `apply_url`);
    - è scartata se uno dei campi `title`, `company`, `location`, `apply_url`, `matched_search`, `salary`, `recruiter_name`, `recruiter_profile_url` supera il `max_length` del modello (Sprint 49; mai troncata);
    - è scartata se il suo `external_id` esiste già tra i job LinkedIn dell'utente (archiviati e importati compresi) o è già comparso nello stesso run;
-   - altrimenti diventa un `Job` con `origin=collected`, `status=new`, creato con `Job.objects.create` uno per uno (senza transazione). Gli scarti non sono registrati.
-2. **Scoring** (§5.9) di tutti i job appena creati, in parallelo (`SCORING_CONCURRENCY = 5` thread). Un job il cui scoring fallisce **resta in lista senza punteggio**.
-3. **`RunLog`** `collection`/SUCCESS con `raccolti=N scorati=M scartati_scoring=K`. La funzione restituisce `{collected, scored, discarded_scoring, kept}`, dove oggi `kept = scored`.
+   - altrimenti diventa un `Job` con `origin=collected`, `status=new`, `matched_saved_search` = ricerca attribuita dalla fonte (se è tra le ricerche attive dell'utente), creato con `Job.objects.create` uno per uno (senza transazione). Gli scarti sono contati per motivo (`CollectionResult.discarded_missing`, `discarded_too_long`, `discarded_duplicate`).
+2. **Scoring** (§5.9) in parallelo (`SCORING_CONCURRENCY = 5` thread) dei job appena creati **più** i job dell'utente rimasti senza punteggio con `scoring_failures < 3` (Sprint 68: scoring fallito in passato o raccolta interrotta prima dello scoring). Un job il cui scoring fallisce **resta in lista senza punteggio** e incrementa `scoring_failures`.
+3. **`RunLog`** `collection` con conteggi, scarti ed esito per gruppo (§4.7). La funzione restituisce `{collected, scored, discarded_scoring, kept, retried, retried_scored, groups_failed}`, dove `kept = scored`.
 
 **Nessuna generazione automatica di CV** (rimossa nello Sprint 45): tutti i documenti si generano solo su richiesta.
 
-Se una chiamata di gruppo ad Apify fallisce dopo 2 tentativi, l'eccezione risale e si perde la raccolta **intera** dell'utente per quella notte (inclusi gli altri gruppi). Un errore imprevisto durante la creazione dei job interrompe la raccolta e lascia in DB, senza punteggio, i job già creati (lo scoring parte solo a raccolta conclusa). Per rilanciare il ciclo di un solo utente serve la shell Django (`DEPLOY.md` §7.4); su quel percorso non ci sono guardie né quote.
+Un errore imprevisto durante la creazione dei job interrompe ancora la raccolta dell'utente, ma i job già creati senza punteggio vengono ripresi dallo scoring della notte successiva. Il limite per lingua dello Sprint 48 non è stato riapplicato ai job valutati prima (servirebbe una nuova chiamata AI per job). Per rilanciare il ciclo di un solo utente serve la shell Django (`DEPLOY.md` §7.4), con la stessa guardia; per ritentare subito lo scoring dei job senza punteggio c'è `manage.py retry_unscored_jobs [--dry-run] [--user-id N] [--ignore-limit]`.
 
 > **Freschezza per fusi lontani.** Con un unico batch alle 02:00 Europe/Rome, gli utenti europei trovano job freschi prima delle 10:00 locali; per fusi lontani i job possono essere di molte ore prima. Accettato per l'MVP.
 
@@ -527,9 +530,9 @@ I tre flag sono indipendenti: si può generare una cover letter mentre è in cor
 | Genera / rigenera CV (con "colma i gap") | `apps/cv/manual_generation.py` | `cv_generation_in_progress` | `manual_cv_count` / `PRICE_MANUAL_CV_EXTRA` | → `cv_generated` (→ `new` se fallisce); esce dall'archivio |
 | Genera cover letter | `apps/cv/cover_letter_manual_generation.py` | `cover_letter_generation_in_progress` | `cover_letter_count` / `PRICE_COVER_LETTER_EXTRA` | invariato |
 | Genera messaggio di networking | `apps/cv/referral_message_manual_generation.py` | `referral_message_generation_in_progress` | `referral_message_count` / `PRICE_REFERRAL_MESSAGE_EXTRA` | invariato |
-| Import da link | `apps/jobs/import_service.py` | nessuna (controllo duplicato prima della riserva) | `import_count` / `PRICE_IMPORT_EXTRA`, solo Pro | nuovo job `new` |
-| Job manuale | `apps/jobs/manual_job_service.py` | nessuna | `manual_job_count` / `PRICE_MANUAL_JOB_EXTRA` | nuovo job `new` |
-| Raccolta manuale | `apps/jobs/tasks.py` | `User.collection_in_progress` (stantia dopo 2 h) | `collection_count`, nessun credito | nuovi job `new` |
+| Import da link | `apps/jobs/import_service.py` | nessuna (controllo duplicato prima della riserva; `IntegrityError` sul vincolo di unicità → "già importato" con restituzione) | `import_count` / `PRICE_IMPORT_EXTRA`, solo Pro | nuovo job `new` |
+| Job manuale | `apps/jobs/manual_job_service.py` | nessuna (restituzione se la creazione fallisce) | `manual_job_count` / `PRICE_MANUAL_JOB_EXTRA` | nuovo job `new` |
+| Raccolta manuale | `apps/jobs/tasks.py` | `User.collection_in_progress` (stantia dopo 2 h, condivisa col ciclo notturno) | `collection_count`, nessun credito | nuovi job `new` |
 | Messaggio chat editor | `apps/cv/draft_chat.py`, `cover_letter_draft_chat.py` | nessuna | solo credito (`PRICE_*_DRAFT_CHAT_MESSAGE`) | invariato |
 
 Il "riprova" dopo un fallimento è una normale nuova richiesta e consuma come tale. Il timeout gunicorn (`SystemExit`) è intercettato solo dalla raccolta manuale; per le generazioni un worker ucciso a metà lascia il flag acceso e la riserva non restituita (§11).
@@ -543,6 +546,7 @@ Il "riprova" dopo un fallimento è una normale nuova richiesta e consuma come ta
 - Le ricerche attive sono **raggruppate per (`search_type`, `city`, `country`)**: una chiamata per gruppo. Un utente con tutte le ricerche sulla stessa città fa al massimo 2 chiamate (una per tipo).
 - Payload per gruppo: `keyword` = lista delle keywords per i gruppi Job role, oppure `COMPANY_SEARCH_KEYWORDS = ["jobs", "hiring"]` per i gruppi Company; `location = "<città>, <paese>"`; `publishedAt = "r86400"` (ultime 24 h); `maxItems = MAX_ITEMS_PER_CALL = 150` (minimo fatturato per chiamata dall'actor, pay-per-result); `saveOnlyUniqueItems = true`; per le Company anche **`companyInclude`** con i nomi azienda (risoluzione per azienda LinkedIn invece che full-text).
 - Timeout 180 s, `MAX_ATTEMPTS = 2`. Il parametro `limit` di `fetch()` è ignorato.
+- **Esito per gruppo** (Sprint 68): `fetch_groups(searches, window_hours)` restituisce un elemento per gruppo `{label, offers, error}` (`label` = `"<tipo> · <città>, <paese>"`) e intercetta l'eccezione di ogni gruppo invece di farla risalire; `fetch()` resta come appiattimento che solleva il primo errore. Ogni offerta porta `saved_search_id`: la ricerca del gruppo la cui etichetta coincide (senza maiuscole) con quella dell'actor (Company: nome azienda = keywords; Job role: `"<keywords> - <città>, <paese>"` = `searchString`), oppure l'unica ricerca del gruppo, altrimenti `None`.
 - `_normalize_item` mappa i nomi alternativi dei campi Apify; `matched_search` = `searchString` (sostituito dal nome azienda per le Company); `applicationsCount` → `applicants_count` o `applicants_bucket` ("first 25" → `under_25`, "Over 200" → `over_200`); `posterFullName` / `posterProfileUrl` → recruiter; `published_at` con `parse_datetime`.
 
 **Import da URL via API guest di LinkedIn.** `fetch_by_url` estrae l'id dall'URL (`linkedin.com/jobs/view/…<id>`) e legge `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/<id>` (nessuna chiave, User-Agent da browser, timeout 15 s); il parsing dell'HTML è fatto con espressioni regolari sulle classi `topcard__title`, `topcard__org-name-link`, `topcard__flavor--bullet`, `show-more-less-html__markup`. Nessun dato su data di pubblicazione, candidati o recruiter.
@@ -576,11 +580,11 @@ I testi sono solo in italiano. I timestamp vengono aggiornati anche se l'utente 
 
 1. Transazione con `select_for_update` su `User` e `DailyQuota`: se `collection_in_progress` è vero e non stantio (impostato da meno di `COLLECTION_STALE_AFTER = 2 h`) → 409 "Raccolta già in corso per questo account."; se `collection_count >= COLLECTION_DAILY_LIMIT = 1` → 409 "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno.". Altrimenti incrementa il contatore e accende il lock con `collection_started_at`.
 2. Esegue la stessa pipeline del ciclo notturno per il solo utente (§5.1: raccolta raggruppata + scoring parallelo).
-3. Successo → 200 `{collected, scored, discarded_scoring, kept}`.
+3. Successo → 200 `{collected, scored, discarded_scoring, kept, retried, retried_scored, groups_failed}` (la raccolta manuale ritenta anche i job dell'utente senza punteggio, come il ciclo notturno).
 4. Fallimento, compreso `SystemExit` sollevato da gunicorn al timeout: restituzione del contatore, `RunLog` FAILURE, 502 "Raccolta non riuscita. Riprova più tardi.".
 5. In `finally` il lock viene rilasciato (`collection_in_progress = False`, `collection_started_at = None`).
 
-Limite uguale per tutti i piani, senza sblocco a credito (le chiamate Apify sono fatturate comunque). Non esiste una guardia condivisa con il batch notturno: le due raccolte possono sovrapporsi (la deduplica evita i doppioni, non le doppie chiamate). Per concedere una seconda raccolta lo stesso giorno l'amministratore azzera il contatore da shell (`DEPLOY.md` §7.3).
+Limite uguale per tutti i piani, senza sblocco a credito (le chiamate Apify sono fatturate comunque). Dallo Sprint 68 la guardia è **condivisa con il ciclo notturno** (§5.1): durante il ciclo notturno dell'utente la raccolta manuale riceve 409 "Raccolta già in corso", e una raccolta manuale in corso fa saltare l'utente al ciclo notturno. Se falliscono solo alcuni gruppi la raccolta manuale riesce (200) con le offerte degli altri; se falliscono tutti è un fallimento (502, contatore restituito). Per concedere una seconda raccolta lo stesso giorno l'amministratore usa l'azione Admin "Azzera la quota di raccolta manuale di oggi" (`DEPLOY.md` §7.3).
 
 ### 5.7 Import di un job da URL LinkedIn
 
@@ -590,11 +594,10 @@ Limite uguale per tutti i piani, senza sblocco a credito (le chiamate Apify sono
 2. URL non riconosciuto → 409 "Impossibile importare quel job.".
 3. `external_id` già presente tra i job LinkedIn dell'utente (anche raccolti di notte) → 409 "Questo job è già nella tua lista.".
 4. Riserva `import_count` (3/giorno) o credito `PRICE_IMPORT_EXTRA`; saldo insufficiente → 409.
-5. Lettura dalla API guest (§5.3). Se fallisce o mancano campi obbligatori: restituzione della riserva e 409.
-6. Creazione del `Job` (`source=linkedin`, `origin=imported`, `published_at` nullo) e **scoring sincrono** (`score_job`); un fallimento di scoring non fa fallire la richiesta (job senza punteggio).
+5. Lettura dalla API guest (§5.3). Se fallisce, mancano campi obbligatori o un campo supera il `max_length` del modello (stessi controlli della raccolta, `offer_rejection_reason`, Sprint 68): restituzione della riserva e 409.
+6. Creazione del `Job` (`source=linkedin`, `origin=imported`, `published_at` nullo) in un savepoint: se due import simultanei dello stesso link arrivano entrambi qui, il secondo riceve `IntegrityError` dal vincolo di unicità → riserva restituita e 409 "Questo job è già nella tua lista." (Sprint 68). Poi **scoring sincrono** (`score_job`); un fallimento di scoring non fa fallire la richiesta (job senza punteggio, ritentato di notte).
 7. 201 `{job_id, status, score}`.
 
-Il controllo `max_length` dello Sprint 49 non è applicato all'import.
 
 ### 5.8 Creazione manuale di un job
 
@@ -605,13 +608,13 @@ Il controllo `max_length` dello Sprint 49 non è applicato all'import.
 - creazione con `source=manual`, `external_id = "manual-<uuid4>"`, `origin=imported` (sezione Importati), poi scoring sincrono;
 - 201 `{job_id, status, score}`.
 
-Non c'è un percorso di restituzione: il job viene creato subito e un errore di scoring non fa fallire la richiesta.
+Se la creazione fallisce dopo la riserva, contatore o credito vengono restituiti e la risposta è 502 "Impossibile creare il job. Riprova più tardi." (Sprint 68). Un errore di scoring invece non fa fallire la richiesta e non restituisce nulla: il job esiste (è ciò che la quota paga) e lo scoring viene ritentato dal ciclo notturno come per i job raccolti. Scelta più semplice della restituzione condizionata, che avrebbe reso gratuito un job rimasto in lista e richiesto un percorso di addebito in più.
 
 ### 5.9 Scoring
 
 Moduli `apps/jobs/ai_scoring.py` (prompt, schema, chiamata) e `apps/jobs/scoring.py` (applicazione, batch, fallimenti).
 
-- **Input del modello**: profilo completo (sommario, esperienze con bullet, competenze, istruzione, certificazioni, lingue con livello tradotto) + titolo, azienda e descrizione dell'offerta. La località del job **non** è passata.
+- **Input del modello**: profilo completo (sommario, esperienze con bullet, competenze, istruzione, certificazioni, lingue con livello tradotto) + titolo, azienda, **località** (dallo Sprint 68, `Località: …` o "non indicata") e descrizione dell'offerta.
 - **Scala 1–10** con **rubrica per fascia** (Sprint 47) basata sul conteggio dei requisiti "hard" soddisfatti o mancanti: 9–10 tutti soddisfatti; 7–8 manca al più un elemento secondario; 5–6 manca almeno un requisito hard o seniority non allineata; 3–4 più requisiti mancanti o forte disallineamento; 1–2 profilo non pertinente. Descrizione vuota o non valutabile → match e gap vuoti, punteggio ≤ 6.
 - **Regole** nel prompt: ogni voce di match/gap legata a un requisito esplicito dell'offerta; nessuna competenza inventata; nessun gap su elementi già nel profilo; `score_reasoning` di al massimo 2 frasi (~40 parole); `label` brevissima e `reason` di una frase; una lingua assente dal profilo non va mai tra i match.
 - **Schema** `SCORE_JSON_SCHEMA`: `score` (int), `score_match` / `score_gaps` (liste di `{label, reason}`), `score_reasoning`, `language_check {required, language, international_exception}`.
@@ -619,8 +622,8 @@ Moduli `apps/jobs/ai_scoring.py` (prompt, schema, chiamata) e `apps/jobs/scoring
 - **Applicazione** (`_apply_score_result`): clamp a 1–10, cap lingua, salvataggio di `score`, `score_match`, `score_gaps`, `score_reasoning`, `date_scored`.
 - **Batch** (`score_jobs`, usato da raccolta notturna e manuale): `ThreadPoolExecutor` con `SCORING_CONCURRENCY = 5` thread **solo per le chiamate Bedrock**; il profilo è caricato una volta con `prefetch_related`; i salvataggi avvengono sul thread principale. **Singolo** (`score_job`): usato da import e job manuali.
 - **Scarto campi oltre `max_length`**: avviene prima, nella raccolta (§5.1), per evitare che un `DataError` interrompa il batch.
-- **Fallimenti**: errore Bedrock o output fuori schema dopo 3 tentativi → il job **resta in DB e in lista con `score = NULL`** (ordinato in fondo, senza badge), `RunLog` `scoring`/FAILURE. Nessun nuovo tentativo automatico.
-- **Storico**: i punteggi precedenti allo Sprint 47 restano su 1–5 e quelli precedenti allo Sprint 48 non hanno il cap; nessun ri-scoring.
+- **Fallimenti**: errore Bedrock o output fuori schema dopo 3 tentativi → il job **resta in DB e in lista con `score = NULL`** (ordinato in fondo, senza badge), `RunLog` `scoring`/FAILURE e `scoring_failures` +1. Il ciclo notturno (e la raccolta manuale) ritenta i job dell'utente con `score` nullo e `scoring_failures < MAX_SCORING_FAILURES = 3` (`scoring.unscored_jobs_to_retry`); oltre resta senza punteggio, ritentabile solo con `retry_unscored_jobs --ignore-limit`.
+- **Storico**: i punteggi dati su scala 1–5 sono riscalati ×2 da `rescale_legacy_scores` (dry-run di default, `--confirm`, `--before <ISO>`; idempotente grazie a `score_rescaled_from_legacy`; i valori > 5 prima del taglio sono segnalati e lasciati). Taglio di default **2026-09-24 21:00 UTC**, non la data del commit dello Sprint 47 (2026-09-28 14:39 UTC): sui dati l'ultimo punteggio 1–5 è delle 08:37 UTC del 24/09 e il primo su 1–10 delle 21:07 UTC dello stesso giorno. Sul dump del 2026-11-14 i punteggi da riscalare erano 3.898, di cui 988 sui job del vecchio cap (eliminati) → 2.910. I punteggi precedenti allo Sprint 48 non hanno il cap lingua e non sono stati rivalutati. Frontend senza logica speciale: colori a fasce (`scoreStyle.js`, `ceil(score/2)`), filtro 1–10 e ordinamento lavorano già sulla sola scala 1–10.
 
 ### 5.10 Cover letter
 
@@ -853,11 +856,13 @@ L'amministratore gestisce piani e credito **solo dal Django Admin** (`/admin/`),
 
 | Modello | Configurazione |
 |---|---|
-| `User` | `UserAdmin` di Django con un fieldset "App di ricerca lavoro": `plan`, `timezone`, `interface_language`, `cv_language_mode`, `cv_include_photo`, `objective_statement`, `extra_credit`, `last_activity_reset`, `last_notified_at`; in lista anche `plan` ed `extra_credit`. Non sono esposti `last_inactivity_notified_at`, `collection_in_progress`, `collection_started_at` |
+| `User` | `UserAdmin` di Django con un fieldset "App di ricerca lavoro": `plan`, `timezone`, `interface_language`, `cv_language_mode`, `cv_include_photo`, `objective_statement`, `extra_credit`, `last_activity_reset`, `last_notified_at`, e (Sprint 68) un fieldset "Raccolta e inattività": `collection_in_progress`, `collection_started_at`, `last_inactivity_notified_at`; in lista anche `plan` ed `extra_credit`. Azioni (Sprint 68): "Azzera la quota di raccolta manuale di oggi", "Azzera tutti i contatori giornalieri di oggi" |
 | `Profile` | Con inline di `Experience`, `Education`, `Skill`, `Certification`, `Language` |
 | `SavedSearch` | Lista con keywords, città, paese, utente, attiva |
-| `Job` | Lista con titolo, azienda, utente, source, origin, status, score, archiviato, `discarded_by_cap`; filtri e ricerca |
-| `DailyQuota` | In lista solo `manual_cv_count` e `import_count`; gli altri 5 contatori solo nel dettaglio |
+| `Job` | Lista con titolo, azienda, utente, source, origin, status, score, archiviato, `score_rescaled_from_legacy`, `scoring_failures`; filtri e ricerca; `user` e `matched_saved_search` come id |
+| `DailyQuota` | In lista tutti e 7 i contatori (Sprint 68), ricerca per email; azione "Azzera tutti i contatori delle righe selezionate" |
+| `JobFilterPreset` | Sprint 68: sola lettura (nome, utente, data; dettaglio con i filtri), nessuna aggiunta |
+| `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument` | Sprint 68: sola lettura, eliminabili; `html_source` non mostrato; in lista solo job, utente, date (canale e destinatario per i messaggi) |
 | `RunLog` | Lista con tipo, esito, utente, job, date; filtri per tipo ed esito |
 | `CVDocument` | Lista con job, utente, tipo, data |
 | `PushSubscription` | Lista con utente, endpoint, data |
@@ -865,9 +870,7 @@ L'amministratore gestisce piani e credito **solo dal Django Admin** (`/admin/`),
 
 Registrati automaticamente dalle librerie: sito e account social di allauth, PeriodicTask e pianificazioni di `django_celery_beat` (da qui si modificano gli orari dei task).
 
-**Non registrati**: `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument`, `JobFilterPreset`. Per consultarli serve la shell.
-
-Comandi di gestione: `set_e2e_account` e `seed_e2e_jobs` (solo con `DEBUG=True`, per i test e2e), `restore_backup`.
+Comandi di gestione: `set_e2e_account` e `seed_e2e_jobs` (solo con `DEBUG=True`, per i test e2e), `restore_backup`, `secure_media_files`; dallo Sprint 68 `delete_discarded_by_cap_jobs`, `rescale_legacy_scores` (entrambi dry-run di default, `--confirm` per eseguire) e `retry_unscored_jobs`.
 
 ---
 
@@ -910,22 +913,22 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 6. **Login Google non attivo** in produzione (credenziali vuote), `LOGIN_REDIRECT_URL` non impostato, ritorno da Google mai verificato. Dallo Sprint 66 l'API accetta solo token: per attivarlo serve un passaggio sessione → token dopo il ritorno da Google (§3.7).
 7. **Operazioni lunghe sincrone in gunicorn.** Raccolta manuale e generazioni occupano un worker gunicorn per tutta la durata; con 4 worker, poche operazioni contemporanee bastano a rallentare tutto il sito. Un deploy o riavvio durante un'operazione la interrompe.
 8. **Flag transitori senza timeout.** `cv_generation_in_progress`, `cover_letter_generation_in_progress` e `referral_message_generation_in_progress` vengono spenti solo dal codice della richiesta; se il processo muore (timeout gunicorn → `SystemExit`, non intercettato da `except Exception`; riavvio) il flag resta acceso e il job resta bloccato per quel tipo di generazione, con la riserva di quota/credito non restituita. Solo la guardia della raccolta manuale ha uno sblocco automatico (2 ore).
-9. **Raccolta notturna fragile.** Un errore su un solo gruppo Apify fa perdere tutta la raccolta dell'utente; un errore durante la creazione dei job lascia job senza punteggio; i job senza punteggio non vengono mai ritentati. Il ciclo è sequenziale su tutti gli utenti in un unico task.
-10. **Nessuna guardia condivisa** tra raccolta manuale e notturna (doppie chiamate Apify possibili). Lo sblocco di una seconda raccolta manuale nello stesso giorno richiede la shell.
+9. **Raccolta notturna.** *(Sprint 68: errori isolati per gruppo Apify, job senza punteggio ritentati fino a 3 volte.)* Resta: il ciclo è sequenziale su tutti gli utenti in un unico task; un errore imprevisto durante la creazione dei job interrompe la raccolta dell'utente (i job già creati vengono poi scorati dal retry).
+10. *(Risolto nello Sprint 68: guardia `collection_in_progress` condivisa tra raccolta manuale e notturna; sblocco della seconda raccolta manuale con un'azione Admin.)*
 11. **Notifiche.** Non esiste un modo per disattivare le notifiche dall'app né per annullare la sottoscrizione di un dispositivo al logout.
-12. **Osservabilità limitata.** `RunLog` registra solo i fallimenti per CV, cover letter, messaggi e chat (più il caso multi-pagina del CV); le generazioni riuscite, le offerte scartate dalla raccolta (campi mancanti, troppo lunghi, duplicati) e i consumi di quota/credito non lasciano traccia. Non esiste un registro contabile del credito.
-13. **Modelli non in Admin.** `CVDraft`, `CoverLetterDocument`, `CoverLetterDraft`, `ReferralMessageDocument` e `JobFilterPreset` non sono registrati; la lista `DailyQuota` mostra 2 contatori su 6; `User` in Admin non espone i campi della raccolta manuale e dell'inattività.
+12. **Osservabilità limitata.** `RunLog` registra solo i fallimenti per CV, cover letter, messaggi e chat (più il caso multi-pagina del CV); le generazioni riuscite e i consumi di quota/credito non lasciano traccia. Non esiste un registro contabile del credito. Le offerte scartate dalla raccolta sono contate nel `RunLog` `collection` dallo Sprint 68.
+13. *(Risolto nello Sprint 68: modelli registrati in Admin, `DailyQuota` con tutti i contatori, campi di raccolta e inattività nella scheda `User`, §9.)*
 14. **Costi AI e Apify non stimati.** Senza tetto per notte il costo della raccolta cresce con il numero di gruppi (ogni chiamata fattura almeno 150 risultati) e quello dello scoring con il numero di offerte raccolte; nessuna soglia o monitoraggio è definito.
 
 **Backend: difetti puntuali**
 
 15. **Stato del job sovrascritto dalla generazione CV.** Il successo imposta sempre `status = cv_generated` e il fallimento sempre `new`, anche per un job già in `application_done` (la PWA permette di rigenerare il CV su questi job).
 16. **`JobSerializer` non espone `referral_message_generation_in_progress`**: il frontend lo legge ma il valore è sempre indefinito, quindi il pulsante "Genera messaggio" si disabilita solo durante la richiesta locale (la guardia server resta attiva).
-17. **`discarded_by_cap` non filtrato.** I job storici marcati dal vecchio cap compaiono in lista e nelle statistiche Home.
-18. **Import da URL.** Non applica il controllo `max_length` della raccolta; il controllo duplicati avviene prima della riserva senza lock, quindi due import simultanei dello stesso URL possono arrivare al vincolo di unicità con un errore non gestito (non verificato).
-19. **Job manuale senza restituzione**: se qualcosa fallisce dopo la riserva la quota resta consumata (lo scoring fallito non fa fallire la richiesta).
-20. **Scoring.** Il cap lingua dipende dal fatto che il modello segnali la lingua richiesta; il prefisso del cap è sempre in italiano; la località del job non è passata al modello; i punteggi storici su 1–5 si mescolano a quelli su 1–10 in ordinamento, filtro e colori.
-21. **Ricerche salvate.** La `PATCH` che cambia il tipo di una ricerca attiva non ricontrolla i limiti di piano; su Free la disattivazione automatica della ricerca precedente non è segnalata dalla UI.
+17. *(Risolto nello Sprint 68: job del vecchio cap eliminati, campo `discarded_by_cap` rimosso, §4.4.)*
+18. *(Risolto nello Sprint 68: controlli di lunghezza della raccolta e `IntegrityError` gestito come "già importato" con restituzione, §5.7.)*
+19. *(Risolto nello Sprint 68: restituzione se la creazione fallisce; lo scoring fallito viene ritentato di notte, §5.8.)*
+20. **Scoring.** Il cap lingua dipende dal fatto che il modello segnali la lingua richiesta e non è stato riapplicato ai job valutati prima dello Sprint 48; il prefisso del cap è sempre in italiano. *(Sprint 68: località passata al modello, punteggi storici riscalati su 1–10.)*
+21. *(Risolto nello Sprint 68: la `PATCH` del tipo di una ricerca attiva ripassa dai limiti di piano; la PWA segnala con un avviso la ricerca disattivata.)* Resta: nessun lock sulle attivazioni concorrenti (B4 dell'audit di sicurezza).
 22. **Profilo.** `Education.end_date` facoltativa; completezza verificata solo alla generazione; `technologies` non modificabile da UI; foto non rimovibile dalla pagina Profilo; le foto e le versioni precedenti dei documenti restano su disco finché non si esegue `secure_media_files --delete-orphans`.
 23. **Messaggi e testi del backend solo in italiano** (errori API, notifiche, prefisso del cap lingua), anche con interfaccia in inglese.
 24. **Commenti e docstring superati** nel codice: "3 livelli di compattamento" in `generation.py` e `draft.py`; docstring di `CVDraft` ("generare un nuovo CV sovrascrive il draft") e di `CoverLetterDraft`; nome del PeriodicTask notturno con "cap di intake"; riferimenti a `02-specifiche-tecniche-v3.md`.
@@ -944,7 +947,7 @@ Elenco descrittivo dei difetti e dei limiti osservati nel codice al 2026-11-14 (
 **Frontend**
 
 33. **Bundle vecchio nelle tab aperte**: dopo un deploy una tab già aperta può usare la versione precedente finché non viene ricaricata (osservato nello Sprint 58); nessun ricaricamento automatico.
-34. **Filtri preferiti.** Un preset creato dalla sezione Importati salva anche il filtro "Ricerca" (lì nascosto), che torna attivo applicandolo altrove; l'eliminazione è ottimistica e non gestisce l'errore dell'API.
+34. *(Risolto nello Sprint 68: un preset salvato da Importati non contiene il filtro "Ricerca"; se l'eliminazione fallisce la pillola viene ripristinata con un messaggio. Sezione e filtri della lista sono nella query string `/list?section=…&from=…&to=…&score=…&status=…&search=…&location=…&applicants=…&recruiter=…&q=…`, con l'ultima query anche in `sessionStorage` per il link "Torna alla lista".)*
 35. **Test e2e obsoleto**: `job-list.spec.js` contiene ancora il test dell'arricchimento con "salva anche nel profilo", funzione rimossa nello Sprint 44 (§13).
 
 **Calibrazione**
@@ -971,7 +974,7 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 | GET, PUT, PATCH, DELETE | `/api/<sezione>/<id>/` | Lettura, modifica, eliminazione di una voce | 200; 204; 404 |
 | POST | `/api/profile/import-cv/` | Estrazione e strutturazione di un CV PDF/.docx (multipart `file`), senza salvataggio | 200 JSON strutturato; 400 file mancante, formato non supportato, oltre 5 MB o 10 pagine; 409 quota giornaliera esaurita; 422 illeggibile o testo < 40 caratteri; 502 se l'AI fallisce |
 | GET, POST | `/api/searches/` | Ricerche salvate (`search_type, keywords, city, country`; `is_active` read-only) | 200; 201; 400 oltre il limite di piano |
-| GET, PUT, PATCH, DELETE | `/api/searches/<id>/` | Singola ricerca | 200; 204; 404 |
+| GET, PUT, PATCH, DELETE | `/api/searches/<id>/` | Singola ricerca; cambiare `search_type` di una ricerca attiva applica i limiti di piano dell'attivazione (Sprint 68) | 200 (con `deactivated_previous` se su Free è stata spenta l'altra ricerca attiva del nuovo tipo); 204; 400; 404 |
 | POST | `/api/searches/<id>/activate/` | Attiva; su Free disattiva la precedente dello stesso tipo | 200 (con `deactivated_previous` se applicabile); 400 limite attive Pro |
 | POST | `/api/searches/<id>/deactivate/` | Disattiva | 200 |
 | GET | `/api/searches-city-autocomplete/?q=` | Proxy Nominatim (min 2 caratteri, max 8 risultati, cache 1 h) | 200 lista `{city, country…}`, `[]` anche su errore di rete |
@@ -985,12 +988,12 @@ Tutti gli endpoint sono sotto il dominio dell'app; salvo dove indicato richiedon
 
 | Metodo | Path | Scopo | Risposte rilevanti |
 |---|---|---|---|
-| GET | `/api/jobs/` | Lista job (senza paginazione), ordinata per `score` decrescente (nulli in fondo) poi `date_collected` decrescente. Query: `section` (`main` default \| `imported` \| `favorites` \| `archived`), `q` (sottostringa su titolo/azienda/località; se presente ignora gli altri filtri), `date_from`, `date_to` (`YYYY-MM-DD`, fuso utente, estremi inclusi), `location`, `score` (CSV interi), `status` (CSV), `search` (CSV di id `SavedSearch` e/o `none`, in OR), `applicants` (CSV di fasce), `recruiter` (`yes` \| `no` \| `all`) | 200 lista `JobSerializer`; 400 parametro non valido |
+| GET | `/api/jobs/` | Lista job (senza paginazione), ordinata per `score` decrescente (nulli in fondo) poi `date_collected` decrescente. Query: `section` (`main` default \| `imported` \| `favorites` \| `archived`), `q` (sottostringa su titolo/azienda/località; se presente ignora gli altri filtri), `date_from`, `date_to` (`YYYY-MM-DD`, fuso utente, estremi inclusi), `location`, `score` (CSV interi), `status` (CSV), `search` (CSV di id `SavedSearch` e/o `none`, in OR; dallo Sprint 68 per FK `matched_saved_search`, con ripiego sull'etichetta per i job senza FK), `applicants` (CSV di fasce), `recruiter` (`yes` \| `no` \| `all`) | 200 lista `JobSerializer`; 400 parametro non valido |
 | GET | `/api/jobs/<id>/` | Dettaglio | 200; 404 |
 | GET | `/api/jobs/stats/` | Statistiche Home `{jobs:{today, week, total, manual:{…}}, cvs:{…}, applications:{…}}` | 200 |
-| POST | `/api/jobs/collect/` | Raccolta manuale sincrona (§5.6) | 200 `{collected, scored, discarded_scoring, kept}`; 409 in corso o già usata oggi; 502 fallita |
+| POST | `/api/jobs/collect/` | Raccolta manuale sincrona (§5.6) | 200 `{collected, scored, discarded_scoring, kept, retried, retried_scored, groups_failed}`; 409 in corso (anche il ciclo notturno) o già usata oggi; 502 fallita su tutti i gruppi |
 | POST | `/api/jobs/import/` | Import da link LinkedIn `{url}` (§5.7) | 201 `{job_id, status, score}`; 403 non Pro; 409 URL non valido, offerta non recuperabile, duplicato, quota/credito esauriti |
-| POST | `/api/jobs/manual/` | Creazione manuale (§5.8) | 201 `{job_id, status, score}`; 400 validazione; 409 quota/credito esauriti |
+| POST | `/api/jobs/manual/` | Creazione manuale (§5.8) | 201 `{job_id, status, score}`; 400 validazione; 409 quota/credito esauriti; 502 creazione fallita (quota/credito restituiti) |
 | POST | `/api/jobs/<id>/archive/`, `/unarchive/` | Archivia / ripristina (non cambia lo stato) | 200 job serializzato; 404 |
 | POST | `/api/jobs/<id>/favorite/`, `/unfavorite/` | Preferito sì/no | 200 job serializzato; 404 |
 | POST | `/api/jobs/<id>/mark-application-done/` | Candidatura fatta (anche senza CV); aggiorna `last_activity_reset` | 200 job serializzato; 409 già fatta |
@@ -1037,11 +1040,12 @@ Campi di `JobSerializer`: `id, title, company, location, description, apply_url,
 
 ### 13.1 Suite backend
 
-299 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 66)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
+340 test Django (`python manage.py test`), **tutti verdi il 2026-11-14 (Sprint 68)** se lanciati con `DJANGO_DEBUG=true` (con la configurazione di produzione `DEBUG=false` il redirect HTTPS fa rispondere 301 al test client e ~60 test falliscono senza regressioni reali: procedura in `DEPLOY.md` §4.4). Il database di test è separato. Le chiamate esterne (Bedrock, Apify, LinkedIn, Nominatim, Web Push, S3) sono sempre simulate con mock.
 
 | File | Test | Cosa copre |
 |---|---|---|
 | `apps/jobs/tests.py` | 105 | Raccolta per utente (campi obbligatori, dedup, scarto oltre `max_length`, assenza di cap), scoring singolo e parallelo (concorrenza, fallimenti, cap lingua e regressione sottostringa), ciclo notturno per utente e orchestratore, assenza di CV automatici, raccolta manuale (guardia, guardia stantia, quota, rimborso, `SystemExit`) e relativa API, schedulazione del ciclo notturno, import da link (servizio e API), job manuale (servizio e API), lista e filtri (sezioni, date nel fuso utente, location, candidati, recruiter, ricerca multipla, ricerca testuale), archivio, preferiti, dettaglio, candidatura fatta (anche senza CV), API dei messaggi di networking, filtri preferiti, comando `seed_e2e_jobs` |
+| `apps/jobs/test_sprint68.py` | 41 | Sprint 68: `delete_discarded_by_cap_jobs` (dry-run con conteggi, `--confirm` con documenti, bozze e file, colonna già rimossa) e rifiuto della migrazione `jobs/0019` con righe marcate; `rescale_legacy_scores` (dry-run, idempotenza, valori anomali, taglio personalizzato); contatore `scoring_failures`, retry notturno con limite, `retry_unscored_jobs`; FK `matched_saved_search` in raccolta, filtro dopo la modifica della ricerca, ripiego testuale, backfill `jobs/0018` solo univoco, ricerca eliminata; isolamento degli errori per gruppo Apify e attribuzione della ricerca, `RunLog` per gruppo, tutti i gruppi falliti; scarti contati; guardia condivisa manuale/notturna; azioni Admin sui contatori e pagine Admin nuove; import con `IntegrityError` e campi troppo lunghi; restituzione della quota/credito del job manuale e retry dello scoring; località nel prompt; `PATCH` del tipo di ricerca (Free/Pro, inattiva) |
 | `apps/jobs/sources/tests.py` | 26 | Fonte Apify (payload raggruppato, Company con `companyInclude`, normalizzazione, candidati e recruiter, retry) e import via API guest |
 | `apps/cv/tests.py` | 31 | Generazione CV (un blocco per esperienza, 1 pagina su profilo standard, foto on/off, istruzione copiata dal profilo, CV congelato dopo modifiche al profilo, modalità lingua, ripiego per overflow e `RunLog` multi-pagina), generazione manuale (quota nel giorno Europe/Rome, credito, concorrenza, rimborso, ritorno a `new`, uscita dall'archivio), messaggi di networking (8 test: quota, più messaggi per job, concorrenza, credito, rimborso, indicazioni) |
 | `apps/cv/test_selection.py` | 19 | Selezione dell'istruzione, budget bullet, cap esperienze con swap, taglio per rilevanza, rimozione del bullet meno rilevante |

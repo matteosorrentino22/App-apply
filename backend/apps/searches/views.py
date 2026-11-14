@@ -1,4 +1,5 @@
 import requests
+from django.db import transaction
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -23,6 +24,29 @@ class SavedSearchViewSet(viewsets.ModelViewSet):
         except services.PlanLimitExceeded as exc:
             raise ValidationError({"detail": str(exc)})
         serializer.save(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        self._deactivated_previous = None
+        try:
+            with transaction.atomic():
+                response = super().update(request, *args, **kwargs)
+        except services.PlanLimitExceeded as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if self._deactivated_previous is not None:
+            response.data["deactivated_previous"] = self.get_serializer(self._deactivated_previous).data
+        return response
+
+    def perform_update(self, serializer):
+        # Cambiare il tipo di una ricerca attiva equivale ad attivarla nel
+        # nuovo tipo (Sprint 68): stessi limiti di piano dell'attivazione —
+        # su Free si spegne l'eventuale altra ricerca attiva di quel tipo
+        # (restituita in `deactivated_previous`), su Pro il pool è unico e
+        # non cambia. Prima un Free poteva trovarsi con 2 ricerche attive
+        # dello stesso tipo.
+        previous_type = serializer.instance.search_type
+        search = serializer.save()
+        if search.is_active and search.search_type != previous_type:
+            self._deactivated_previous = services.activate_search(search)
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):

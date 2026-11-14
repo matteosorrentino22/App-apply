@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -37,6 +38,7 @@ import JobCard from '@/components/JobCard'
 import MultiSelectFilter from '@/components/MultiSelectFilter'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 import { todayInputValue } from '../utils/date'
+import { JOB_LIST_SEARCH_STORAGE_KEY } from '../utils/jobListUrl'
 
 const EMPTY_MANUAL_JOB = {
   title: '',
@@ -51,25 +53,84 @@ const SECTIONS = ['main', 'imported', 'favorites', 'archived']
 const SCORES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 const STATUSES = ['new', 'cv_generated', 'application_done']
 const APPLICANTS_RANGES = ['under_25', '25_50', '51_100', '101_200', 'over_200']
+const RECRUITER_VALUES = ['yes', 'no']
+// Parametri che restano nell'URL anche vuoti: "from=" significa "nessun
+// limite" (pulsante "Tutto"), mentre l'assenza significa "oggi" (default).
+const KEEP_EMPTY_PARAMS = ['from', 'to']
+
+function parseList(value, allowed) {
+  const items = value ? value.split(',').filter(Boolean) : []
+  return allowed ? items.filter((item) => allowed.includes(item)) : items
+}
 
 export default function JobListPage() {
   const { t } = useLanguage()
   const { user, logout } = useAuth()
   const { showToast } = useToast()
 
-  const [section, setSection] = useState('main')
-  const [dateFrom, setDateFrom] = useState(todayInputValue)
-  const [dateTo, setDateTo] = useState(todayInputValue)
-  const [scores, setScores] = useState([])
-  const [statuses, setStatuses] = useState([])
-  const [searchFilters, setSearchFilters] = useState([])
+  // Sezione e filtri vivono nella query string (Sprint 68): tornando dal
+  // dettaglio di un job (link o back del browser) la lista riparte da dove
+  // era, e l'URL è condivisibile. L'ultima query è anche in sessionStorage
+  // per il link "Torna alla lista" del dettaglio e degli editor.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sectionParam = searchParams.get('section')
+  const section = SECTIONS.includes(sectionParam) ? sectionParam : 'main'
+  const dateFrom = searchParams.has('from') ? searchParams.get('from') : todayInputValue()
+  const dateTo = searchParams.has('to') ? searchParams.get('to') : todayInputValue()
+  const query = searchParams.get('q') || ''
+  const location = searchParams.get('location') || ''
+  const recruiterParam = searchParams.get('recruiter')
+  const recruiterFilter = RECRUITER_VALUES.includes(recruiterParam) ? recruiterParam : 'all'
+  const scoreParam = searchParams.get('score') || ''
+  const statusParam = searchParams.get('status') || ''
+  const searchParam = searchParams.get('search') || ''
+  const applicantsParam = searchParams.get('applicants') || ''
+  const scores = useMemo(
+    () => parseList(scoreParam).map(Number).filter((value) => SCORES.includes(value)),
+    [scoreParam],
+  )
+  const statuses = useMemo(() => parseList(statusParam, STATUSES), [statusParam])
+  const searchFilters = useMemo(() => parseList(searchParam), [searchParam])
+  const applicantsRanges = useMemo(() => parseList(applicantsParam, APPLICANTS_RANGES), [applicantsParam])
+
   const [savedSearches, setSavedSearches] = useState([])
-  const [query, setQuery] = useState('')
-  const [queryInput, setQueryInput] = useState('')
-  const [location, setLocation] = useState('')
-  const [locationInput, setLocationInput] = useState('')
-  const [applicantsRanges, setApplicantsRanges] = useState([])
-  const [recruiterFilter, setRecruiterFilter] = useState('all')
+  const [queryInput, setQueryInput] = useState(query)
+  const [locationInput, setLocationInput] = useState(location)
+
+  const updateParams = useCallback(
+    (changes) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current)
+          for (const [key, value] of Object.entries(changes)) {
+            const text = Array.isArray(value) ? value.join(',') : (value ?? '')
+            if (text === '' && !KEEP_EMPTY_PARAMS.includes(key)) {
+              next.delete(key)
+            } else {
+              next.set(key, text)
+            }
+          }
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+
+  const listSearch = searchParams.toString()
+  useEffect(() => {
+    sessionStorage.setItem(JOB_LIST_SEARCH_STORAGE_KEY, listSearch ? `?${listSearch}` : '')
+  }, [listSearch])
+
+  const setSection = (value) => updateParams({ section: value === 'main' ? '' : value })
+  const setDateFrom = (value) => updateParams({ from: value })
+  const setDateTo = (value) => updateParams({ to: value })
+  const setScores = (value) => updateParams({ score: value })
+  const setStatuses = (value) => updateParams({ status: value })
+  const setSearchFilters = (value) => updateParams({ search: value })
+  const setApplicantsRanges = (value) => updateParams({ applicants: value })
+  const setRecruiterFilter = (value) => updateParams({ recruiter: value === 'all' ? '' : value })
 
   const [filterPresets, setFilterPresets] = useState([])
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false)
@@ -166,7 +227,10 @@ export default function JobListPage() {
         name: presetName,
         scores,
         statuses,
-        search_ids: searchFilters,
+        // Nella sezione Importati il filtro "Ricerca" è nascosto e ignorato:
+        // non va salvato, altrimenti tornerebbe attivo applicando il preset
+        // da un'altra sezione.
+        search_ids: section === 'imported' ? [] : searchFilters,
         location,
         applicants_ranges: applicantsRanges,
         has_recruiter: recruiterFilter === 'all' ? '' : recruiterFilter,
@@ -186,35 +250,45 @@ export default function JobListPage() {
   // legame persistente tra i due dopo l'applicazione). Mai le date, che il
   // preset non contiene.
   function applyFilterPreset(preset) {
-    setScores(preset.scores || [])
-    setStatuses(preset.statuses || [])
-    setSearchFilters(preset.search_ids || [])
-    setLocation(preset.location || '')
+    updateParams({
+      score: preset.scores || [],
+      status: preset.statuses || [],
+      search: preset.search_ids || [],
+      location: preset.location || '',
+      applicants: preset.applicants_ranges || [],
+      recruiter: preset.has_recruiter || '',
+    })
     setLocationInput(preset.location || '')
-    setApplicantsRanges(preset.applicants_ranges || [])
-    setRecruiterFilter(preset.has_recruiter || 'all')
   }
 
-  async function handleDeletePreset(id) {
-    setFilterPresets((current) => current.filter((preset) => preset.id !== id))
-    await deleteFilterPreset(id)
+  // Rimozione ottimistica, ma se l'API fallisce la pillola torna al suo
+  // posto (ordine di creazione, come la lista del server) con un messaggio.
+  async function handleDeletePreset(preset) {
+    setFilterPresets((current) => current.filter((item) => item.id !== preset.id))
+    try {
+      await deleteFilterPreset(preset.id)
+    } catch {
+      setFilterPresets((current) =>
+        [...current, preset].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id - b.id)),
+      )
+      showToast(t('jobs.deletePresetError'))
+    }
   }
 
   function handleSearchChange(value) {
     setQueryInput(value)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setQuery(value), 300)
+    debounceRef.current = setTimeout(() => updateParams({ q: value }), 300)
   }
 
   function handleLocationChange(value) {
     setLocationInput(value)
     if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current)
-    locationDebounceRef.current = setTimeout(() => setLocation(value), 300)
+    locationDebounceRef.current = setTimeout(() => updateParams({ location: value }), 300)
   }
 
   function resetDateRange() {
-    setDateFrom('')
-    setDateTo('')
+    updateParams({ from: '', to: '' })
   }
 
   function toggleValue(list, setList, value) {
@@ -538,7 +612,7 @@ export default function JobListPage() {
             <button
               type="button"
               disabled={searching}
-              onClick={() => handleDeletePreset(preset.id)}
+              onClick={() => handleDeletePreset(preset)}
               aria-label={t('jobs.deletePreset')}
               className="text-muted-foreground/60 hover:text-destructive"
             >

@@ -17,6 +17,10 @@ from .scoring import score_job
 MANUAL_JOB_DAILY_LIMIT = 3
 
 
+class ManualJobFailed(Exception):
+    """La creazione è fallita dopo la riserva: quota o credito restituiti."""
+
+
 class ManualJobRejected(Exception):
     """Richiesta respinta senza consumo di quota/credito: massimale
     giornaliero raggiunto e saldo credito insufficiente."""
@@ -49,27 +53,46 @@ def _reserve_quota_or_credit(user):
     )
 
 
+@transaction.atomic
+def _refund(user, charge_mode):
+    if charge_mode == "quota":
+        quota, _ = DailyQuota.objects.get_or_create(user=user, date=_today_europe_rome())
+        quota = DailyQuota.objects.select_for_update().get(pk=quota.pk)
+        quota.manual_job_count = max(0, quota.manual_job_count - 1)
+        quota.save(update_fields=["manual_job_count"])
+    else:
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
+        locked_user.extra_credit += settings.PRICE_MANUAL_JOB_EXTRA
+        locked_user.save(update_fields=["extra_credit"])
+
+
 def create_manual_job(user, data):
     """Crea un job inserito manualmente dall'utente, senza fonte esterna
     (Sprint 43): stesso trattamento post-creazione dell'import da LinkedIn —
-    scoring applicato subito, nessuna generazione automatica di CV anche con
-    punteggio alto (sempre manuale). `external_id` non ha un equivalente
-    naturale (nessun link/offerta esterna da cui derivarlo): un UUID è
-    sufficiente a soddisfare il vincolo di unicità per
-    `(user, source, external_id)`, non serve altro."""
-    _reserve_quota_or_credit(user)
+    scoring applicato subito, nessuna generazione automatica di CV.
+    `external_id` è un UUID, sufficiente per il vincolo di unicità.
 
-    job = Job.objects.create(
-        user=user,
-        source=Job.Source.MANUAL,
-        external_id=f"manual-{uuid.uuid4()}",
-        title=data["title"],
-        company=data["company"],
-        location=data["location"],
-        description=data["description"],
-        apply_url=data.get("apply_url") or "",
-        published_at=data["published_at"],
-        origin=Job.Origin.IMPORTED,
-    )
+    Se la creazione fallisce dopo la riserva, quota o credito vengono
+    restituiti (Sprint 68). Uno scoring fallito invece non restituisce nulla:
+    il job esiste (è ciò che la quota paga) e il ciclo notturno ritenta lo
+    scoring come per i job raccolti."""
+    charge_mode = _reserve_quota_or_credit(user)
+
+    try:
+        job = Job.objects.create(
+            user=user,
+            source=Job.Source.MANUAL,
+            external_id=f"manual-{uuid.uuid4()}",
+            title=data["title"],
+            company=data["company"],
+            location=data["location"],
+            description=data["description"],
+            apply_url=data.get("apply_url") or "",
+            published_at=data["published_at"],
+            origin=Job.Origin.IMPORTED,
+        )
+    except Exception as exc:
+        _refund(user, charge_mode)
+        raise ManualJobFailed("Impossibile creare il job. Riprova più tardi.") from exc
     score_job(job)
     return job

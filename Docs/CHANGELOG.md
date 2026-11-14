@@ -10,10 +10,10 @@
 
 | Documento | Versione | As-is al | Contenuto |
 |---|---|---|---|
-| `01-specifiche-funzionali-v6.md` | 6 | 2026-11-14 (Sprint 66) | Cosa fa l'app: funzioni, piani e massimali, criteri di accettazione, limiti noti |
-| `02-specifiche-tecniche-v5.md` | 5 | 2026-11-14 (Sprint 66) | Architettura, stack, modello dati completo, flussi, generazione CV, deploy, API REST (§12), test (§13), limiti tecnici noti |
+| `01-specifiche-funzionali-v6.md` | 6 | 2026-11-14 (Sprint 68) | Cosa fa l'app: funzioni, piani e massimali, criteri di accettazione, limiti noti |
+| `02-specifiche-tecniche-v5.md` | 5 | 2026-11-14 (Sprint 68) | Architettura, stack, modello dati completo, flussi, generazione CV, deploy, API REST (§12), test (§13), limiti tecnici noti |
 | `03-specifiche-funzionali-contenuto-cv-v5.md` | 5 | 2026-11-14 (Sprint 64) | Regole di contenuto, selezione e impaginazione del CV; editor e chat. Prevale su 01/02 per questi temi |
-| `../DEPLOY.md` | — | 2026-11-14 (Sprint 66) | Deploy in produzione, variabili d'ambiente, task schedulati, backup, runbook operativo |
+| `../DEPLOY.md` | — | 2026-11-14 (Sprint 68) | Deploy in produzione, variabili d'ambiente, task schedulati, backup, runbook operativo |
 
 ## Versioni superate (`archivio/`)
 
@@ -35,12 +35,12 @@ Nessuna delle versioni archiviate descriveva gli sprint 40–64.
 - **v1–v3** (luglio 2026): perimetro MVP, massimali, credito come pool generico, foto on/off.
 - **v4** (luglio 2026, revisione criticità): credito in €, niente Word, limiti di raccolta per notte, tie-break del cap, definizione "nuovi job", generazione concorrente bloccata, scoring fallito scartato. Poi aggiornata in place con sprint-39 e sprint-47.
 - **v5** (01/08/2026): recepisce il documento 03 v3 (profilo a 5 sezioni, vincoli istruzione, qualifica, arricchimento ristretto).
-- **v6** (14/11/2026): fusione di v4 e v5 e allineamento completo all'as-is degli sprint 40–64. Aggiornata in place con lo Sprint 66 (registrazione su invito, sessione che scade, documenti privati, limiti).
+- **v6** (14/11/2026): fusione di v4 e v5 e allineamento completo all'as-is degli sprint 40–64. Aggiornata in place con lo Sprint 66 (registrazione su invito, sessione che scade, documenti privati, limiti) e con lo Sprint 68 (§4.2–§4.5, §4.14, §4.15, §4.21, §8.A punti 1–3, 5, 7–16 annotati come risolti).
 
 ### 02 — Specifiche tecniche
 - **v1–v3** (luglio 2026): architettura monolitica Django+Celery, modello dati, flussi, deploy. v3 poi aggiornata in place con sprint-39 e sprint-47.
 - **v4** (01/08/2026): recepisce il documento 03 (pipeline CV riscritta, `Education.start_date/end_date`, rimozione `key_achievements`).
-- **v5** (14/11/2026): fusione di v3 e v4 e allineamento completo all'as-is degli sprint 40–64; aggiunte le sezioni API REST e Test. Aggiornata in place con lo Sprint 66 (sicurezza: §3.7, §4.15, §7.1, §8, §11, §12, §13).
+- **v5** (14/11/2026): fusione di v3 e v4 e allineamento completo all'as-is degli sprint 40–64; aggiunte le sezioni API REST e Test. Aggiornata in place con lo Sprint 66 (sicurezza: §3.7, §4.15, §7.1, §8, §11, §12, §13) e con lo Sprint 68 (lista job, scoring e raccolta: §4.1, §4.3, §4.4, §4.6, §4.7, §5.1–§5.3, §5.6–§5.9, §9, §11, §12, §13).
 
 ### 03 — Contenuto del CV
 - **v1–v3** (luglio 2026): selezione e quantità del contenuto, qualifica, Areas of Expertise, overflow.
@@ -73,3 +73,4 @@ Ogni sprint ha la sua scheda in `../sprints/sprint-NN.md`. Le schede 40–42 e 4
 | 63 | Filtro "Ricerca" multi-selezione; editor e chat della cover letter | 01 §4.5, §4.19; 02 §5.12–§5.13 |
 | 64 | Filtri preferiti salvabili | 01 §4.21; 02 §4.13 |
 | 66 | Sicurezza (audit del 2026-11-14): download con URL firmati e nomi casuali, foto senza metadati, token con scadenza per inattività e logout, throttling, registrazione su invito, limiti di input, Django 5.2 LTS, header HTTP/CSP, push in allowlist, container non-root, log con conservazione | 01 §4.1, §4.11, §6; 02 §3.7, §4.15, §7.1, §8, §12, §13; `DEPLOY.md` §3, §4.5, §8 |
+| 68 | Difetti di lista job, scoring e raccolta: eliminazione dei job del vecchio cap, punteggi 1–5 riscalati ×2, retry dello scoring (max 3 fallimenti), riferimento stabile alla ricerca di provenienza, filtri della lista nell'URL, filtri preferiti senza "Ricerca" da Importati ed eliminazione con ripristino, avviso e limiti di piano sulle ricerche Free, raccolta isolata per gruppo con esiti e scarti nel `RunLog`, guardia condivisa manuale/notturna, azioni Admin sui contatori, Admin dei modelli mancanti, import e job manuale robusti, località nel prompt di scoring | 01 §4.2–§4.5, §4.14, §4.15, §4.21, §8.A; 02 §4, §5, §9, §11–§13; `DEPLOY.md` §4.4, §4.6, §7 |

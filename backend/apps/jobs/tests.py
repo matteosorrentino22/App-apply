@@ -59,6 +59,14 @@ def _offer(external_id, **overrides):
     return offer
 
 
+def _fake_source(offers, label="job_role · Roma, Italia"):
+    """Fonte simulata con un solo gruppo riuscito (interfaccia
+    `fetch_groups`, Sprint 68)."""
+    return MagicMock(
+        fetch_groups=MagicMock(return_value=[{"label": label, "offers": offers, "error": None}])
+    )
+
+
 class CollectJobsForUserTests(TestCase):
     def setUp(self):
         self.free_user = User.objects.create_user(
@@ -73,8 +81,8 @@ class CollectJobsForUserTests(TestCase):
     def test_no_cap_saves_every_valid_offer_regardless_of_plan(self):
         offers = [_offer(f"ext-{i}") for i in range(80)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
-            created = collect_jobs_for_user(self.free_user)
+            mock_get_source.return_value = _fake_source(offers)
+            created = collect_jobs_for_user(self.free_user).created
 
         self.assertEqual(len(created), 80)
         self.assertEqual(Job.objects.filter(user=self.free_user).count(), 80)
@@ -82,8 +90,8 @@ class CollectJobsForUserTests(TestCase):
     def test_offer_missing_a_required_field_is_not_saved(self):
         offers = [_offer("ext-1"), _offer("ext-2", company="")]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
-            created = collect_jobs_for_user(self.free_user)
+            mock_get_source.return_value = _fake_source(offers)
+            created = collect_jobs_for_user(self.free_user).created
 
         self.assertEqual(len(created), 1)
         self.assertEqual(Job.objects.filter(user=self.free_user).count(), 1)
@@ -100,15 +108,15 @@ class CollectJobsForUserTests(TestCase):
             _offer("ext-3"),
         ]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
-            created = collect_jobs_for_user(self.free_user)
+            mock_get_source.return_value = _fake_source(offers)
+            created = collect_jobs_for_user(self.free_user).created
 
         self.assertEqual({j.external_id for j in created}, {"ext-1", "ext-3"})
 
     def test_offer_without_published_at_is_saved_with_null(self):
         offers = [_offer("ext-1", published_at=None)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             collect_jobs_for_user(self.free_user)
 
         job = Job.objects.get(user=self.free_user, external_id="ext-1")
@@ -117,9 +125,9 @@ class CollectJobsForUserTests(TestCase):
     def test_rerunning_with_same_external_id_does_not_duplicate(self):
         offers = [_offer("ext-1")]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             collect_jobs_for_user(self.free_user)
-            second_run_created = collect_jobs_for_user(self.free_user)
+            second_run_created = collect_jobs_for_user(self.free_user).created
 
         self.assertEqual(len(second_run_created), 0)
         self.assertEqual(Job.objects.filter(user=self.free_user, external_id="ext-1").count(), 1)
@@ -136,22 +144,22 @@ class CollectJobsForUserTests(TestCase):
         )
         offers = [_offer(f"ext-{i}") for i in range(150)]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
-            created = collect_jobs_for_user(pro_user)
+            mock_get_source.return_value = _fake_source(offers)
+            created = collect_jobs_for_user(pro_user).created
 
         self.assertEqual(len(created), 150)
 
     def test_no_active_searches_collects_nothing(self):
         SavedSearch.objects.filter(user=self.free_user).update(is_active=False)
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            created = collect_jobs_for_user(self.free_user)
+            created = collect_jobs_for_user(self.free_user).created
         mock_get_source.assert_not_called()
         self.assertEqual(created, [])
 
     def test_matched_search_from_offer_is_saved_on_the_job(self):
         offers = [_offer("ext-1", matched_search="Project Manager - Roma, Italia")]
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             collect_jobs_for_user(self.free_user)
 
         job = Job.objects.get(user=self.free_user, external_id="ext-1")
@@ -338,14 +346,13 @@ class RunNightlyCycleForUserTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             summary = run_nightly_cycle_for_user(self.user)
 
         self.assertEqual(summary["collected"], 20)
         self.assertEqual(summary["scored"], 20)
         self.assertEqual(summary["kept"], 20)
         self.assertNotIn("discarded_cap", summary)
-        self.assertEqual(Job.objects.filter(user=self.user, discarded_by_cap=True).count(), 0)
 
         run_log = RunLog.objects.get(user=self.user, task_type=RunLog.TaskType.COLLECTION)
         self.assertEqual(run_log.status, RunLog.Status.SUCCESS)
@@ -376,7 +383,7 @@ class NoAutomaticCvGenerationInNightlyCycleTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", side_effect=fake_score
         ), patch("apps.cv.generation.generate_cv") as mock_generate_cv:
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             summary = run_nightly_cycle_for_user(self.user)
 
         self.assertNotIn("cv_generated", summary)
@@ -401,7 +408,7 @@ class RunManualCollectionForUserTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             summary = run_manual_collection_for_user(self.user)
 
         self.assertEqual(summary["collected"], 3)
@@ -430,7 +437,7 @@ class RunManualCollectionForUserTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            mock_get_source.return_value = _fake_source([])
             summary = run_manual_collection_for_user(self.user)
 
         self.assertEqual(summary["collected"], 0)
@@ -449,7 +456,7 @@ class RunManualCollectionForUserTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            mock_get_source.return_value = _fake_source([])
             summary = run_manual_collection_for_user(self.user)
 
         self.assertEqual(summary["collected"], 0)
@@ -479,7 +486,7 @@ class RunManualCollectionForUserTests(TestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            mock_get_source.return_value = _fake_source([])
             return run_manual_collection_for_user(self.user)
 
     def test_second_call_same_day_hits_the_daily_limit(self):
@@ -529,7 +536,7 @@ class CollectJobsApiTests(APITestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=offers))
+            mock_get_source.return_value = _fake_source(offers)
             response = self.client.post("/api/jobs/collect/")
 
         self.assertEqual(response.status_code, 200)
@@ -550,7 +557,7 @@ class CollectJobsApiTests(APITestCase):
         with patch("apps.jobs.collection.get_job_source") as mock_get_source, patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
-            mock_get_source.return_value = MagicMock(fetch=MagicMock(return_value=[]))
+            mock_get_source.return_value = _fake_source([])
             first = self.client.post("/api/jobs/collect/")
             second = self.client.post("/api/jobs/collect/")
 

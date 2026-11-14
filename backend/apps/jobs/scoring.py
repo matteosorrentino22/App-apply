@@ -1,13 +1,21 @@
 import concurrent.futures
 import re
 
+from django.db.models import F
 from django.utils import timezone
 
 from apps.profiles.language_options import LANGUAGE_NAME_LABELS
 from apps.profiles.models import Profile
 
 from .ai_scoring import score_job_with_claude
-from .models import RunLog
+from .models import Job, RunLog
+
+# Tentativi di scoring per job (Sprint 68): un job rimasto senza punteggio
+# (errore Bedrock/output fuori schema, raccolta interrotta prima dello
+# scoring) viene ritentato dal ciclo notturno finché i fallimenti non
+# arrivano a questo numero, poi resta senza punteggio (ritentabile solo a
+# mano con `retry_unscored_jobs --ignore-limit`).
+MAX_SCORING_FAILURES = 3
 
 # Punteggio massimo se la lingua richiesta dall'offerta (language_check,
 # ai_scoring.py) non è presente nel profilo a nessun livello: verifica
@@ -99,6 +107,7 @@ def _apply_score_result(job, result, profile):
 
 
 def _log_scoring_failure(job, exc, started_at):
+    Job.objects.filter(pk=job.pk).update(scoring_failures=F("scoring_failures") + 1)
     RunLog.objects.create(
         user=job.user,
         job=job,
@@ -172,3 +181,13 @@ def score_jobs(jobs):
             scored.append(job)
 
     return scored
+
+
+def unscored_jobs_to_retry(user=None, ignore_limit=False):
+    """Job senza punteggio da ritentare, dal più vecchio."""
+    queryset = Job.objects.filter(score__isnull=True)
+    if user is not None:
+        queryset = queryset.filter(user=user)
+    if not ignore_limit:
+        queryset = queryset.filter(scoring_failures__lt=MAX_SCORING_FAILURES)
+    return queryset.select_related("user").order_by("date_collected", "pk")
