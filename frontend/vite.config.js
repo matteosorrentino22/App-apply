@@ -24,6 +24,16 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // Sprint 70: niente ricaricamenti automatici delle schede aperte a un
+      // deploy (si perderebbero modifiche non salvate). 'prompt' (il
+      // default, qui esplicito) e non 'autoUpdate'; inoltre il service
+      // worker lo registra src/lib/appUpdate.js e non `virtual:pwa-register`,
+      // che anche in modalità 'prompt' ricarica la pagina quando un service
+      // worker trovato da un controllo successivo (o da un'altra scheda)
+      // prende il controllo. Con injectManifest l'attivazione del nuovo
+      // service worker la decide sw.js (skipWaiting + clients.claim).
+      registerType: 'prompt',
+      injectRegister: false,
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',

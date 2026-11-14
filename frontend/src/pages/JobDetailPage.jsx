@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import AiNotice from '../components/AiNotice'
+import { ActionCostHint } from '@/components/ActionCost'
+import { confirmCreditCharge, useUsage } from '@/lib/usage'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Heart, UserRound } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -73,6 +75,9 @@ export default function JobDetailPage() {
   const [selectedReferralPastInstructions, setSelectedReferralPastInstructions] = useState([])
   const [generatingReferralMessage, setGeneratingReferralMessage] = useState(false)
   const [referralMessages, setReferralMessages] = useState([])
+  // Costo della prossima richiesta e conferma prima di un addebito a credito
+  // (Sprint 70, integrato nella pagina del job al merge con lo Sprint 69).
+  const { usage, refresh: refreshUsage } = useUsage()
 
   useEffect(() => {
     let cancelled = false
@@ -129,6 +134,7 @@ export default function JobDetailPage() {
   }
 
   async function handleGenerate() {
+    if (!confirmCreditCharge(t, lang, usage, 'cv')) return
     setGenerating(true)
     try {
       const result = await generateCv(id, selectedGaps, gapInstructions)
@@ -149,6 +155,7 @@ export default function JobDetailPage() {
         showToast(t('jobs.generationFailed'))
       }
     } finally {
+      refreshUsage()
       setGenerating(false)
     }
   }
@@ -169,6 +176,7 @@ export default function JobDetailPage() {
   }
 
   async function handleGenerateCoverLetter() {
+    if (!confirmCreditCharge(t, lang, usage, 'cover_letter')) return
     setGeneratingCoverLetter(true)
     try {
       const instructions = [...selectedPastInstructions, coverLetterText.trim()]
@@ -186,6 +194,7 @@ export default function JobDetailPage() {
         showToast(t('jobs.coverLetterGenerationFailed'))
       }
     } finally {
+      refreshUsage()
       setGeneratingCoverLetter(false)
     }
   }
@@ -209,6 +218,7 @@ export default function JobDetailPage() {
   }
 
   async function handleGenerateReferralMessage() {
+    if (!confirmCreditCharge(t, lang, usage, 'referral_message')) return
     setGeneratingReferralMessage(true)
     try {
       const instructions = [...selectedReferralPastInstructions, referralText.trim()]
@@ -229,6 +239,7 @@ export default function JobDetailPage() {
         showToast(t('jobs.referralGenerationFailed'))
       }
     } finally {
+      refreshUsage()
       setGeneratingReferralMessage(false)
     }
   }
@@ -534,6 +545,7 @@ export default function JobDetailPage() {
       </div>
 
       <AiNotice />
+      <ActionCostHint usage={usage} action="cv" />
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" disabled={generating || job.cv_generation_in_progress} onClick={handleGenerate}>
@@ -791,6 +803,7 @@ export default function JobDetailPage() {
           </div>
 
           <AiNotice />
+          <ActionCostHint usage={usage} action="cover_letter" />
 
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setShowReferralDialog(false)}>
@@ -842,6 +855,7 @@ export default function JobDetailPage() {
           </div>
 
           <AiNotice />
+          <ActionCostHint usage={usage} action="referral_message" />
 
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setShowCoverLetterDialog(false)}>

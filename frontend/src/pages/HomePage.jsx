@@ -6,6 +6,8 @@ import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { ActionCostHint } from '@/components/ActionCost'
+import { useUsage } from '@/lib/usage'
 
 function formatNumber(value, lang) {
   return new Intl.NumberFormat(lang === 'it' ? 'it-IT' : 'en-US').format(value ?? 0)
@@ -70,6 +72,7 @@ export default function HomePage() {
   const [collecting, setCollecting] = useState(false)
   const [summary, setSummary] = useState(null)
   const [stats, setStats] = useState(null)
+  const { usage, refresh: refreshUsage } = useUsage()
 
   useEffect(() => {
     fetchHomeStats()
@@ -94,6 +97,7 @@ export default function HomePage() {
       }
     } finally {
       setCollecting(false)
+      refreshUsage()
     }
   }
 
@@ -140,9 +144,12 @@ export default function HomePage() {
           <CardDescription>{t('home.collectHint')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <Button onClick={handleCollect} disabled={collecting} className="self-start">
-            {collecting ? t('home.collecting') : t('home.collectButton')}
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button onClick={handleCollect} disabled={collecting} className="self-start">
+              {collecting ? t('home.collecting') : t('home.collectButton')}
+            </Button>
+            <ActionCostHint usage={usage} action="collection" />
+          </div>
 
           {summary && (
             <div className="flex items-center gap-8">

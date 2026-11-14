@@ -25,6 +25,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import CityAutocomplete from '@/components/CityAutocomplete'
 import { DeleteAccountButton, ExportDataButton } from '@/components/AccountDataActions'
+import UsageLimitsCard from '@/components/UsageLimitsCard'
+import { useUsage } from '@/lib/usage'
+import TimezoneSelect from '@/components/TimezoneSelect'
+import EmailChangeForm from '@/components/EmailChangeForm'
 import { SUPPORTED_LANGUAGES } from '../i18n/translations'
 
 const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', city: '', country: '' }
@@ -59,6 +63,8 @@ export default function AccountPage() {
   const [passwordForm, setPasswordForm] = useState({ old: '', next: '', confirm: '' })
   const [passwordError, setPasswordError] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [timeZone, setTimeZone] = useState(user?.timezone || 'Europe/Rome')
+  const { usage } = useUsage()
 
   useEffect(() => {
     loadSearches()
@@ -287,6 +293,8 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
+      <UsageLimitsCard usage={usage} timeZone={user.timezone} />
+
       <Card>
         <CardHeader>
           <CardTitle>{t('account.searchesTitle')}</CardTitle>
@@ -482,6 +490,19 @@ export default function AccountPage() {
             </Select>
           </div>
 
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="account-timezone">{t('timezone.label')}</Label>
+            <TimezoneSelect
+              id="account-timezone"
+              value={timeZone}
+              onChange={(next) => {
+                setTimeZone(next)
+                handleSettingChange({ timezone: next })
+              }}
+            />
+            <p className="text-xs text-muted-foreground">{t('timezone.hint')}</p>
+          </div>
+
           <fieldset className="flex flex-col gap-2.5">
             <legend className="mb-1 text-sm font-medium text-foreground">
               {t('onboarding.cvLanguageLabel')}
@@ -556,7 +577,13 @@ export default function AccountPage() {
           <CardDescription>{t('account.privacyHint')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <form onSubmit={handleChangePassword} className="flex flex-col gap-3" noValidate>
+          <EmailChangeForm currentEmail={user.email} />
+
+          <form
+            onSubmit={handleChangePassword}
+            className="flex flex-col gap-3 border-t border-border pt-4"
+            noValidate
+          >
             <h3 className="text-sm font-semibold text-foreground">{t('account.changePasswordTitle')}</h3>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="old-password">{t('account.oldPassword')}</Label>

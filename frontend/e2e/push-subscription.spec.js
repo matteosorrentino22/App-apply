@@ -33,13 +33,16 @@ function pushSubscriptionExists(email, endpoint) {
   return output.toString().trim() === 'True'
 }
 
+// Codice di invito del backend di prova (Sprint 66), vuoto se la registrazione è aperta.
+const INVITE_CODE = process.env.E2E_INVITE_CODE || ''
+
 let uniqueSuffix = 0
 async function registerUser(request, baseURL) {
   uniqueSuffix += 1
   const email = `e2e-push-${Date.now()}-${uniqueSuffix}@example.com`
   const password = 'SuperSecret123!'
   const response = await request.post(`${baseURL}/api/accounts/register/`, {
-    data: { email, password, accept_privacy: true, accept_terms: true, confirm_age: true },
+    data: { email, password, invite_code: INVITE_CODE, accept_privacy: true, accept_terms: true, confirm_age: true },
   })
   const body = await response.json()
   return { email, password, token: body.token }

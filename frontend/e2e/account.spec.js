@@ -21,13 +21,16 @@ function setAccount(email, { plan = 'pro', credit = '7.50' } = {}) {
   )
 }
 
+// Codice di invito del backend di prova (Sprint 66), vuoto se la registrazione è aperta.
+const INVITE_CODE = process.env.E2E_INVITE_CODE || ''
+
 let uniqueSuffix = 0
 async function registerUser(request, baseURL) {
   uniqueSuffix += 1
   const email = `e2e-acc-${Date.now()}-${uniqueSuffix}@example.com`
   const password = 'SuperSecret123!'
   const response = await request.post(`${baseURL}/api/accounts/register/`, {
-    data: { email, password, accept_privacy: true, accept_terms: true, confirm_age: true },
+    data: { email, password, invite_code: INVITE_CODE, accept_privacy: true, accept_terms: true, confirm_age: true },
   })
   const body = await response.json()
   return { email, password, token: body.token }
@@ -139,4 +142,18 @@ test('su iOS senza installazione alla home mostra l\'istruzione dedicata', async
   await expect(iosPage.getByRole('button', { name: 'Attiva notifiche' })).not.toBeVisible()
 
   await iosContext.close()
+})
+
+// Sprint 70: titolo della pagina e "I tuoi limiti di oggi".
+test('Impostazioni: titolo corretto e limiti di oggi con massimali e prezzi', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+
+  await expect(page.getByRole('heading', { name: 'Impostazioni', level: 1 })).toBeVisible()
+  await expect(page.getByText('I tuoi limiti di oggi')).toBeVisible()
+  // Utente Free appena registrato: 0 generazioni CV su 1, 1,50 € oltre il massimale.
+  const cvRow = page.getByTestId('usage-row-cv')
+  await expect(cvRow).toContainText('0 / 1')
+  await expect(cvRow).toContainText('1,50')
+  await expect(page.getByTestId('usage-row-import')).toContainText('Solo piano Pro')
 })

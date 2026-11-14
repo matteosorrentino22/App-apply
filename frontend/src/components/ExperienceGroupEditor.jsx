@@ -7,6 +7,11 @@ import { Card } from '@/components/ui/card'
 import ChipInput from '@/components/ChipInput'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 
+// Stessi limiti del backend (apps/profiles/serializers.py, Sprint 70).
+const MAX_BULLETS = 15
+const MAX_BULLET_LENGTH = 400
+const MAX_TECHNOLOGY_LENGTH = 200
+
 let nextKey = 0
 function makeKey() {
   nextKey += 1
@@ -23,6 +28,7 @@ export function emptyRole() {
     end_date: '',
     ongoing: false,
     bullets: [],
+    technologies: [],
   }
 }
 
@@ -189,6 +195,23 @@ export default function ExperienceGroupEditor({
                       value={r.bullets}
                       onChange={(bullets) => updateRole(c._key, r._key, { bullets })}
                       placeholder={t('onboarding.activitiesPlaceholder')}
+                      maxLength={MAX_BULLET_LENGTH}
+                      flagTooLong={typeof r._key !== 'number'}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t('profileExtras.bulletsHint')
+                        .replace('{max}', MAX_BULLETS)
+                        .replace('{length}', MAX_BULLET_LENGTH)}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <Label htmlFor={`technologies-${r._key}`}>{t('profileExtras.technologies')}</Label>
+                    <ChipInput
+                      id={`technologies-${r._key}`}
+                      value={r.technologies || []}
+                      onChange={(technologies) => updateRole(c._key, r._key, { technologies })}
+                      placeholder={t('profileExtras.technologiesPlaceholder')}
+                      maxLength={MAX_TECHNOLOGY_LENGTH}
                     />
                   </div>
                 </div>

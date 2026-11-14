@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function ChipInput({ value, onChange, placeholder, className, id }) {
+// `maxLength` (Sprint 70) limita il testo di una nuova voce; con
+// `flagTooLong` le voci già presenti oltre il limite (es. dal pre-compilamento
+// da CV) sono evidenziate, perché il server le rifiuterebbe.
+export default function ChipInput({ value, onChange, placeholder, className, id, maxLength, flagTooLong = false }) {
   const [draft, setDraft] = useState('')
 
   function commitDraft() {
@@ -39,7 +42,10 @@ export default function ChipInput({ value, onChange, placeholder, className, id 
       {value.map((item, index) => (
         <span
           key={`${item}-${index}`}
-          className="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-1 text-[13px] font-medium text-primary"
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-1 text-[13px] font-medium text-primary',
+            flagTooLong && maxLength && item.length > maxLength && 'bg-destructive-soft text-destructive',
+          )}
         >
           {item}
           <button
@@ -56,6 +62,7 @@ export default function ChipInput({ value, onChange, placeholder, className, id 
         id={id}
         type="text"
         value={draft}
+        maxLength={maxLength}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={commitDraft}

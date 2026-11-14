@@ -1,4 +1,6 @@
 import { apiFetch, getToken, setToken } from './client'
+import { currentPushSubscription } from '../lib/push'
+import { browserTimeZone } from '../utils/date'
 
 // Con la verifica dell'email attiva (Sprint 67) la registrazione non
 // restituisce un token: `verification_required` dice alla PWA di mostrare
@@ -11,6 +13,8 @@ export async function register({ email, password, inviteCode = '', language, con
       password,
       invite_code: inviteCode,
       interface_language: language,
+      // Sprint 70: fuso del dispositivo come default dell'account.
+      timezone: browserTimeZone(),
       accept_privacy: consents.privacy,
       accept_terms: consents.terms,
       confirm_age: consents.age,
@@ -31,15 +35,28 @@ export async function login(email, password) {
 
 // Revoca il token lato server (Sprint 66); il token locale si cancella
 // comunque, anche se la chiamata fallisce (rete assente, token già scaduto).
+// Sprint 70: il dispositivo smette anche di ricevere le notifiche push
+// dell'account, sul server (endpoint mandato al logout) e nel browser.
 export async function logout() {
+  const subscription = await currentPushSubscription()
   if (getToken()) {
     try {
-      await apiFetch('/api/accounts/logout/', { method: 'POST' })
+      await apiFetch('/api/accounts/logout/', {
+        method: 'POST',
+        body: subscription ? { push_endpoint: subscription.endpoint } : {},
+      })
     } catch {
       // ignorato: il token locale viene rimosso in ogni caso
     }
   }
   setToken(null)
+  if (subscription) {
+    try {
+      await subscription.unsubscribe()
+    } catch {
+      // sottoscrizione già scaduta o rimossa dal browser
+    }
+  }
 }
 
 export function fetchMe() {
@@ -90,6 +107,19 @@ export async function changePassword(oldPassword, newPassword) {
 export async function deleteAccount(password) {
   await apiFetch('/api/accounts/delete/', { method: 'POST', body: { password, confirm: true } })
   setToken(null)
+}
+
+// Cambio dell'email di accesso (Sprint 70): il backend invia il link di
+// conferma al nuovo indirizzo; l'email cambia solo alla conferma.
+export function requestEmailChange(password, newEmail) {
+  return apiFetch('/api/accounts/email/change/', {
+    method: 'POST',
+    body: { password, new_email: newEmail },
+  })
+}
+
+export function confirmEmailChange(token) {
+  return apiFetch('/api/accounts/email/change/confirm/', { method: 'POST', body: { token } })
 }
 
 // URL firmato (10 minuti) dello ZIP: si apre come un normale download.

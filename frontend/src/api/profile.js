@@ -8,6 +8,11 @@ export function updateProfile(payload, { isMultipart = false } = {}) {
   return apiFetch('/api/profiles/me/', { method: 'PATCH', body: payload, isMultipart })
 }
 
+// Rimozione della foto (Sprint 70): il file viene cancellato dal server.
+export function removeProfilePhoto() {
+  return apiFetch('/api/profiles/me/photo/', { method: 'DELETE' })
+}
+
 export function importCv(file) {
   const formData = new FormData()
   formData.append('file', file)

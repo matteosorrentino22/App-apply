@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -34,10 +35,13 @@ class PushSubscriptionView(APIView):
         data = serializer.validated_data
 
         # Attivare le notifiche su un dispositivo è un consenso esplicito:
-        # riaccende anche la preferenza dell'account (Sprint 67).
+        # riaccende anche la preferenza dell'account (Sprint 67), e
+        # `last_notified_at` riparte da ora (Sprint 70) per non annunciare i
+        # job creati mentre le notifiche erano spente.
         if not request.user.notifications_enabled:
             request.user.notifications_enabled = True
-            request.user.save(update_fields=["notifications_enabled"])
+            request.user.last_notified_at = timezone.now()
+            request.user.save(update_fields=["notifications_enabled", "last_notified_at"])
         PushSubscription.objects.update_or_create(
             user=request.user,
             endpoint=data["endpoint"],

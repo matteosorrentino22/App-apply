@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import { ToastProvider } from './components/ToastProvider'
-import { buttonVariants } from './components/ui/button'
+import { Button, buttonVariants } from './components/ui/button'
 import { cn } from './lib/utils'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -21,7 +22,10 @@ import LegalPage from './pages/LegalPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import ConfirmEmailChangePage from './pages/ConfirmEmailChangePage'
 import LegalFooter from './components/LegalFooter'
+import AppUpdateBanner from './components/AppUpdateBanner'
+import ProfileCompletionBanner from './components/ProfileCompletionBanner'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -56,11 +60,19 @@ function NavItem({ to, label }) {
 }
 
 function Topbar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const { t } = useLanguage()
+  const navigate = useNavigate()
   // Finché mancano le accettazioni legali (Sprint 67) ogni pagina protetta
   // mostra la schermata di accettazione: la navigazione non serve.
   const showNav = user && !user.legal_acceptance_required
+
+  // Esci raggiungibile da ogni pagina autenticata (Sprint 70), non solo
+  // dalla lista.
+  async function handleLogout() {
+    await logout()
+    navigate('/login')
+  }
 
   return (
     <div
@@ -77,7 +89,20 @@ function Topbar() {
           <NavItem to="/settings" label={t('account.navLink')} />
         </nav>
       )}
-      <LanguageSwitcher />
+      <div className="flex items-center gap-1">
+        <LanguageSwitcher />
+        {showNav && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            aria-label={t('account.logout')}
+            title={t('account.logout')}
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -90,6 +115,7 @@ export default function App() {
           <AccountLanguageSync />
           <BrowserRouter>
             <Topbar />
+            <ProfileCompletionBanner />
             <Routes>
               <Route path="/" element={<Navigate to="/list" replace />} />
               <Route path="/login" element={<LoginPage />} />
@@ -99,6 +125,7 @@ export default function App() {
               <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
               <Route
                 path="/onboarding"
                 element={
@@ -165,6 +192,7 @@ export default function App() {
               />
             </Routes>
             <LegalFooter />
+            <AppUpdateBanner />
           </BrowserRouter>
         </ToastProvider>
       </AuthProvider>

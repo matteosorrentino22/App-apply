@@ -19,13 +19,16 @@ function seedJobs(email) {
   })
 }
 
+// Codice di invito del backend di prova (Sprint 66), vuoto se la registrazione è aperta.
+const INVITE_CODE = process.env.E2E_INVITE_CODE || ''
+
 let uniqueSuffix = 0
 async function registerUser(request, baseURL) {
   uniqueSuffix += 1
   const email = `e2e-jobs-${Date.now()}-${uniqueSuffix}@example.com`
   const password = 'SuperSecret123!'
   const response = await request.post(`${baseURL}/api/accounts/register/`, {
-    data: { email, password, accept_privacy: true, accept_terms: true, confirm_age: true },
+    data: { email, password, invite_code: INVITE_CODE, accept_privacy: true, accept_terms: true, confirm_age: true },
   })
   const body = await response.json()
   return { email, password, token: body.token }
@@ -367,47 +370,40 @@ test('il cuoricino aggiunge/rimuove un job dalla sezione Preferiti', async ({ pa
   await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
 })
 
-test('arricchimento con "salva anche nel profilo" aggiunge il bullet all\'esperienza esistente', async ({
+// Sprint 68: sezione e filtri nella query string.
+test('i filtri restano nell\'URL: tornando dal dettaglio la lista è ancora filtrata', async ({
   page,
   request,
   baseURL,
 }) => {
-  const { token } = await loginAsSeededUser(page, request, baseURL)
+  await loginAsSeededUser(page, request, baseURL)
 
-  // L'arricchimento (Docs/03 §5.6) si aggancia a un'esperienza già presente
-  // nel profilo: non introduce mai un'azienda/ruolo del tutto nuovo, quindi
-  // il profilo deve già averne una prima di poterla selezionare nel form.
-  const experienceResponse = await request.post(`${baseURL}/api/experiences/`, {
-    headers: { Authorization: `Token ${token}` },
-    data: { company: 'Beta SpA', role: 'Backend Developer', bullets: ['Bullet iniziale'] },
-  })
-  const experience = await experienceResponse.json()
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await expect(page).toHaveURL(/score=4/)
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
-  await cardFor(page, 'Backend Developer').getByRole('link', { name: 'Dettagli' }).click()
+  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
+  await page.waitForURL(/jobs\//)
+  await page.goBack()
+
+  await expect(page).toHaveURL(/score=4/)
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+})
+
+// Sprint 70: "Esci" nella barra in alto, su ogni pagina autenticata.
+test('il pulsante Esci della barra in alto funziona anche dal dettaglio di un job', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  await loginAsSeededUser(page, request, baseURL)
+  await cardFor(page, 'Project Manager').getByRole('link', { name: 'Dettagli' }).click()
   await page.waitForURL(/jobs\//)
 
-  await page.getByRole('button', { name: /Aggiungi un'attività/ }).click()
-  await page.getByLabel('Esperienza').click()
-  await page.getByRole('option', { name: 'Backend Developer — Beta SpA' }).click()
-  await page.getByLabel('Nuove attività / competenze').fill('Consulenza backend freelance')
-  await page.keyboard.press('Enter')
-  await page.getByRole('checkbox', { name: 'Salva anche nel profilo' }).check()
+  await page.getByRole('button', { name: 'Esci' }).click()
 
-  // Il profilo di questo utente e2e non ha un titolo di studio (nessun
-  // onboarding completato, §10.2): la generazione vera e propria viene
-  // respinta prima della chiamata a Claude, ma `save_to_profile` è già
-  // stato applicato prima di quel controllo (apps/cv/enrichment.py). Il
-  // frontend mostra il messaggio esatto restituito dal backend (`detail`),
-  // non un testo fisso di "generazione già in corso" (bug corretto).
-  await page.getByRole('button', { name: 'Genera CV con questo dettaglio' }).click()
-  await expect(
-    page.getByText('Completa il profilo (almeno un titolo di studio) prima di generare un CV.'),
-  ).toBeVisible({ timeout: 20000 })
-
-  const response = await request.get(`${baseURL}/api/experiences/`, {
-    headers: { Authorization: `Token ${token}` },
-  })
-  const experiences = await response.json()
-  const updated = experiences.find((exp) => exp.id === experience.id)
-  expect(updated.bullets).toContain('Consulenza backend freelance')
+  await expect(page).toHaveURL(/\/login$/)
+  await page.goto('/list')
+  await expect(page).toHaveURL(/\/login$/)
 })

@@ -5,30 +5,43 @@ from apps.common.files import InvalidPhoto, sanitize_photo, signed_photo_url
 from .models import Certification, Education, Experience, Language, Profile, Skill
 
 
-# Testi del profilo che finiscono nei prompt AI e nei PDF (Sprint 66): stessi
-# tetti del content_json delle bozze (apps.cv.draft_validation).
-MAX_BULLETS = 30
-MAX_BULLET_LENGTH = 2_000
+# Testi del profilo che finiscono nei prompt AI e nei PDF. Sprint 66: tetti
+# larghi (30 × 2.000); Sprint 70: bullet ricondotti a valori da CV (doc 03:
+# ogni bullet occupa 1–2 righe, budget complessivo di 18 bullet), cioè 15
+# per esperienza da 400 caratteri. Non sono retroattivi: un'esperienza già
+# salvata oltre i limiti si può ancora salvare senza toccare i bullet in
+# eccesso (`_validate_string_list` con `existing`), ma non crescere.
+MAX_BULLETS = 15
+MAX_BULLET_LENGTH = 400
 MAX_TECHNOLOGIES = 50
 MAX_TECHNOLOGY_LENGTH = 200
 
 
-def _validate_string_list(value, max_items, max_length):
+def _validate_string_list(value, max_items, max_length, existing=()):
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise serializers.ValidationError("Deve essere una lista di testi.")
-    if len(value) > max_items:
+    existing = [item for item in existing if isinstance(item, str)] if isinstance(existing, list) else []
+    if len(value) > max(max_items, len(existing)):
         raise serializers.ValidationError(f"Massimo {max_items} elementi.")
-    if any(len(item) > max_length for item in value):
+    unchanged = set(existing)
+    if any(len(item) > max_length and item not in unchanged for item in value):
         raise serializers.ValidationError(f"Ogni elemento può avere al massimo {max_length} caratteri.")
     return value
 
 
 class ExperienceSerializer(serializers.ModelSerializer):
+    def _existing(self, field):
+        if self.instance is None:
+            return []
+        return getattr(self.instance, field, None) or []
+
     def validate_bullets(self, value):
-        return _validate_string_list(value, MAX_BULLETS, MAX_BULLET_LENGTH)
+        return _validate_string_list(value, MAX_BULLETS, MAX_BULLET_LENGTH, self._existing("bullets"))
 
     def validate_technologies(self, value):
-        return _validate_string_list(value, MAX_TECHNOLOGIES, MAX_TECHNOLOGY_LENGTH)
+        return _validate_string_list(
+            value, MAX_TECHNOLOGIES, MAX_TECHNOLOGY_LENGTH, self._existing("technologies")
+        )
 
     class Meta:
         model = Experience

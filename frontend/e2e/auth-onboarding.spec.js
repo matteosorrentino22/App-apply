@@ -23,6 +23,8 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
   await page.getByLabel('Password').fill(password)
   // Sprint 67: informativa, termini ed età minima (tre spunte obbligatorie).
   for (const box of await page.getByRole('checkbox').all()) await box.click()
+  // Sprint 66: codice di invito, se il backend di prova lo richiede.
+  if (process.env.E2E_INVITE_CODE) await page.getByLabel('Codice di invito').fill(process.env.E2E_INVITE_CODE)
   await page.getByRole('button', { name: 'Registrati' }).click()
 
   await expect(page).toHaveURL(/\/onboarding$/)
@@ -59,6 +61,8 @@ test('esperienze: più ruoli nella stessa azienda restano un unico gruppo in UI'
   await page.getByLabel('Password').fill(password)
   // Sprint 67: informativa, termini ed età minima (tre spunte obbligatorie).
   for (const box of await page.getByRole('checkbox').all()) await box.click()
+  // Sprint 66: codice di invito, se il backend di prova lo richiede.
+  if (process.env.E2E_INVITE_CODE) await page.getByLabel('Codice di invito').fill(process.env.E2E_INVITE_CODE)
   await page.getByRole('button', { name: 'Registrati' }).click()
   await expect(page).toHaveURL(/\/onboarding$/)
 

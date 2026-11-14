@@ -1,6 +1,6 @@
 # Deploy e operatività in produzione
 
-> Stato descritto: **as-is al 2026-11-14** (Sprint 67, privacy e GDPR).
+> Stato descritto: **as-is al 2026-11-14** (Sprint 70, account, profilo, notifiche e frontend).
 > Riferimenti: `Docs/02-specifiche-tecniche-v5.md` §8 (infrastruttura), `CLAUDE.md` (regola "un solo file compose").
 > Questo file è nel repository pubblico: **non** riportare qui dominio, IP, email, nomi di account o utenti, token.
 
@@ -98,11 +98,7 @@ Tutti i container `app-apply-*` devono riportare `.../docker-compose.prod.yml`. 
 
 ```
 docker compose -f docker-compose.prod.yml build web
-<<<<<<< HEAD
-docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (345 test, OK al 2026-11-14, Sprint 67)
-=======
-docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true web python manage.py test --noinput   # suite backend (340 test, OK al 2026-11-14, Sprint 68)
->>>>>>> worktree-agent-a997742a70b328090
+docker compose -f docker-compose.prod.yml run --rm --no-deps -e DJANGO_DEBUG=true -e REGISTRATION_INVITE_CODE= web python manage.py test --noinput   # suite backend (419 test, OK al 2026-11-14, Sprint 70)
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py makemigrations --check --dry-run
 docker compose -f docker-compose.prod.yml run --rm --no-deps web python manage.py check --deploy                     # con DEBUG=false: nessun problema atteso
 cd frontend && npm run test:e2e                                                     # Playwright (e2e/*.spec.js)
@@ -114,7 +110,7 @@ cd frontend && npm run test:e2e                                                 
 
 Con `REGISTRATION_INVITE_CODE` valorizzato in `.env` due test di registrazione (`accounts/test_security.py`) rispondono 400: aggiungere `-e REGISTRATION_INVITE_CODE=` al comando dei test. Per non condividere il server PostgreSQL di produzione (e il nome `test_<db>`) con altre esecuzioni in parallelo, si può usare un PostgreSQL usa e getta su una rete Docker dedicata, passando `POSTGRES_HOST`/`POSTGRES_PASSWORD` di quel container (procedura usata nello Sprint 68, `sprints/sprint-68.md`).
 
-I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova. Dallo Sprint 66 il login è limitato a 10 tentativi al minuto per IP: una suite e2e lunga lanciata contro lo stesso ambiente può ricevere 429.
+I test e2e usano i comandi `set_e2e_account` e `seed_e2e_jobs` per preparare account e job di prova. Contro un backend con `REGISTRATION_INVITE_CODE` valorizzato va passato lo stesso codice in `E2E_INVITE_CODE` (Sprint 70); le registrazioni via API presuppongono un backend senza invio email configurato (Sprint 67). Dallo Sprint 66 il login è limitato a 10 tentativi al minuto per IP: una suite e2e lunga lanciata contro lo stesso ambiente può ricevere 429.
 
 ### 4.5 Rilascio dello Sprint 66 (sicurezza) — passi una tantum, in ordine
 
@@ -139,7 +135,6 @@ Da eseguire a mano sul VPS, nella cartella del repository. Effetti visibili: **t
    Il comando è idempotente: rilanciato, non rinomina di nuovo i file già sistemati.
 8. **Verifiche**: coerenza dello stack (§4.3); `docker compose -f docker-compose.prod.yml exec web id` → `uid=1000(app)`; `curl -sI https://<dominio>/` mostra `strict-transport-security`, `content-security-policy`, `x-frame-options` e nessun header `server`; un vecchio URL `/media/...` risponde 404; dalla PWA: login, download di CV e cover letter, anteprima PDF negli editor (CSP), foto nel profilo; login all'admin sul path configurato; access log presente in `docker compose -f docker-compose.prod.yml exec caddy ls -la /var/log/caddy`.
 
-<<<<<<< HEAD
 ### 4.6 Rilascio dello Sprint 67 (privacy e GDPR) — passi una tantum, in ordine
 
 Effetti visibili: al prossimo accesso **tutti gli utenti esistenti vedono la schermata di accettazione** di informativa, termini ed età minima (gli utenti esistenti risultano già con email verificata); con l'email configurata i nuovi iscritti devono confermare l'indirizzo prima di accedere.
@@ -163,7 +158,7 @@ Effetti visibili: al prossimo accesso **tutti gli utenti esistenti vedono la sch
    - log del worker senza warning "Email non configurata".
 7. **Comunicare ai tester** che al prossimo accesso dovranno accettare informativa e termini.
 8. **Dopo 7 giorni**: eliminare dal VPS i dump manuali più vecchi in `backups/` del repository (es. `pre_*.dump`, `pre_sprint66_media.tgz`): contengono dati personali, non rientrano nella rotazione e l'informativa dichiara una conservazione dei backup di 7 giorni.
-=======
+
 ### 4.7 Rilascio dello Sprint 68 (lista job, scoring, raccolta) — passi una tantum, in ordine
 
 Lo sprint contiene tre migrazioni `jobs/0017` (nuovi campi), `jobs/0018` (backfill della ricerca di provenienza) e `jobs/0019` (rimozione di `discarded_by_cap`). La **0019 si rifiuta di partire finché esistono job con `discarded_by_cap=True`**: per questo, prima di `up -d`, si applicano le migrazioni fino alla 0018 e si lanciano i comandi con un container usa e getta. Se si facesse subito `up -d`, `web` non partirebbe (errore esplicito della 0019 nei log): basta eseguire i passi 5–6 e rilanciare `up -d`.
@@ -187,7 +182,15 @@ Lo sprint contiene tre migrazioni `jobs/0017` (nuovi campi), `jobs/0018` (backfi
 7. **Avvio**: `docker compose -f docker-compose.prod.yml up -d` (`web` applica la `jobs/0019` e le migrazioni non ancora applicate; `frontend-build` ricompila la PWA).
 8. **Facoltativo — job senza punteggio**: il ciclo notturno li ritenta da solo (al massimo 3 fallimenti per job). Per farlo subito: `docker compose -f docker-compose.prod.yml exec web python manage.py retry_unscored_jobs --dry-run`, poi senza `--dry-run` (una chiamata AI per job).
 9. **Verifiche**: coerenza dello stack (§4.3); in Admin la lista Job non ha più il filtro "discarded by cap", i job riscalati hanno `score_rescaled_from_legacy`; la mattina dopo, `RunLog` `collection` con le righe per gruppo e i contatori degli scarti.
->>>>>>> worktree-agent-a997742a70b328090
+
+### 4.8 Rilascio dello Sprint 70 (account, profilo, notifiche, frontend)
+
+Nessuna migrazione, nessuna variabile d'ambiente nuova, nessun comando sui dati. Il cambio dell'email di accesso è disponibile solo con l'invio email configurato (Sprint 67, `EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD`).
+
+1. **Build**: `docker compose -f docker-compose.prod.yml build web worker beat frontend-build`.
+2. **Avvio**: `docker compose -f docker-compose.prod.yml up -d` (`frontend-build` ricompila la PWA).
+3. **Prima volta dopo il rilascio**: le schede già aperte eseguono ancora il bundle precedente, che non conosce l'avviso "Nuova versione disponibile": vanno ricaricate una volta a mano (o chiuse e riaperte). Dai rilasci successivi l'avviso compare da solo (entro 30 minuti o al ritorno sulla scheda).
+4. **Verifiche**: coerenza dello stack (§4.3); dalla PWA: Impostazioni con il titolo "Impostazioni", "I tuoi limiti di oggi" con contatori e prezzi, fuso orario modificabile; "Esci" (icona in alto a destra) da una pagina qualsiasi; Profilo con foto rimovibile, tecnologie e obiettivo; cambio email di prova (link al nuovo indirizzo, avviso al vecchio, login con il nuovo indirizzo dopo la conferma).
 
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 
@@ -278,15 +281,12 @@ Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da sh
 - Vulnerabilità note delle dipendenze (controllo manuale periodico): `docker compose -f docker-compose.prod.yml run --rm --no-deps --user root web sh -c "pip install -q pip-audit && pip-audit"` e, in `frontend/`, `npm audit --omit=dev`.
 - Esiti di raccolta, scoring, generazioni e chat: modello `RunLog` (Django Admin), con `task_type`, `status`, `message`.
 - PDF generato ma "pagina bianca" al download: quasi sempre stack misto dev/prod (§4.3).
-<<<<<<< HEAD
 - Email di servizio (Sprint 67) non arrivate: log del worker (`docker compose -f docker-compose.prod.yml logs --tail 200 worker`): "Email non configurata" = credenziali mancanti nel `.env`; errori SMTP di autenticazione = password per le app errata o revocata. I task ritentano 3 volte sugli errori di rete. Un utente che non trova l'email di verifica può chiederne un'altra dal login (3 all'ora per indirizzo); in alternativa, da Django Admin → Users, spuntare `email_verified`.
 - Utente che non vuole accettare la nuova versione di informativa/termini: dalla schermata di accettazione può comunque esportare i dati o eliminare l'account. Il registro delle accettazioni è in Django Admin → Legal acceptances (sola lettura).
 - Richieste sui dati da parte di un utente (accesso, cancellazione): l'utente le fa da solo da Impostazioni ("Esporta i miei dati", "Elimina account"). Anche eliminare un utente da Django Admin (o da shell con `user.delete()`) cancella tutte le sue righe, i suoi file su disco e il testo dei suoi `RunLog` (segnali di `apps/accounts/signals.py`); solo l'email di conferma parte esclusivamente dalla cancellazione fatta dall'utente.
 - Copie delle email inviate: Gmail conserva ogni messaggio nella cartella "Posta inviata" dell'account mittente (indirizzo del destinatario e testo, nessun dato del profilo); vanno ripulite periodicamente a mano.
-=======
 - Job senza punteggio (Sprint 68): il ciclo notturno li ritenta finché `Job.scoring_failures` non arriva a 3; a mano `python manage.py retry_unscored_jobs [--dry-run] [--user-id <id>] [--ignore-limit]` (`--ignore-limit` include quelli già arrivati a 3).
 - Raccolta parziale: il `RunLog` `collection` riporta una riga per gruppo (`gruppo <tipo> · <città>, <paese>: ok, offerte=N` oppure `ERRORE …`) e gli scarti (`scartati_campi_mancanti`, `scartati_troppo_lunghi`, `scartati_duplicati`); con almeno un gruppo fallito lo stato è `failure` anche se gli altri gruppi sono stati raccolti.
->>>>>>> worktree-agent-a997742a70b328090
 
 ## 8. Sicurezza HTTP, log e conservazione (Sprint 66)
 
