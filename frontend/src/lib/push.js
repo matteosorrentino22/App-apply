@@ -53,11 +53,21 @@ export async function subscribeToPush(vapidPublicKey) {
   return { status: 'granted', subscription }
 }
 
+// Sottoscrizione del browser in uso, o null (anche se il service worker
+// non è attivo: `serviceWorker.ready` non si risolverebbe mai).
+export async function currentPushSubscription() {
+  try {
+    if (!isPushSupported() || !navigator.serviceWorker.controller) return null
+    const registration = await navigator.serviceWorker.ready
+    return await registration.pushManager.getSubscription()
+  } catch {
+    return null
+  }
+}
+
 // Notifiche disattivate da Impostazioni (Sprint 67): oltre alle
 // sottoscrizioni eliminate lato server, si annulla quella del browser.
 export async function unsubscribeFromPush() {
-  if (!isPushSupported() || !navigator.serviceWorker.controller) return
-  const registration = await navigator.serviceWorker.ready
-  const subscription = await registration.pushManager.getSubscription()
+  const subscription = await currentPushSubscription()
   if (subscription) await subscription.unsubscribe()
 }

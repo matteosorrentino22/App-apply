@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 70 account, profilo, notifiche e frontend)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -61,7 +61,7 @@ La v6 fonde le due versioni divergenti precedenti: la v4 in radice, che aveva re
   - arricchimento ristretto alle esperienze esistenti;
   - qualifica professionale;
   - vincoli minimi del profilo.
-- **v6** (14/11/2026): fusione di v4 e v5 e allineamento all'as-is degli sprint 40–64 (vedi nota sopra). Le versioni superate sono in `Docs/archivio/`. Aggiornata in place con lo Sprint 66 (sicurezza) e lo Sprint 67 (privacy e GDPR: consensi in registrazione, verifica dell'email, recupero e cambio password, export e cancellazione dell'account, pagine legali, preferenza notifiche, avviso AI).
+- **v6** (14/11/2026): fusione di v4 e v5 e allineamento all'as-is degli sprint 40–64 (vedi nota sopra). Le versioni superate sono in `Docs/archivio/`. Aggiornata in place con lo Sprint 66 (sicurezza), lo Sprint 67 (privacy e GDPR: consensi in registrazione, verifica dell'email, recupero e cambio password, export e cancellazione dell'account, pagine legali, preferenza notifiche, avviso AI), lo Sprint 68 (lista, scoring, raccolta) e lo Sprint 70 (contatori e prezzi visibili, fuso orario, cambio email, logout ovunque, notifiche al logout, pagina Profilo completa, avviso di nuova versione).
 
 ---
 
@@ -190,7 +190,7 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
   - **non enumerazione**: la registrazione risponde sempre "Controlla la tua email", anche se l'indirizzo ha già un account. In quel caso non viene creato nulla e al titolare dell'indirizzo arriva un'email che segnala il tentativo, con i link al login e al recupero password. Anche il reinvio del link risponde sempre allo stesso modo;
   - le email di servizio (verifica, tentativo di registrazione, recupero password, conferma di cancellazione) sono in italiano o in inglese secondo la lingua dell'interfaccia e non contengono dati del profilo;
   - **senza invio di email configurato** resta il comportamento precedente: i nuovi account nascono già verificati, la registrazione fa entrare subito nell'onboarding e un'email già registrata è segnalata come tale ("Un utente con questa email esiste già."). Gli account creati prima dello Sprint 67 risultano già verificati.
-- **Login** con email e password. Dopo il login l'utente arriva sempre alla lista job, anche se l'onboarding non è stato completato. Con credenziali errate il messaggio è sempre lo stesso ("Credenziali non valide."), sia che l'email esista sia che non esista. Sotto il modulo c'è il link **"Password dimenticata?"** (Sprint 67).
+- **Login** con email e password. Dopo il login l'utente arriva alla lista job, anche se l'onboarding non è stato completato; dallo Sprint 70, finché il profilo non è completo (stessa regola della generazione del CV: almeno un titolo di studio), in cima a ogni pagina c'è un **banner fisso** con il link: "Completa il profilo" (all'onboarding, con l'import del CV) se il profilo è ancora vuoto, "Vai al profilo" se manca solo l'istruzione. Il banner non compare in onboarding e nella pagina Profilo e sparisce appena il profilo è completo. Si è scelto il banner invece di un rimando automatico all'onboarding per non interrompere chi usa già l'app. Con credenziali errate il messaggio è sempre lo stesso ("Credenziali non valide."), sia che l'email esista sia che non esista. Sotto il modulo c'è il link **"Password dimenticata?"** (Sprint 67).
 - **Sessione** (Sprint 66): ogni accesso vale per quel dispositivo; si può essere collegati da più dispositivi contemporaneamente. La sessione **scade dopo 30 giorni senza utilizzo** su quel dispositivo (usare l'app la rinnova): a quel punto, o se la sessione viene revocata, l'app torna alla pagina di login. Con il rilascio dello Sprint 66 tutti gli utenti hanno dovuto rifare il login una volta.
 - **Tentativi limitati** (Sprint 66): troppi tentativi di login o di registrazione ravvicinati vengono bloccati per qualche minuto con il messaggio "Troppi tentativi. Attendi qualche minuto e riprova.". Dallo Sprint 67 sono limitati anche le richieste di email (reinvio del link, recupero password: poche all'ora per dispositivo e per indirizzo), i tentativi di password nel cambio password e nell'eliminazione dell'account, e l'export dei dati (3 al giorno).
 - **Recupero della password** (Sprint 67), dalla pagina "Recupera la password" (link "Password dimenticata?"):
@@ -198,8 +198,9 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
   - il link (valido **3 giorni**, utilizzabile **una sola volta**) apre la pagina "Scegli una nuova password"; dopo il salvataggio l'utente è **disconnesso da tutti i dispositivi** e accede con la nuova password. Un link scaduto o già usato mostra "Il link non è valido o è scaduto: chiedine uno nuovo." Usare il link conferma anche l'indirizzo email;
   - senza invio di email configurato la pagina mostra "Il recupero della password via email non è al momento disponibile. Scrivi al titolare indicato nell'informativa privacy."
 - **Cambio della password** dalle Impostazioni (§4.22, Sprint 67).
+- **Cambio dell'email di accesso** dalle Impostazioni (§4.22, Sprint 70), solo con l'invio di email configurato: password + nuovo indirizzo, link di conferma (3 giorni) al nuovo indirizzo e avviso a quello attuale; l'email di accesso cambia solo alla conferma.
 - **Login con Google.** È implementato ma **non è configurato in produzione**; dallo Sprint 67 il pulsante "Accedi con Google" **compare solo quando l'amministratore lo configura**, quindi oggi non si vede e l'unico accesso è email e password. Il percorso non è comunque completo (§8).
-- **Logout:** il pulsante "Esci" si trova nell'intestazione della lista job e nella schermata di accettazione dei testi legali. Chiude la sessione di quel dispositivo anche sul server (gli altri dispositivi restano collegati).
+- **Logout:** dallo Sprint 70 il pulsante "Esci" (icona in alto a destra, accanto al selettore della lingua) è nella barra di navigazione di **tutte le pagine** riservate agli utenti collegati; resta anche nella schermata di accettazione dei testi legali. Chiude la sessione di quel dispositivo anche sul server (gli altri dispositivi restano collegati) e **disattiva le notifiche push su quel dispositivo** (§4.12).
 - **Accettazione dei testi aggiornati** (Sprint 67). Chi non ha accettato le **versioni correnti** di informativa, termini e dichiarazione d'età vede, al posto di qualunque pagina riservata agli utenti collegati, una **schermata bloccante** "Informativa privacy e termini di servizio" con le stesse tre caselle e il pulsante "Continua". È successo una volta a tutti gli utenti registrati prima dello Sprint 67 e succederà di nuovo a tutti quando un testo cambierà versione. Dalla schermata, senza accettare, si può comunque **esportare i dati**, **eliminare l'account** o **uscire**; finché non si accetta la barra di navigazione resta nascosta e nessuna altra funzione è disponibile.
 - **Pagine legali** (Sprint 67): **Informativa privacy** (`/privacy`) e **Termini di servizio** (`/terms`) sono pagine pubbliche, leggibili anche senza account, in italiano o in inglese secondo la lingua dell'interfaccia, con versione e data di entrata in vigore. Un piccolo footer con i due link è presente in tutte le pagine dell'app. I dati del titolare del trattamento (nome, email e, facoltativo, indirizzo) li imposta l'amministratore nella configurazione; finché mancano nome o email le pagine mostrano l'avviso "Dati del titolare del trattamento da completare: questa pagina non è ancora nella sua versione definitiva." Una copia di riferimento dei testi è in `Docs/legal/`.
 - **Export ed eliminazione dell'account**: dalle Impostazioni (§4.22) e dalla schermata di accettazione (Sprint 67).
@@ -207,13 +208,15 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 **Onboarding (3 passi).**
 1. **Preferenze:**
    - nome e cognome (obbligatori; compaiono su CV, cover letter e nomi dei file);
-   - "Situazione / obiettivo attuale": dato salvato ma inerte, non usato da nessuna funzione;
+   - "Situazione / obiettivo attuale": dato salvato ma inerte, non usato da nessuna funzione (modificabile anche in seguito dalla pagina Profilo, Sprint 70);
+   - **fuso orario** (Sprint 70): elenco dei fusi IANA; proposto quello dell'account o, se è ancora il default Europe/Rome, quello del dispositivo. Alla registrazione l'account riceve già il fuso del dispositivo;
    - template CV: campo bloccato su "Standard (unico disponibile)", perché esiste un solo template;
    - lingua dei documenti: "lingua dell'offerta" (default) oppure "sempre inglese";
    - inclusione della foto nel CV (sì/no).
 2. **Profilo:**
    - **upload facoltativo di un CV esistente** (PDF o Word .docx), che pre-compila il form; nulla viene salvato finché l'utente non preme "Salva";
    - se il file non contiene testo leggibile (es. scansione), l'app avvisa "Non siamo riusciti a leggere il CV: compila il profilo manualmente" e non crea un profilo vuoto;
+   - dallo Sprint 70 gli altri errori hanno un messaggio dedicato: file troppo grande (oltre 5 MB, controllato già prima dell'invio), formato non supportato (solo PDF e .docx), troppe pagine (oltre 10), limite di 5 import al giorno raggiunto, servizio di lettura del CV non disponibile ("riprova più tardi o compila il profilo a mano");
    - poi l'utente compila o corregge tutte le sezioni (vedi sotto).
 3. **Prima ricerca:** tipo, keywords, città e paese. La ricerca viene creata e **attivata subito**, poi l'utente va alla lista.
 
@@ -222,7 +225,7 @@ La pagina di onboarding resta raggiungibile anche in seguito, ma non ha un link 
 **Profilo master.** Un solo profilo per utente. Contiene:
 - **dati di contatto:** telefono, **email da mostrare sul CV**, città e paese (con autocompletamento), link LinkedIn, foto. L'email del CV è distinta da quella di login (Sprint 41): se è vuota, CV e cover letter non mostrano alcuna email;
 - **sommario professionale;**
-- **esperienze lavorative**, raggruppate per azienda (più ruoli nella stessa azienda): ruolo, località, data di inizio e di fine (oppure "in corso"), bullet;
+- **esperienze lavorative**, raggruppate per azienda (più ruoli nella stessa azienda): ruolo, località, data di inizio e di fine (oppure "in corso"), bullet ("attività / competenze"), **tecnologie** (modificabili da onboarding e Profilo dallo Sprint 70; compaiono sul CV come riga "Tecnologie");
 - **istruzione:** istituto, titolo, località, data di inizio e di fine (oppure "in corso"), note;
 - **competenze** e **certificazioni** (voci semplici);
 - **lingue**, scelte da una **lista fissa di 36 lingue** con **4 livelli**: Elementary, Intermediate, Fluent, Mother tongue (Sprint 41). Sul CV nomi e livelli vengono tradotti nella lingua del documento.
@@ -234,11 +237,11 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - La data di fine dell'istruzione **non è obbligatoria**: "in corso" è ammesso.
 - Le **esperienze possono essere zero** (es. neolaureato).
 - Oltre 5 esperienze compare un avviso: il CV ne mostrerà al massimo 5.
-- Non c'è un limite applicato al numero o alla lunghezza dei bullet.
+- **Limiti dei testi** (Sprint 70): al massimo **15 bullet per esperienza**, ciascuno di **400 caratteri** (il campo non accetta testo più lungo; i bullet pre-compilati dal CV oltre il limite sono evidenziati); al massimo 30 esperienze, 15 voci di istruzione, 100 competenze, 50 certificazioni e 36 lingue. I limiti non sono retroattivi: un'esperienza salvata prima, con più bullet o bullet più lunghi, si può ancora salvare senza toccarli, ma non può crescere oltre e i bullet nuovi devono rispettare il limite.
 
 **Cosa recupera il pre-compilamento da CV.**
 - **Recupera:** sommario, telefono ed email (solo se scritti nel CV), aziende, ruoli, luoghi e bullet, istituti, titoli e note, competenze, certificazioni e lingue con livello. Le scale libere e quelle CEFR sono ricondotte ai 4 livelli; nel dubbio la voce viene omessa.
-- **Non recupera:** le **date** di esperienze e istruzione, città e LinkedIn. Vanno inserite a mano.
+- **Non recupera:** le **date** di esperienze e istruzione, città e LinkedIn. Vanno inserite a mano. Dallo Sprint 70 le tecnologie estratte dal CV restano nel form.
 
 **Opzioni dei documenti** (modificabili in seguito in Impostazioni, §4.22):
 - **lingua:** vale per CV, cover letter e messaggi di networking;
@@ -331,7 +334,7 @@ Nella sezione **Importati** c'è un riquadro con:
 
 **Filtri** (tutti visibili in linea, senza pannello separato). Si combinano in AND tra loro; dentro un filtro a scelta multipla le opzioni valgono in OR.
 - **Intervallo di date** "Dal" / "Al", sulla data di raccolta, nel fuso dell'utente, estremi inclusi.
-  - **Default: oggi–oggi.**
+  - **Default: oggi–oggi**, con "oggi" nel fuso dell'utente (dallo Sprint 70; prima era la data del dispositivo).
   - Il link "Tutte le date" toglie il limite e mostra tutto lo storico.
   - Sostituisce i vecchi periodi preimpostati (Sprint 46).
 - **Location:** testo libero, cercato come sottostringa nella località del job.
@@ -554,8 +557,8 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 **Regole del credito.**
 - Il credito è un **saldo unico in euro** sull'account. Copre tutte le azioni della tabella, sia sul Free sia sul Pro, tranne l'import, che resta precluso al Free.
 - Un'azione **fallita** non consuma nulla: l'unità di massimale o l'importo scalato vengono restituiti.
-- L'addebito a credito avviene **senza una conferma preventiva**.
-- L'utente **non vede** i contatori residui né il listino. I prezzi sono valori di default configurati dall'amministratore, non "da definire".
+- **Contatori e prezzi visibili** (Sprint 70): in Impostazioni il riquadro **"I tuoi limiti di oggi"** mostra per ogni azione a massimale usate oggi / massimale del piano e prezzo oltre il massimale ("Solo piano Pro" per l'import sul Free, "Non disponibile" per raccolta manuale e import CV), più il prezzo a messaggio delle due chat e l'ora in cui i contatori ripartono. Sotto i pulsanti di import da link, "Aggiungi manualmente" (anche nel popup) e "Raccogli ora" un'indicazione dice cosa succede alla prossima richiesta: "Incluso nel piano: ne restano N su M oggi", "Massimale di oggi raggiunto: questa azione costa X € (saldo Y €)" oppure, se il saldo non basta, che l'azione è bloccata.
+- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e generazione del CV dalla lista chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"). Nella pagina del job (CV, cover letter, messaggi) e nelle chat degli editor il costo non è ancora mostrato né confermato: i dati sono disponibili, l'integrazione è rinviata (§8.A punto 29). I prezzi sono valori di default configurati dall'amministratore, non "da definire".
 - Le **chat** degli editor sono utilizzabili **solo con credito disponibile**.
 - I massimali si **azzerano a mezzanotte (Europe/Rome)**, per tutti gli utenti.
 
@@ -574,7 +577,8 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 - **Preferenza "Ricevi notifiche push"** (Sprint 67), nello stesso riquadro, attiva di default:
   - togliendo la spunta le notifiche si spengono per l'account: l'app **elimina le registrazioni di tutti i dispositivi**, annulla quella del browser in uso e mostra "Notifiche disattivate: non riceverai notifiche su nessun dispositivo…"; nessuna notifica (mattutina o di inattività) viene più inviata;
   - per riattivarle si rimette la spunta e si preme di nuovo "Attiva notifiche" su ogni dispositivo. Anche attivare le notifiche su un dispositivo riaccende la preferenza.
-- Il logout non disattiva le notifiche su quel dispositivo.
+- **Logout** (Sprint 70): il dispositivo da cui si esce smette di ricevere le notifiche dell'account (registrazione eliminata sul server e annullata nel browser); gli altri dispositivi restano registrati. Dopo un nuovo accesso le notifiche vanno riattivate con "Attiva notifiche".
+- **Riattivazione** (Sprint 70): rimettendo la spunta, o attivando le notifiche su un dispositivo dopo averle spente, la notifica mattutina riparte da quel momento: i job creati mentre le notifiche erano spente non la fanno partire.
 
 **Notifica mattutina.**
 - Parte nella fascia **10:00–10:59 locali**, **solo se** esistono **nuovi job**: job creati **dopo l'ultima notifica mattutina** inviata a quell'utente (o dopo la registrazione).
@@ -591,7 +595,7 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 **Valgono per entrambe:**
 - un clic sulla notifica apre l'app sulla lista;
 - i testi sono **solo in italiano**, qualunque sia la lingua dell'interfaccia;
-- l'"ora locale" è quella del fuso dell'utente, che però **non è impostabile da interfaccia**: in pratica vale Europe/Rome (§8).
+- l'"ora locale" è quella del fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
 
 ### 4.13 Home e statistiche (Sprint 44)
 
@@ -822,25 +826,27 @@ Le statistiche si ricaricano dopo una raccolta manuale riuscita. Non ci sono alt
 
 **Profilo** (voce di menu "Profilo"). Pagina "Modifica profilo" con:
 - nome e cognome;
-- sommario, telefono, email del CV, città e paese, LinkedIn, caricamento di una nuova foto;
-- tutte le sezioni del profilo master (§4.1).
+- "Situazione / obiettivo attuale" (Sprint 70, con la nota che oggi non è usato nella generazione dei documenti);
+- sommario, telefono, email del CV, città e paese, LinkedIn;
+- **foto**: anteprima della foto attuale, caricamento di una nuova (salvata con "Salva modifiche") e, dallo Sprint 70, **"Rimuovi foto"** con conferma, che elimina subito anche il file dal server;
+- tutte le sezioni del profilo master (§4.1), con le **tecnologie** di ogni ruolo (Sprint 70).
 
 Si salva con il pulsante "Salva". Limiti della pagina:
 - **non** si può importare un CV (solo in onboarding);
-- la foto attuale si vede in anteprima (Sprint 66) ma non la si può rimuovere; caricandone una nuova, la precedente viene eliminata (Sprint 67);
-- le tecnologie delle esperienze non sono modificabili;
-- la "situazione / obiettivo" si imposta solo in onboarding.
+- caricando una nuova foto la precedente viene eliminata (Sprint 67).
 
-**Impostazioni** (voce di menu "Impostazioni"; il titolo della pagina è ancora "Il tuo account"). Sei riquadri:
+**Impostazioni** (voce di menu "Impostazioni"; dallo Sprint 70 anche il titolo della pagina è "Impostazioni" / "Settings", prima era "Il tuo account"). Sette riquadri:
 1. **Piano e credito:** piano (Free/Pro) e saldo del credito extra, in sola lettura (§4.11).
-2. **Ricerche salvate:** creazione, modifica, eliminazione, attivazione e disattivazione (§4.2).
-3. **Impostazioni:** lingua dell'interfaccia, lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
-4. **Notifiche push:** preferenza "Ricevi notifiche push" (Sprint 67) e attivazione sul dispositivo (§4.12).
-5. **Privacy e sicurezza** (Sprint 67):
+2. **I tuoi limiti di oggi** (Sprint 70): contatori, massimali e prezzi (§4.11).
+3. **Ricerche salvate:** creazione, modifica, eliminazione, attivazione e disattivazione (§4.2).
+4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e della Home e l'ora della notifica mattutina), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
+5. **Notifiche push:** preferenza "Ricevi notifiche push" (Sprint 67) e attivazione sul dispositivo (§4.12).
+6. **Privacy e sicurezza** (Sprint 67):
+   - **Email di accesso** (Sprint 70): email attuale e cambio con nuovo indirizzo + password. Il server invia un link di conferma (valido 3 giorni) al nuovo indirizzo e un avviso a quello attuale ("se non sei stato tu, cambia la password"); l'app mostra "Ti abbiamo inviato un link di conferma a …". L'email di accesso cambia solo quando si apre il link (pagina "Nuova email di accesso", che funziona anche da un dispositivo non collegato); il link vale una volta sola. Se il nuovo indirizzo appartiene già a un altro account la risposta è la stessa ma non parte nessuna email; se lo diventa prima della conferma, la conferma è rifiutata. Senza invio di email configurato il riquadro dice che il cambio non è disponibile. L'email mostrata sul CV (Profilo) è un dato diverso e non cambia;
    - **Cambia password:** password attuale, nuova password ripetuta due volte. Dopo il cambio gli **altri dispositivi vengono disconnessi**, quello in uso resta collegato ("Password cambiata. Gli altri dispositivi sono stati disconnessi."). Password attuale errata o nuova password troppo debole producono un messaggio d'errore;
    - **Documenti legali:** link a informativa privacy e termini di servizio, ciascuno con la versione accettata e la data ("versione 1.0 accettata il …");
    - **Esporta i miei dati:** scarica subito un **archivio ZIP** con tutti i dati dell'account in formato JSON (account, accettazioni, profilo, ricerche, offerte con punteggi e motivazioni, documenti generati, bozze e chat, messaggi di networking, filtri salvati, quote giornaliere, sessioni, dispositivi registrati per le notifiche, registri delle elaborazioni), i PDF di CV e cover letter, la foto e un file di istruzioni in italiano e inglese. La password non è inclusa. **Al massimo 3 export al giorno**; oltre: "Hai già esportato i dati 3 volte oggi: riprova domani.".
-6. **Zona pericolosa** (Sprint 67): **"Elimina account"**. Un popup chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
+7. **Zona pericolosa** (Sprint 67): **"Elimina account"**. Un popup chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
 
 Export ed eliminazione sono disponibili anche dalla schermata di accettazione dei testi legali (§4.1), senza dover prima accettare.
 
@@ -879,7 +885,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 24. **Personalizzazione di oggetto, saluto, destinatario e chiusura della cover letter.** Sono testi fissi per lingua.
 25. **Modifica e cancellazione dei messaggi di networking** generati.
 26. **Ulteriori metriche in Home** oltre alle tre esistenti (erano state chieste "altre metriche a scelta", nessuna è stata implementata).
-27. **Cambio dell'indirizzo email** di accesso dall'app: l'email resta in sola lettura (Sprint 67).
+27. *(Voce rimossa con lo Sprint 70: l'email di accesso si cambia dalle Impostazioni, §4.22.)*
 28. **Gestione dei consensi oltre i tre obbligatori**: non esistono consensi facoltativi (marketing, profilazione) né la revoca di singoli consensi; chi non accetta i testi può solo esportare i dati, eliminare l'account o uscire (Sprint 67).
 
 ---
@@ -898,11 +904,11 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - **età minima 16 anni**, dichiarata in registrazione;
   - **dati nell'Unione Europea**: il server è nell'UE e le elaborazioni AI usano la regione AWS di Francoforte con instradamento limitato alle regioni AWS dell'UE. Alcuni fornitori di servizi accessori (invio email e notifiche push, raccolta delle offerte, che riceve solo keywords e località delle ricerche) possono trattare dati anche fuori dall'UE, come indicato nell'informativa;
   - **conservazione**: dati dell'account per tutta la sua durata e cancellati subito con l'eliminazione (§4.22); **copie di backup 7 giorni**, poi cancellate automaticamente; **log di sicurezza del server** (con indirizzi IP) **14 giorni**; dati temporanei per i limiti di frequenza **al massimo 24 ore**; sessioni che scadono dopo **30 giorni** senza utilizzo o al logout; registri tecnici delle elaborazioni per la durata dell'account, poi solo in forma anonima;
-  - **diritti dell'interessato** esercitabili dall'app: accesso e portabilità con l'export dei dati, cancellazione con l'eliminazione dell'account, rettifica modificando profilo e impostazioni; per il resto si scrive al titolare indicato nell'informativa;
+  - **diritti dell'interessato** esercitabili dall'app: accesso e portabilità con l'export dei dati, cancellazione con l'eliminazione dell'account, rettifica modificando profilo e impostazioni (dallo Sprint 70 anche l'email di accesso); per il resto si scrive al titolare indicato nell'informativa;
   - **nessun cookie di profilazione, analisi o pubblicità**: sul dispositivo restano solo il token di accesso e la lingua scelta (memoria locale del browser) e i file dell'app installabile;
   - **trasparenza AI**: i punti in cui l'app genera testo con l'AI mostrano l'avviso "Contenuto generato con l'AI: verificalo prima di usarlo." (§4.7).
 - **Fuso orario.**
-  - Il "giorno" della lista e della Home e l'orario delle notifiche seguono il fuso dell'utente. Il fuso però non è impostabile da interfaccia, quindi di fatto vale **Europe/Rome** per tutti.
+  - Il "giorno" della lista e della Home (compreso il default "oggi" del filtro date) e l'orario delle notifiche seguono il fuso dell'utente, impostabile in Impostazioni e in onboarding (Sprint 70). I nuovi account ricevono il fuso del dispositivo; quelli precedenti restano su Europe/Rome finché l'utente non lo cambia.
   - Raccolta notturna e azzeramento dei massimali seguono sempre Europe/Rome.
 - **Freschezza dei dati.** Al mattino si vedono le offerte pubblicate nelle 24 ore precedenti la raccolta notturna (o quella manuale).
 - **Reattività — lista:** si apre senza attesa percepibile. Si intende reattività del server, **non** cache offline (§5.20).
@@ -911,6 +917,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - non c'è un tempo massimo garantito;
   - la raccolta manuale può richiedere minuti;
   - durante l'attesa il comando sullo stesso job è disabilitato.
+- **Aggiornamenti dell'app** (Sprint 70). Quando viene pubblicata una nuova versione, una scheda già aperta mostra in basso "Nuova versione disponibile" con il pulsante **"Aggiorna"**, che ricarica la pagina. L'app non si ricarica mai da sola, così non si perdono modifiche non salvate; il controllo avviene ogni 30 minuti e quando si torna sulla scheda.
 - **Gestione dei fallimenti.**
   - Se un'azione AI fallisce, l'utente vede un messaggio semplice ("Non siamo riusciti a generare … Riprova."), non un errore tecnico, e **non perde** massimale né credito.
   - Se la raccolta notturna fallisce, all'utente semplicemente non arrivano job nuovi.
@@ -941,6 +948,9 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Senza invio di email configurato la registrazione fa entrare subito nell'app e "Password dimenticata?" mostra che il recupero non è disponibile (Sprint 67).
 - ☐ "Password dimenticata?" risponde allo stesso modo per email registrate e non; il link ricevuto permette una sola volta di scegliere una nuova password e disconnette tutti i dispositivi (Sprint 67).
 - ☐ Il cambio password dalle Impostazioni richiede la password attuale e disconnette gli altri dispositivi, lasciando collegato quello in uso (Sprint 67).
+- ☐ Il cambio dell'email di accesso richiede la password; l'email cambia solo aprendo il link ricevuto al nuovo indirizzo, l'indirizzo attuale riceve un avviso, il link non vale una seconda volta; senza invio di email il cambio non è disponibile (Sprint 70).
+- ☐ "Esci" è raggiungibile da ogni pagina riservata e disattiva le notifiche push del dispositivo (Sprint 70).
+- ☐ Con il profilo incompleto (nessun titolo di studio) ogni pagina, tranne onboarding e Profilo, mostra il banner con il link per completarlo (Sprint 70).
 - ☐ Un utente che non ha accettato le versioni correnti di informativa e termini vede solo la schermata di accettazione, da cui può accettare, esportare i dati, eliminare l'account o uscire; nessun'altra funzione risponde finché non accetta (Sprint 67).
 - ☐ `/privacy` e `/terms` si aprono senza login, in italiano o in inglese; se mancano i dati del titolare mostrano l'avviso; il footer con i due link è in tutte le pagine (Sprint 67).
 - ☐ Il pulsante "Accedi con Google" non compare finché il login Google non è configurato (Sprint 67).
@@ -953,6 +963,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Un CV senza testo leggibile produce l'avviso di compilazione manuale, senza creare un profilo vuoto.
 - ☐ La generazione del CV è rifiutata con un messaggio se il profilo non ha almeno una voce di istruzione. Un'istruzione "in corso" (senza data di fine) è accettata.
 - ☐ Le esperienze possono essere zero.
+- ☐ Un bullet nuovo oltre 400 caratteri o un'esperienza con più di 15 bullet sono rifiutati; un'esperienza salvata prima oltre i limiti si salva ancora senza modificarne i bullet in eccesso (Sprint 70).
+- ☐ Dalla pagina Profilo si rimuove la foto (anche il file sul server), si modificano le tecnologie dei ruoli e l'obiettivo (Sprint 70).
 - ☐ Una modifica al profilo vale per i documenti generati in seguito, non per quelli già prodotti.
 
 ### Ricerche
@@ -1050,6 +1062,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 ### Piani, massimali e credito
 - ☐ Ogni azione della tabella di §4.11 ha un contatore giornaliero proprio, che si azzera a mezzanotte Europe/Rome.
 - ☐ Il credito è un saldo in euro, visibile in Impostazioni e modificabile solo dall'amministratore. Non esistono voucher né checkout.
+- ☐ "I tuoi limiti di oggi" mostra per ogni azione usate / massimale e prezzo extra, e i prezzi delle chat; import da link e job manuale indicano il costo della prossima richiesta e chiedono conferma quando andrebbero a credito (Sprint 70).
 - ☐ Un'azione fallita non consuma né massimale né credito.
 
 ### Notifiche
@@ -1057,6 +1070,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Togliendo la spunta "Ricevi notifiche push" l'utente non riceve più alcuna notifica e le registrazioni di tutti i suoi dispositivi vengono eliminate; riattivando le notifiche su un dispositivo la preferenza torna attiva (Sprint 67).
 - ☐ Con job creati dopo l'ultima notifica mattutina, l'utente riceve la notifica tra le 10:00 e le 10:59 locali. Senza job nuovi, nessuna notifica.
 - ☐ Uno stesso batch non viene annunciato due volte.
+- ☐ Dopo il logout il dispositivo non riceve più notifiche dell'account; riattivando le notifiche, i job creati mentre erano spente non fanno partire la notifica mattutina (Sprint 70).
 - ☐ Dopo 7 giorni senza "candidatura fatta" (a partire dalla registrazione o dall'ultima candidatura) l'utente riceve una volta il promemoria di inattività.
 
 ### Requisiti trasversali
@@ -1065,6 +1079,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ L'interfaccia è in italiano se il dispositivo è in italiano, altrimenti in inglese, ed è modificabile.
 - ☐ Le chat degli editor, il pannello di generazione del CV e i popup di cover letter e messaggi mostrano l'avviso sul contenuto generato con l'AI (Sprint 67).
 - ☐ L'app non usa cookie di profilazione né strumenti di analisi; i backup più vecchi di 7 giorni vengono cancellati automaticamente (Sprint 67).
+- ☐ Dopo il rilascio di una nuova versione una scheda aperta mostra "Nuova versione disponibile — Aggiorna" e si ricarica solo premendo il pulsante (Sprint 70).
 
 ---
 
@@ -1116,7 +1131,7 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 26. **Riferimento ai bullet fragile.** Il contesto ✦ della chat CV si basa sulla posizione del bullet: riordinare o eliminare bullet dopo averli indicati può spostare il riferimento su un altro bullet. Allo stesso modo, nella chat della cover letter, accettare più aggiunte o rimozioni dello stesso turno può far puntare le proposte successive al paragrafo sbagliato.
 27. **Testi della chat della cover letter.** Il messaggio iniziale e il segnaposto del campo parlano di "CV" e di "sommario".
 28. **Grassetto solo nei bullet.** I marcatori di grassetto sono riconosciuti solo nei bullet delle esperienze: se finiscono in altri campi (es. un sommario modificato) vengono stampati come asterischi.
-29. **Prezzo della chat non visibile.** Il costo per messaggio non viene mostrato prima dell'invio.
+29. **Prezzo della chat non visibile.** *(In parte risolto nello Sprint 70: il prezzo a messaggio è in Impostazioni, "I tuoi limiti di oggi"; nell'editor non è ancora mostrato.)* Il costo per messaggio non viene mostrato prima dell'invio.
 
 **Cover letter e networking**
 30. **Pulsante "Genera messaggio" sbloccato.** Il pulsante resta disabilitato solo durante la richiesta della pagina corrente: lo stato "in generazione" non viene mostrato agli altri dispositivi o dopo un ricaricamento. Il blocco lato server resta comunque attivo.
@@ -1126,19 +1141,19 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 **Account, piani e notifiche**
 33. **Login con Google non completato.** Non è configurato in produzione e dallo Sprint 67 il pulsante è nascosto. Anche configurandolo, il ritorno da Google non produce una sessione dell'app e salterebbe le tre caselle dei consensi e il codice di invito: va completato prima di renderlo disponibile. Le pagine di accesso del componente usato per Google restano comunque raggiungibili dal browser; un account creato da lì non può usare l'app ed è soggetto alla schermata di accettazione.
 34. *(Risolto nello Sprint 67: recupero e cambio password, cancellazione dell'account ed export dei dati esistono, §4.1 e §4.22.)*
-35. **Contatori e prezzi non visibili.** L'utente non vede i massimali residui né i prezzi. Scopre il passaggio a credito solo dal saldo che cala, e il blocco solo dal messaggio d'errore.
-36. **Fuso orario fisso.** Il fuso orario per utente esiste ma non si imposta da interfaccia: le "10:00 locali" e il "giorno" della lista sono di fatto quelli italiani. La data predefinita del filtro usa invece la data del dispositivo.
-37. **Logout e notifiche.** Il logout non disattiva le notifiche su quel dispositivo: per spegnerle si usa la preferenza in Impostazioni, che vale per tutti i dispositivi dell'account (dallo Sprint 67 le notifiche sono disattivabili).
+35. **Contatori e prezzi non visibili.** *(Risolto nello Sprint 70: "I tuoi limiti di oggi" in Impostazioni; costo della prossima richiesta e conferma prima dell'addebito per import, job manuale, raccolta manuale e CV dalla lista. Resta da integrare la pagina del job: generazione di CV, cover letter e messaggi.)* L'utente non vede i massimali residui né i prezzi. Scopre il passaggio a credito solo dal saldo che cala, e il blocco solo dal messaggio d'errore.
+36. **Fuso orario fisso.** *(Risolto nello Sprint 70: fuso impostabile in Impostazioni e in onboarding, default dal dispositivo alla registrazione; il default del filtro date usa il fuso dell'utente.)* Il fuso orario per utente esiste ma non si imposta da interfaccia: le "10:00 locali" e il "giorno" della lista sono di fatto quelli italiani. La data predefinita del filtro usa invece la data del dispositivo.
+37. **Logout e notifiche.** *(Risolto nello Sprint 70: il logout disattiva le notifiche del dispositivo; alla riattivazione non si contano i job del periodo di silenzio.)* Il logout non disattiva le notifiche su quel dispositivo: per spegnerle si usa la preferenza in Impostazioni, che vale per tutti i dispositivi dell'account (dallo Sprint 67 le notifiche sono disattivabili).
 38. **Lingua di messaggi e notifiche.** Messaggi d'errore del server, notifiche e prefisso del limite per lingua sono solo in italiano, anche con l'interfaccia in inglese.
-39. **Import CV in errore.** Se il servizio AI fallisce durante l'import del CV in onboarding, l'utente vede solo un errore generico (l'import non viene però conteggiato nel limite giornaliero).
-40. **Limiti della pagina Profilo:** non permette di rimuovere la foto; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
-41. **Onboarding saltabile.** Dopo il login non c'è alcun rimando all'onboarding se il profilo è incompleto: l'utente se ne accorge solo quando la generazione del CV viene rifiutata. Con la verifica dell'email attiva (Sprint 67) l'onboarding è proposto solo se il primo login avviene dal pulsante della pagina di conferma; un login fatto in altro modo porta alla lista.
-42. **Titolo della pagina Impostazioni.** Il titolo è ancora "Il tuo account".
-43. **Logout solo dalla lista.** Il logout si trova solo nella pagina della lista job (e, dallo Sprint 67, nella schermata di accettazione dei testi legali).
-44. **Tab rimaste aperte dopo un aggiornamento.** Una scheda dell'app aperta prima di un aggiornamento continua a usare la versione precedente finché non viene ricaricata (es. grassetti mostrati come `**testo**` nell'editor). Non c'è un ricaricamento automatico.
+39. **Import CV in errore.** *(Risolto nello Sprint 70: messaggi dedicati per file troppo grande, formato, pagine, limite giornaliero e servizio AI non disponibile.)* Se il servizio AI fallisce durante l'import del CV in onboarding, l'utente vede solo un errore generico (l'import non viene però conteggiato nel limite giornaliero).
+40. **Limiti della pagina Profilo:** *(Risolto nello Sprint 70: foto rimovibile, tecnologie e obiettivo modificabili.)* non permette di rimuovere la foto; le tecnologie delle esperienze non sono modificabili da nessuna schermata; l'obiettivo è modificabile solo in onboarding.
+41. **Onboarding saltabile.** *(Risolto nello Sprint 70: banner fisso con il link finché il profilo non è completo.)* Dopo il login non c'è alcun rimando all'onboarding se il profilo è incompleto: l'utente se ne accorge solo quando la generazione del CV viene rifiutata. Con la verifica dell'email attiva (Sprint 67) l'onboarding è proposto solo se il primo login avviene dal pulsante della pagina di conferma; un login fatto in altro modo porta alla lista.
+42. **Titolo della pagina Impostazioni.** *(Risolto nello Sprint 70.)* Il titolo è ancora "Il tuo account".
+43. **Logout solo dalla lista.** *(Risolto nello Sprint 70: "Esci" nella barra in alto di ogni pagina.)* Il logout si trova solo nella pagina della lista job (e, dallo Sprint 67, nella schermata di accettazione dei testi legali).
+44. **Tab rimaste aperte dopo un aggiornamento.** *(Risolto nello Sprint 70: avviso "Nuova versione disponibile — Aggiorna", senza ricaricamenti automatici.)* Una scheda dell'app aperta prima di un aggiornamento continua a usare la versione precedente finché non viene ricaricata (es. grassetti mostrati come `**testo**` nell'editor). Non c'è un ricaricamento automatico.
 
 **Privacy, email e backup (Sprint 67)**
-60. **Email non modificabile.** L'indirizzo email di accesso non si può cambiare dall'app (§5.27).
+60. **Email non modificabile.** *(Risolto nello Sprint 70: cambio dalle Impostazioni con conferma al nuovo indirizzo.)* L'indirizzo email di accesso non si può cambiare dall'app (§5.27).
 61. **Backup solo sul server.** Le copie di backup restano sullo stesso server dell'app: un guasto del disco le perderebbe insieme ai dati. Non sono cifrate; una copia altrove si fa solo a mano.
 62. **Export lento per account molto grandi.** L'archivio viene preparato al momento del download: con moltissimi PDF può richiedere qualche secondo, senza indicazione di avanzamento oltre al pulsante "Preparazione…".
 63. *(Risolto nello Sprint 67: il popup di eliminazione annuncia l'email di conferma solo se l'invio di email è configurato.)*
@@ -1154,7 +1169,7 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 52. **Volume senza tetti.** Senza cap, un utente con molte ricerche può ricevere centinaia di job per notte (fino a 150 per gruppo di ricerche). È voluto (le richieste alla fonte sono comunque pagate), ma resta da osservare il carico sulla lista e i costi di scoring.
 53. **Timer di inattività ancorato alla sola "candidatura fatta".** Scatta anche per utenti appena registrati o attivi che non marcano candidature (effetto voluto, da rivedere).
 54. **Fonte non disponibile indistinguibile da "nessun job".** È voluto. Resta da valutare se in futuro serva distinguerli.
-55. **Riferimenti orari diversi.** Raccolta e massimali seguono Europe/Rome; lista e notifiche il fuso dell'utente, oggi comunque Europe/Rome. Per utenti lontani dall'Europa i dati arrivano con ore di ritardo e i massimali si azzerano a un orario locale diverso dalla mezzanotte.
+55. **Riferimenti orari diversi.** Raccolta e massimali seguono Europe/Rome; lista e notifiche il fuso dell'utente (impostabile dallo Sprint 70). Per utenti lontani dall'Europa i dati arrivano con ore di ritardo e i massimali si azzerano a un orario locale diverso dalla mezzanotte.
 56. **Privacy.** Dallo Sprint 67 esistono consensi in registrazione, pagine legali, export e cancellazione dell'account (§4.1, §4.22, §6). Resta da decidere cosa fare delle **copie delle email di servizio** (indirizzo del destinatario e testo, mai dati del profilo) che rimangono nella posta inviata dell'account email mittente, anche dopo l'eliminazione dell'account: cancellarle periodicamente a mano oppure dichiararne la conservazione nell'informativa.
 57. **Assenza di OCR.** Per i CV in formato immagine o scansione l'utente compila a mano. Resta da verificare quanto spesso succeda.
 58. **Rigenerazione senza limite per job.** È limitata solo dal massimale giornaliero e dal credito.

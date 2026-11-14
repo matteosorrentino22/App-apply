@@ -8,7 +8,9 @@ import {
   createSectionItem,
   updateSectionItem,
   deleteSectionItem,
+  removeProfilePhoto,
 } from '../api/profile'
+import { Trash2 } from 'lucide-react'
 import ListSectionEditor, { emptyRow } from '../components/ListSectionEditor'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
 import ExperienceGroupEditor from '../components/ExperienceGroupEditor'
@@ -90,6 +92,7 @@ function groupExperiencesByCompany(items) {
       end_date: item.end_date || '',
       ongoing: !item.end_date,
       bullets: item.bullets || [],
+      technologies: item.technologies || [],
     })
   }
   return groups
@@ -106,6 +109,7 @@ function flattenRoles(companies) {
       start_date: role.start_date || null,
       end_date: role.ongoing ? null : role.end_date || null,
       bullets: role.bullets,
+      technologies: role.technologies || [],
     })),
   )
 }
@@ -162,10 +166,14 @@ export default function ProfilePage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  // Nome e obiettivo stanno sull'account (PATCH /api/accounts/me/);
+  // l'obiettivo è modificabile anche dopo l'onboarding (Sprint 70).
   const [nameFields, setNameFields] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
+    objective_statement: user?.objective_statement || '',
   })
+  const [removingPhoto, setRemovingPhoto] = useState(false)
   const [profileFields, setProfileFields] = useState({
     summary: '',
     phone: '',
@@ -295,11 +303,29 @@ export default function ProfilePage() {
 
       setNotice(t('profile.saved'))
       setPhotoFile(null)
+      // Aggiorna `profile_status` (banner del profilo incompleto).
+      refreshUser().catch(() => {})
     } catch (err) {
       const detail = formatApiErrorDetail(err)
       setError(detail ? `${t('profile.saveError')} (${detail})` : t('profile.saveError'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    if (!window.confirm(t('profileExtras.photoRemoveConfirm'))) return
+    setError('')
+    setNotice('')
+    setRemovingPhoto(true)
+    try {
+      await removeProfilePhoto()
+      setPhotoUrl(null)
+      setNotice(t('profileExtras.photoRemoved'))
+    } catch {
+      setError(t('common.genericError'))
+    } finally {
+      setRemovingPhoto(false)
     }
   }
 
@@ -346,6 +372,17 @@ export default function ProfilePage() {
                   onChange={(event) => setNameFields({ ...nameFields, last_name: event.target.value })}
                 />
               </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="objective">{t('onboarding.objectiveLabel')}</Label>
+              <Textarea
+                id="objective"
+                maxLength={2000}
+                placeholder={t('onboarding.objectivePlaceholder')}
+                value={nameFields.objective_statement}
+                onChange={(event) => setNameFields({ ...nameFields, objective_statement: event.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">{t('profileExtras.objectiveHint')}</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="summary">{t('profile.summary')}</Label>
@@ -403,7 +440,20 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="photo">{t('profile.photo')}</Label>
               {photoUrl && (
-                <img src={photoUrl} alt={t('profile.photo')} className="h-16 w-16 rounded-full border border-border object-cover" />
+                <div className="flex items-center gap-3">
+                  <img src={photoUrl} alt={t('profile.photo')} className="h-16 w-16 rounded-full border border-border object-cover" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemovePhoto}
+                    disabled={removingPhoto || saving}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t('profileExtras.photoRemove')}
+                  </Button>
+                </div>
               )}
               <Input
                 id="photo"
@@ -411,6 +461,7 @@ export default function ProfilePage() {
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setPhotoFile(event.target.files[0] || null)}
               />
+              {photoFile && <p className="text-xs text-muted-foreground">{t('profileExtras.photoNewHint')}</p>}
             </div>
           </CardContent>
         </Card>

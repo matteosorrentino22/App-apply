@@ -14,6 +14,7 @@ from .tasks import send_service_email
 logger = logging.getLogger(__name__)
 
 VERIFY_EMAIL_SALT = "apps.accounts.verify-email"
+CHANGE_EMAIL_SALT = "apps.accounts.change-email"
 
 _SIGNATURE = {
     "it": "\n\n— App-apply\nEmail automatica: non rispondere a questo messaggio.",
@@ -65,6 +66,37 @@ MESSAGES = {
             "To choose a new one open this link (valid for 3 days, single use):\n\n{link}\n\n"
             "After the change you will be logged out of all devices.\n\n"
             "If you did not request it, ignore this email: your password stays the same.",
+        ),
+    },
+    "email_change_confirm": {
+        "it": (
+            "Conferma il nuovo indirizzo email",
+            "Ciao,\n\nè stato chiesto di usare questo indirizzo come nuova email di accesso di un "
+            "account App-apply. Per confermare apri questo link (valido 3 giorni):\n\n{link}\n\n"
+            "Finché non confermi, l'email di accesso resta quella di prima. Se non sei stato tu, "
+            "ignora questa email.",
+        ),
+        "en": (
+            "Confirm your new email address",
+            "Hi,\n\nsomeone asked to use this address as the new login email of an App-apply "
+            "account. To confirm open this link (valid for 3 days):\n\n{link}\n\n"
+            "Until you confirm, the login email stays the same. If it wasn't you, ignore this email.",
+        ),
+    },
+    "email_change_notice": {
+        "it": (
+            "Richiesta di cambio dell'email di accesso",
+            "Ciao,\n\nè stato chiesto di cambiare l'email di accesso del tuo account App-apply. "
+            "Abbiamo inviato un link di conferma al nuovo indirizzo: l'email di accesso cambia solo "
+            "dopo la conferma, fino ad allora resta questa.\n\nSe non sei stato tu, qualcuno conosce "
+            "la tua password: cambiala subito dalle Impostazioni dell'app ({settings_link}).",
+        ),
+        "en": (
+            "Login email change requested",
+            "Hi,\n\nsomeone asked to change the login email of your App-apply account. We sent a "
+            "confirmation link to the new address: the login email changes only after it is "
+            "confirmed, until then it stays this one.\n\nIf it wasn't you, someone knows your "
+            "password: change it right away from the app Settings ({settings_link}).",
         ),
     },
     "account_deleted": {
@@ -125,6 +157,39 @@ def read_verification_token(token):
     if not user_id.isdigit() or not email:
         raise signing.BadSignature("payload non valido")
     return int(user_id), email
+
+
+def make_email_change_token(user, new_email):
+    # Contiene anche l'email attuale: dopo il cambio il link non vale più
+    # (stesso schema della verifica, nessuna tabella in più).
+    return signing.TimestampSigner(salt=CHANGE_EMAIL_SALT).sign_object(
+        {"id": user.pk, "old": user.email.lower(), "new": new_email.lower()}
+    )
+
+
+def read_email_change_token(token):
+    """(user_id, email attuale, nuova email) dal token, o solleva
+    signing.SignatureExpired / signing.BadSignature."""
+    value = signing.TimestampSigner(salt=CHANGE_EMAIL_SALT).unsign_object(
+        token, max_age=settings.EMAIL_VERIFICATION_MAX_AGE
+    )
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("id"), int)
+        or not all(isinstance(value.get(key), str) and value[key] for key in ("old", "new"))
+    ):
+        raise signing.BadSignature("payload non valido")
+    return value["id"], value["old"], value["new"]
+
+
+def send_email_change_emails(user, new_email):
+    send_templated_email(
+        "email_change_confirm", new_email, user.interface_language,
+        link=_url("/confirm-email-change", t=make_email_change_token(user, new_email)),
+    )
+    send_templated_email(
+        "email_change_notice", user.email, user.interface_language, settings_link=_url("/settings"),
+    )
 
 
 def send_verification_email(user):

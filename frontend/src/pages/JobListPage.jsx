@@ -35,6 +35,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import JobCard from '@/components/JobCard'
+import { ActionCostHint } from '@/components/ActionCost'
+import { confirmCreditCharge, useUsage } from '@/lib/usage'
 import MultiSelectFilter from '@/components/MultiSelectFilter'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 import { todayInputValue } from '../utils/date'
@@ -64,8 +66,10 @@ function parseList(value, allowed) {
 }
 
 export default function JobListPage() {
-  const { t } = useLanguage()
-  const { user, logout } = useAuth()
+  const { t, lang } = useLanguage()
+  const { user } = useAuth()
+  // Contatori e prezzi di import e job manuale (Sprint 70).
+  const { usage, refresh: refreshUsage } = useUsage()
   const { showToast } = useToast()
 
   // Sezione e filtri vivono nella query string (Sprint 68): tornando dal
@@ -75,8 +79,10 @@ export default function JobListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const sectionParam = searchParams.get('section')
   const section = SECTIONS.includes(sectionParam) ? sectionParam : 'main'
-  const dateFrom = searchParams.has('from') ? searchParams.get('from') : todayInputValue()
-  const dateTo = searchParams.has('to') ? searchParams.get('to') : todayInputValue()
+  // "Oggi" nel fuso dell'utente, come il filtro lato server (Sprint 70).
+  const today = todayInputValue(user?.timezone)
+  const dateFrom = searchParams.has('from') ? searchParams.get('from') : today
+  const dateTo = searchParams.has('to') ? searchParams.get('to') : today
   const query = searchParams.get('q') || ''
   const location = searchParams.get('location') || ''
   const recruiterParam = searchParams.get('recruiter')
@@ -296,6 +302,7 @@ export default function JobListPage() {
   }
 
   async function handleGenerateCv(job) {
+    if (!confirmCreditCharge(t, lang, usage, 'cv')) return
     setGeneratingIds((current) => new Set(current).add(job.id))
     try {
       await generateCv(job.id)
@@ -316,6 +323,7 @@ export default function JobListPage() {
         next.delete(job.id)
         return next
       })
+      refreshUsage()
     }
   }
 
@@ -356,6 +364,7 @@ export default function JobListPage() {
   async function handleImport(event) {
     event.preventDefault()
     setImportError('')
+    if (!confirmCreditCharge(t, lang, usage, 'import')) return
     setImporting(true)
     try {
       await importJob(importUrl)
@@ -368,6 +377,7 @@ export default function JobListPage() {
       )
     } finally {
       setImporting(false)
+      refreshUsage()
     }
   }
 
@@ -380,6 +390,7 @@ export default function JobListPage() {
   async function handleCreateManualJob(event) {
     event.preventDefault()
     setManualJobError('')
+    if (!confirmCreditCharge(t, lang, usage, 'manual_job')) return
     setCreatingManualJob(true)
     try {
       await createManualJob(manualJobFields)
@@ -393,6 +404,7 @@ export default function JobListPage() {
       )
     } finally {
       setCreatingManualJob(false)
+      refreshUsage()
     }
   }
 
@@ -406,9 +418,6 @@ export default function JobListPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-10">
       <header className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">{t('list.title')}</h1>
-        <Button variant="secondary" size="sm" onClick={logout}>
-          {t('list.logout')}
-        </Button>
       </header>
 
       <div className="flex gap-2">
@@ -446,6 +455,7 @@ export default function JobListPage() {
                   {importing ? t('jobs.importing') : t('jobs.importButton')}
                 </Button>
               </div>
+              <ActionCostHint usage={usage} action="import" />
               {importError && (
                 <p role="alert" className="text-sm text-destructive">
                   {importError}
@@ -456,9 +466,12 @@ export default function JobListPage() {
             <p className="text-sm text-muted-foreground">{t('jobs.importProOnly')}</p>
           )}
 
-          <Button type="button" variant="secondary" size="sm" onClick={openManualJobDialog} className="w-fit">
-            {t('jobs.addManualJobButton')}
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button type="button" variant="secondary" size="sm" onClick={openManualJobDialog} className="w-fit">
+              {t('jobs.addManualJobButton')}
+            </Button>
+            <ActionCostHint usage={usage} action="manual_job" />
+          </div>
         </div>
       )}
 
@@ -719,6 +732,7 @@ export default function JobListPage() {
               />
             </div>
 
+            <ActionCostHint usage={usage} action="manual_job" />
             {manualJobError && (
               <p role="alert" className="text-sm text-destructive">
                 {manualJobError}

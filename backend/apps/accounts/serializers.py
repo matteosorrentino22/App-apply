@@ -4,7 +4,10 @@ import zoneinfo
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone as dj_timezone
 from rest_framework import serializers
+
+from apps.profiles.models import Profile
 
 from .emails import email_enabled
 from .legal import MIN_AGE, missing_acceptances
@@ -13,6 +16,10 @@ from .models import User
 
 INVALID_INVITE_MESSAGE = "Registrazione non consentita: codice di invito mancante o non valido."
 EMAIL_TAKEN_MESSAGE = "Un utente con questa email esiste già."
+
+
+def is_valid_timezone(value):
+    return bool(value) and value in zoneinfo.available_timezones()
 
 
 class LegalConsentFields(serializers.Serializer):
@@ -45,11 +52,14 @@ class RegisterSerializer(LegalConsentFields, serializers.ModelSerializer):
     interface_language = serializers.ChoiceField(
         choices=User.InterfaceLanguage.choices, required=False, write_only=True
     )
+    # Fuso rilevato dal browser (Sprint 70): un nome non riconosciuto non
+    # blocca la registrazione, resta il default (Europe/Rome).
+    timezone = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=50)
 
     class Meta:
         model = User
         fields = [
-            "email", "password", "invite_code", "interface_language",
+            "email", "password", "invite_code", "interface_language", "timezone",
             "accept_privacy", "accept_terms", "confirm_age",
         ]
         # Il controllo di unicità è in validate(), dopo il codice di invito:
@@ -70,13 +80,18 @@ class RegisterSerializer(LegalConsentFields, serializers.ModelSerializer):
             raise serializers.ValidationError({"email": [EMAIL_TAKEN_MESSAGE]})
         return attrs
 
+    def validate_timezone(self, value):
+        return value if is_valid_timezone(value) else ""
+
     def create(self, validated_data):
+        extra = {"timezone": validated_data["timezone"]} if validated_data.get("timezone") else {}
         return User.objects.create_user(
             username=validated_data["email"],
             email=validated_data["email"],
             password=validated_data["password"],
             interface_language=validated_data.get("interface_language", User.InterfaceLanguage.IT),
             email_verified=not email_enabled(),
+            **extra,
         )
 
 
@@ -118,6 +133,7 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             "legal_acceptance_required",
             "legal_missing",
             "legal_acceptances",
+            "profile_status",
         ]
         # extra_credit è gestito solo da amministratore (Django Admin, §3
         # funzionali "Gestione account": nessun checkout/pagamento in UI) —
@@ -128,6 +144,20 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
     legal_acceptance_required = serializers.SerializerMethodField()
     legal_missing = serializers.SerializerMethodField()
     legal_acceptances = serializers.SerializerMethodField()
+    profile_status = serializers.SerializerMethodField()
+
+    def get_profile_status(self, user):
+        # Sprint 70: "complete" con la stessa regola della generazione CV
+        # (`Profile.is_complete`, almeno un titolo di studio); "empty" se
+        # non c'è ancora nulla (onboarding mai fatto), altrimenti "incomplete".
+        profile = Profile.objects.filter(user=user).first()
+        if profile is None:
+            return "empty"
+        if profile.is_complete:
+            return "complete"
+        if profile.experiences.exists() or profile.summary:
+            return "incomplete"
+        return "empty"
 
     def get_legal_missing(self, user):
         return missing_acceptances(user)
@@ -146,11 +176,16 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
         return latest
 
     def validate_timezone(self, value):
-        if value not in zoneinfo.available_timezones():
+        if not is_valid_timezone(value):
             raise serializers.ValidationError("Fuso orario non valido.")
         return value
 
     def update(self, instance, validated_data):
+        # Notifiche riaccese (Sprint 70): `last_notified_at` riparte da ora,
+        # così la prima notifica mattutina non conta i job del periodo di
+        # silenzio.
+        if validated_data.get("notifications_enabled") is True and not instance.notifications_enabled:
+            validated_data["last_notified_at"] = dj_timezone.now()
         # Solo i campi modificati (Sprint 66): `instance` è request.user,
         # letto all'autenticazione — un save() completo riscriverebbe anche
         # `extra_credit` con il valore di allora, annullando un addebito o
@@ -195,6 +230,20 @@ class DeleteAccountSerializer(PasswordCheckMixin, serializers.Serializer):
         if value is not True:
             raise serializers.ValidationError("Conferma esplicita richiesta.")
         return value
+
+
+class EmailChangeSerializer(PasswordCheckMixin, serializers.Serializer):
+    password = serializers.CharField(write_only=True, max_length=128)
+    new_email = serializers.EmailField(max_length=254)
+
+    def validate_new_email(self, value):
+        if value.strip().lower() == self.context["request"].user.email.lower():
+            raise serializers.ValidationError("È già la tua email di accesso.")
+        return value.strip()
+
+
+class EmailChangeConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=1000)
 
 
 class LegalAcceptanceSerializer(LegalConsentFields):

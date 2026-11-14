@@ -8,6 +8,8 @@ import { createSearch, activateSearch } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import { formatApiErrorDetail } from '../../utils/apiErrors'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
+import TimezoneSelect from '../../components/TimezoneSelect'
+import { browserTimeZone } from '../../utils/date'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../../utils/languageOptions'
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
 import EducationListEditor, { emptyEducationRow } from '../../components/EducationListEditor'
@@ -67,9 +69,45 @@ function groupExperiencesByCompany(items) {
       role: item.role || '',
       location: item.location || '',
       bullets: item.bullets || [],
+      technologies: item.technologies || [],
     })
   }
   return groups
+}
+
+// Fuso proposto (Sprint 70): quello dell'account, salvo che sia ancora il
+// default del server (Europe/Rome, cioè probabilmente mai scelto) e il
+// dispositivo sia altrove: in quel caso il fuso del dispositivo.
+const SERVER_DEFAULT_TIME_ZONE = 'Europe/Rome'
+
+function initialTimeZone(user) {
+  const saved = user?.timezone
+  if (saved && saved !== SERVER_DEFAULT_TIME_ZONE) return saved
+  return browserTimeZone() || saved || SERVER_DEFAULT_TIME_ZONE
+}
+
+// Errori dell'import CV con un messaggio dedicato (Sprint 70): il backend
+// risponde con un `code` stabile (apps/profiles/views.py).
+const CV_IMPORT_ERROR_CODES = [
+  'file_missing',
+  'file_too_large',
+  'unsupported_type',
+  'too_many_pages',
+  'quota_exceeded',
+  'ai_unavailable',
+]
+const MAX_CV_UPLOAD_BYTES = 5 * 1024 * 1024
+
+function cvImportErrorKey(err) {
+  if (!(err instanceof ApiError)) return 'common.genericError'
+  if (err.status === 422) return 'onboarding.uploadCvUnreadable'
+  if (err.status === 429) return 'common.tooManyRequests'
+  // 413: corpo rifiutato da Caddy prima di arrivare al backend.
+  if (err.status === 413) return 'cvImport.file_too_large'
+  const code = err.data?.code
+  if (CV_IMPORT_ERROR_CODES.includes(code)) return `cvImport.${code}`
+  if (err.status === 502) return 'cvImport.ai_unavailable'
+  return 'common.genericError'
 }
 
 export default function OnboardingPage() {
@@ -87,6 +125,7 @@ export default function OnboardingPage() {
     objective_statement: user?.objective_statement || '',
     cv_language_mode: user?.cv_language_mode || 'job_language',
     cv_include_photo: user?.cv_include_photo || false,
+    timezone: initialTimeZone(user),
   })
 
   const [profileFields, setProfileFields] = useState({
@@ -132,8 +171,11 @@ export default function OnboardingPage() {
       await updateMe(preferences)
       await refreshUser()
       setStep(2)
-    } catch {
-      setError(t('common.genericError'))
+    } catch (err) {
+      // Es. un fuso del dispositivo che il server non riconosce: il campo
+      // in errore è indicato, l'utente può sceglierne un altro.
+      const detail = formatApiErrorDetail(err)
+      setError(detail ? `${t('common.genericError')} (${detail})` : t('common.genericError'))
     } finally {
       setSaving(false)
     }
@@ -144,6 +186,11 @@ export default function OnboardingPage() {
     if (!file) return
     setError('')
     setCvNotice('')
+    // Stesso limite del server: si evita di caricare un file che verrebbe rifiutato.
+    if (file.size > MAX_CV_UPLOAD_BYTES) {
+      setCvNotice(t('cvImport.file_too_large'))
+      return
+    }
     setSaving(true)
     try {
       const structured = await importCv(file)
@@ -164,11 +211,7 @@ export default function OnboardingPage() {
         languages: importedListToRows(structured.languages, LANGUAGE_FIELDS),
       })
     } catch (err) {
-      if (err instanceof ApiError && err.status === 422) {
-        setCvNotice(t('onboarding.uploadCvUnreadable'))
-      } else {
-        setError(t('common.genericError'))
-      }
+      setCvNotice(t(cvImportErrorKey(err)))
     } finally {
       setSaving(false)
     }
@@ -214,6 +257,7 @@ export default function OnboardingPage() {
             start_date: role.start_date || null,
             end_date: role.ongoing ? null : role.end_date || null,
             bullets: role.bullets,
+            technologies: role.technologies || [],
           })
           nextRoles.push({ ...role, _key: created.id })
         }
@@ -253,6 +297,7 @@ export default function OnboardingPage() {
       }
       setSections(nextSections)
 
+      refreshUser().catch(() => {})
       setStep(3)
     } catch (err) {
       const detail = formatApiErrorDetail(err)
@@ -350,6 +395,15 @@ export default function OnboardingPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label htmlFor="onboarding-timezone">{t('timezone.label')}</Label>
+                <TimezoneSelect
+                  id="onboarding-timezone"
+                  value={preferences.timezone}
+                  onChange={(value) => setPreferences({ ...preferences, timezone: value })}
+                />
+                <p className="text-xs text-muted-foreground">{t('timezone.hint')}</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="cv-template">{t('onboarding.cvTemplateLabel')}</Label>
                 <Input id="cv-template" value={t('onboarding.cvTemplateValue')} disabled readOnly />
               </div>
@@ -400,7 +454,7 @@ export default function OnboardingPage() {
             <CardContent className="flex flex-col gap-2">
               <Input type="file" accept=".pdf,.docx" onChange={handleCvUpload} disabled={saving} />
               {cvNotice && (
-                <p role="status" className="text-sm text-muted-foreground">
+                <p role="status" className="text-sm text-destructive">
                   {cvNotice}
                 </p>
               )}
