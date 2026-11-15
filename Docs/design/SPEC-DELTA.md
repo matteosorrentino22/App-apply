@@ -16,7 +16,7 @@
 | A7 | **Icona recruiter** in lista e dettaglio quando l'annuncio ha un recruiter; **2 gap principali** sulla card ("+N altri"); riga descrizione annuncio a fisarmonica; **archivio** anche dal menu ⋯ del dettaglio *(lista fatta nello Sprint 74; dettaglio e menu ⋯ fatti nello Sprint 75)* | 01 lista/dettaglio (solo presentazione) |
 | A8 | **Filtri salvati** (§4.21) e **filtri in URL** (Sprint 68) restano com'è: cambia solo la presentazione (pannello + pillole) *(fatto nello Sprint 74)* | nessuno |
 | A9 | **Logout spostato in Impostazioni**, con finestra di conferma (oggi è nella barra in alto) *(fatto nello Sprint 73)* | 01 account |
-| A10 | **Login Google non mostrato** (il codice allauth resta, non configurato in produzione) | 01 §accesso |
+| A10 | **Login Google non mostrato** (il codice allauth resta, non configurato in produzione) *(verificato nello Sprint 79: il pulsante resta condizionato a `google_login_enabled`, quindi oggi non compare; nessun pulsante nei mockup)* | 01 §accesso |
 | A11 | **Conferma costo in un `Modal` dell'app** al posto di `window.confirm` (Sprint 68–70) *(lista fatta nello Sprint 74, dettaglio nello Sprint 75; negli editor non c'era nessun `window.confirm` da sostituire: verificato nello Sprint 76)* | 01 §costi, 02 flussi |
 | A12 | **Impostazioni a sottopagine**: Ricerche, Notifiche, Account (email, fuso, limiti, privacy, password, elimina), Lingua, Esci | 01 impostazioni |
 | A13 | Nuovo **logo** e icone PWA (`Docs/design/logo/`) | 02 PWA/manifest |

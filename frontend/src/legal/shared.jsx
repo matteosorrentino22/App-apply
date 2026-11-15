@@ -1,21 +1,29 @@
+import { ChevronDown } from 'lucide-react'
+
 // Piccoli componenti di presentazione condivisi da PrivacyContent e TermsContent (Sprint 67).
+// Sprint 79 (mockup `legal-privacy`, `legal-terms`): ogni sezione è una
+// fisarmonica nativa (<details>), il testo è lo stesso. `defaultOpen` sulla
+// prima sezione.
 
 const MISSING_LABEL = { it: '[da completare]', en: '[to be completed]' }
 
 export function LegalArticle({ children }) {
-  return <article className="flex flex-col gap-4 text-sm leading-relaxed text-foreground">{children}</article>
+  return <article className="flex flex-col gap-3 text-[15px] leading-relaxed text-foreground">{children}</article>
 }
 
 export function LegalTitle({ children }) {
-  return <h1 className="text-2xl font-bold tracking-tight">{children}</h1>
+  return <h1 className="text-[28px] font-bold leading-tight tracking-[-0.01em]">{children}</h1>
 }
 
-export function Section({ title, children }) {
+export function Section({ title, defaultOpen = false, children }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="mt-4 text-lg font-semibold">{title}</h2>
-      {children}
-    </section>
+    <details open={defaultOpen} className="group rounded-card border border-border bg-card shadow-card">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 rounded-card px-4 py-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 [&::-webkit-details-marker]:hidden">
+        <h2 className="text-base font-bold leading-snug text-foreground">{title}</h2>
+        <ChevronDown className="h-5 w-5 shrink-0 text-chip-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="flex flex-col gap-2 px-4 pb-4">{children}</div>
+    </details>
   )
 }
 

@@ -21,7 +21,7 @@ function TermsIt({ info, version, date, minAge }) {
         ). Registrandoti e usando l'app li accetti.
       </p>
 
-      <Section title="1. Il servizio">
+      <Section defaultOpen title="1. Il servizio">
         <p>
           L'app raccoglie offerte di lavoro da fonti pubbliche in base alle ricerche che salvi, ne valuta l'affinità con
           il tuo profilo e ti aiuta a preparare CV, lettere di presentazione e messaggi, anche con l'aiuto
@@ -154,7 +154,7 @@ function TermsEn({ info, version, date, minAge }) {
         ). By registering for and using the app you accept them.
       </p>
 
-      <Section title="1. The service">
+      <Section defaultOpen title="1. The service">
         <p>
           The app collects job offers from public sources based on the searches you save, assesses how well they match
           your profile and helps you prepare CVs, cover letters and messages, including with the help of artificial

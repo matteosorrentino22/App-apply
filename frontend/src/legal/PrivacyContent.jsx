@@ -31,7 +31,7 @@ function PrivacyIt({ info, version, date, minAge }) {
         profilo dell'utente e lo aiuta a preparare CV, lettere di presentazione e messaggi.
       </p>
 
-      <Section title="1. Titolare del trattamento">
+      <Section defaultOpen title="1. Titolare del trattamento">
         <p>
           <ControllerName info={info} lang={lang} />
           <ControllerAddress info={info} /> — email: {email}.
@@ -282,7 +282,7 @@ function PrivacyEn({ info, version, date, minAge }) {
         well they match the user's profile and helps the user prepare CVs, cover letters and messages.
       </p>
 
-      <Section title="1. Data controller">
+      <Section defaultOpen title="1. Data controller">
         <p>
           <ControllerName info={info} lang={lang} />
           <ControllerAddress info={info} /> — email: {email}.

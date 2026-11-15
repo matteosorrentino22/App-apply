@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { CircleAlert, CircleCheck, Mail } from 'lucide-react'
 import { resendVerification, verifyEmail } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
+import { AuthPage } from '@/components/auth/AuthPage'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
 
 // Pagina aperta dal link dell'email di verifica (Sprint 67): /verify-email?t=<token firmato>.
+// Aspetto Sprint 79 (mockup `verify-ok`, `verify-expired`): esito con icona;
+// link scaduto o non valido con "Invia un nuovo link".
 export default function VerifyEmailPage() {
   const { t } = useLanguage()
   const [params] = useSearchParams()
@@ -40,42 +44,50 @@ export default function VerifyEmailPage() {
     }
   }
 
+  if (status === 'verifying') {
+    return (
+      <AuthPage centered title={t('verifyEmail.title')}>
+        <div className="flex flex-col items-center gap-3">
+          <Spinner framed label={t('verifyEmail.verifying')} />
+          <p className="text-[15px] text-muted-foreground">{t('verifyEmail.verifying')}</p>
+        </div>
+      </AuthPage>
+    )
+  }
+
+  if (status === 'success') {
+    return (
+      <AuthPage centered title={t('verifyEmail.title')} icon={CircleCheck} tone="success" description={t('verifyEmail.success')}>
+        <Button asChild size="lg">
+          <Link to="/login?next=/onboarding">{t('verifyEmail.goToLogin')}</Link>
+        </Button>
+      </AuthPage>
+    )
+  }
+
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-4 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('verifyEmail.title')}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 text-sm">
-          {status === 'verifying' && <p className="text-muted-foreground">{t('verifyEmail.verifying')}</p>}
-          {status === 'success' && <p>{t('verifyEmail.success')}</p>}
-          {(status === 'invalid' || status === 'expired') && (
-            <form onSubmit={handleResend} className="flex flex-col gap-3" noValidate>
-              <p className="text-destructive">{t(`verifyEmail.${status}`)}</p>
-              <p className="text-muted-foreground">{t('verifyEmail.resendHint')}</p>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="verify-email">{t('login.email')}</Label>
-                <Input
-                  id="verify-email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
-                />
-              </div>
-              <Button type="submit" variant="secondary" className="w-fit" disabled={!email}>
-                {t('verifyEmail.resendSubmit')}
-              </Button>
-              {resendMessage && <p className="text-muted-foreground">{resendMessage}</p>}
-            </form>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button asChild variant={status === 'success' ? 'primary' : 'ghost'} className="w-full">
-            <Link to={status === 'success' ? '/login?next=/onboarding' : '/login'}>{t('verifyEmail.goToLogin')}</Link>
-          </Button>
-        </CardFooter>
-      </Card>
-    </div>
+    <AuthPage centered title={t('verifyEmail.title')} icon={CircleAlert} tone="error" description={t(`verifyEmail.${status}`)}>
+      <form onSubmit={handleResend} className="flex flex-col gap-4" noValidate>
+        <p className="text-[15px] text-muted-foreground">{t('verifyEmail.resendHint')}</p>
+        <Field label={t('login.email')}>
+          <Input
+            id="verify-email"
+            type="email"
+            value={email}
+            placeholder={t('auth.emailPlaceholder')}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+          />
+        </Field>
+        <Button type="submit" size="lg" disabled={!email}>
+          <Mail className="h-5 w-5" aria-hidden="true" />
+          {t('verifyEmail.resendSubmit')}
+        </Button>
+        {resendMessage ? <p role="status" className="text-sm text-muted-foreground">{resendMessage}</p> : null}
+        <Button asChild variant="text">
+          <Link to="/login">{t('verifyEmail.goToLogin')}</Link>
+        </Button>
+      </form>
+    </AuthPage>
   )
 }

@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Info, Mail } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { googleLoginUrl, resendVerification } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useLegalInfo } from '../legal/useLegalInfo'
+import { AuthPage } from '@/components/auth/AuthPage'
+import { Banner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 
+// Accesso (Sprint 67; aspetto Sprint 79, mockup `login`, `login-err`,
+// `login-not-verified`). Stessa logica: email e password, errore delle
+// credenziali, email non ancora confermata con "Invia di nuovo il link",
+// "Password dimenticata?". Il pulsante Google compare solo se il login Google
+// è configurato (oggi non lo è in produzione: il codice allauth resta).
 export default function LoginPage() {
   const { t } = useLanguage()
   const { login } = useAuth()
@@ -64,79 +71,72 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-4 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('login.title')}</CardTitle>
-        </CardHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">{t('login.email')}</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">{t('login.password')}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            {unverified && (
-              <div role="alert" className="flex flex-col gap-2 text-sm">
-                <p className="text-destructive">{t('login.emailNotVerified')}</p>
-                <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={handleResend}>
-                  {t('login.resendVerification')}
-                </Button>
-                {resendMessage && <p className="text-muted-foreground">{resendMessage}</p>}
-              </div>
-            )}
-            <Link to="/forgot-password" className="w-fit text-sm text-primary hover:underline">
-              {t('login.forgotPassword')}
-            </Link>
-          </CardContent>
-          <CardFooter className="flex-col items-stretch gap-3">
-            <Button type="submit" disabled={submitting} className="w-full">
-              {t('login.submit')}
-            </Button>
-            {/* Login Google nascosto finché non è configurato (Sprint 67). */}
-            {legalInfo?.google_login_enabled && (
-              <>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  {t('common.or')}
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-                <Button variant="secondary" asChild className="w-full">
-                  <a href={googleLoginUrl()}>{t('login.googleButton')}</a>
-                </Button>
-              </>
-            )}
-          </CardFooter>
-        </form>
-      </Card>
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        {t('login.noAccount')}{' '}
-        <Link to="/register" className="font-medium text-primary hover:underline">
-          {t('login.registerLink')}
+    <AuthPage
+      title={t('login.title')}
+      footer={
+        <>
+          {t('login.noAccount')}{' '}
+          <Link to="/register" className="font-bold text-primary hover:underline">
+            {t('login.registerLink')}
+          </Link>
+        </>
+      }
+    >
+      {unverified ? (
+        <div className="flex flex-col gap-3" role="alert">
+          <Banner variant="note" icon={Info}>
+            {t('login.emailNotVerified')}
+          </Banner>
+          <Button type="button" variant="secondary" size="lg" onClick={handleResend}>
+            <Mail className="h-5 w-5" aria-hidden="true" />
+            {t('login.resendVerification')}
+          </Button>
+          {resendMessage ? <p className="text-sm text-muted-foreground">{resendMessage}</p> : null}
+        </div>
+      ) : null}
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <Field label={t('login.email')}>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            placeholder={t('auth.emailPlaceholder')}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            autoComplete="email"
+          />
+        </Field>
+        <Field label={t('login.password')}>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        </Field>
+        <Link to="/forgot-password" className="-mt-1 self-end text-[15px] font-bold text-primary hover:underline">
+          {t('login.forgotPassword')}
         </Link>
-      </p>
-    </div>
+        {error ? <Banner variant="error">{error}</Banner> : null}
+        <Button type="submit" size="lg" disabled={submitting}>
+          {t('login.submit')}
+        </Button>
+        {/* Login Google nascosto finché non è configurato (Sprint 67). */}
+        {legalInfo?.google_login_enabled ? (
+          <>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              {t('common.or')}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button variant="secondary" size="lg" asChild>
+              <a href={googleLoginUrl()}>{t('login.googleButton')}</a>
+            </Button>
+          </>
+        ) : null}
+      </form>
+    </AuthPage>
   )
 }

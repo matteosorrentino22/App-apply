@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { CircleAlert, CircleCheck } from 'lucide-react'
 import { confirmPasswordReset } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
+import { AuthPage } from '@/components/auth/AuthPage'
+import { Banner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 
 // Pagina del link di recupero password (Sprint 67): /reset-password?uid=…&token=…
+// Aspetto Sprint 79 (mockup `reset`, `reset-invalid`, `reset-done`).
 export default function ResetPasswordPage() {
   const { t } = useLanguage()
   const [params] = useSearchParams()
@@ -46,64 +49,52 @@ export default function ResetPasswordPage() {
     }
   }
 
+  if (status === 'success') {
+    return (
+      <AuthPage centered title={t('resetPassword.title')} icon={CircleCheck} tone="success" description={t('resetPassword.success')}>
+        <Button asChild size="lg">
+          <Link to="/login">{t('verifyEmail.goToLogin')}</Link>
+        </Button>
+      </AuthPage>
+    )
+  }
+
+  if (status === 'invalid') {
+    return (
+      <AuthPage centered title={t('resetPassword.title')} icon={CircleAlert} tone="error" description={t('resetPassword.invalidLink')}>
+        <Button asChild size="lg">
+          <Link to="/forgot-password">{t('resetPassword.requestNew')}</Link>
+        </Button>
+      </AuthPage>
+    )
+  }
+
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-4 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('resetPassword.title')}</CardTitle>
-        </CardHeader>
-        {status === 'form' ? (
-          <form onSubmit={handleSubmit} noValidate>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="reset-password">{t('account.newPassword')}</Label>
-                <Input
-                  id="reset-password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="reset-password-confirm">{t('account.confirmNewPassword')}</Label>
-                <Input
-                  id="reset-password-confirm"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={submitting || !password}>
-                {t('resetPassword.submit')}
-              </Button>
-            </CardFooter>
-          </form>
-        ) : (
-          <>
-            <CardContent>
-              <p className={status === 'success' ? 'text-sm' : 'text-sm text-destructive'}>
-                {status === 'success' ? t('resetPassword.success') : t('resetPassword.invalidLink')}
-              </p>
-            </CardContent>
-            <CardFooter>
-              <Button asChild className="w-full" variant={status === 'success' ? 'primary' : 'secondary'}>
-                <Link to={status === 'success' ? '/login' : '/forgot-password'}>
-                  {status === 'success' ? t('verifyEmail.goToLogin') : t('resetPassword.requestNew')}
-                </Link>
-              </Button>
-            </CardFooter>
-          </>
-        )}
-      </Card>
-    </div>
+    <AuthPage title={t('resetPassword.title')}>
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <Field label={t('account.newPassword')} hint={t('settings.passwordHint')}>
+          <Input
+            id="reset-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </Field>
+        <Field label={t('account.confirmNewPassword')}>
+          <Input
+            id="reset-password-confirm"
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </Field>
+        {error ? <Banner variant="error">{error}</Banner> : null}
+        <Button type="submit" size="lg" disabled={submitting || !password}>
+          {t('resetPassword.submit')}
+        </Button>
+      </form>
+    </AuthPage>
   )
 }

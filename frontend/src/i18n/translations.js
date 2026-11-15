@@ -5,6 +5,10 @@
 export const translations = {
   it: {
     appName: 'App-apply',
+    // Sprint 79: pagine di accesso (segnaposto comune dei campi email).
+    auth: {
+      emailPlaceholder: 'nome@esempio.it',
+    },
     login: {
       title: 'Accedi',
       email: 'Email',
@@ -58,7 +62,13 @@ export const translations = {
       cvIncludePhotoLabel: 'Includi la foto nel CV',
       next: 'Avanti',
       back: 'Indietro',
-      uploadCvTitle: 'Carica un CV esistente (opzionale)',
+      uploadCvTitle: 'Carica un CV esistente',
+      optional: 'Opzionale',
+      uploadingCv: 'Lettura del CV…',
+      uploadCvRetry: 'Puoi anche riprovare con un altro file.',
+      orFillBelow: 'oppure compila qui sotto',
+      preferencesTitle: 'Le tue preferenze',
+      profileStepTitle: 'Il tuo profilo',
       uploadCvHint: 'Pre-compiliamo il profilo dal tuo CV (PDF o Word). Puoi correggere tutto dopo.',
       uploadCvButton: 'Carica file',
       uploadCvUnreadable: 'Non siamo riusciti a leggere il CV: compila il profilo manualmente.',
@@ -767,7 +777,7 @@ export const translations = {
       terms: 'Termini di servizio',
       controllerMissing:
         'Dati del titolare del trattamento da completare: questa pagina non è ancora nella sua versione definitiva.',
-      back: '← Indietro',
+      back: 'Indietro',
       loadError: 'Impossibile caricare la pagina. Riprova.',
       acceptanceTitle: 'Informativa privacy e termini di servizio',
       acceptanceIntro:
@@ -820,6 +830,9 @@ export const translations = {
   },
   en: {
     appName: 'App-apply',
+    auth: {
+      emailPlaceholder: 'name@example.com',
+    },
     login: {
       title: 'Log in',
       email: 'Email',
@@ -873,7 +886,13 @@ export const translations = {
       cvIncludePhotoLabel: 'Include photo in the CV',
       next: 'Next',
       back: 'Back',
-      uploadCvTitle: 'Upload an existing CV (optional)',
+      uploadCvTitle: 'Upload an existing CV',
+      optional: 'Optional',
+      uploadingCv: 'Reading your CV…',
+      uploadCvRetry: 'You can also try again with another file.',
+      orFillBelow: 'or fill in below',
+      preferencesTitle: 'Your preferences',
+      profileStepTitle: 'Your profile',
       uploadCvHint: 'We pre-fill your profile from your CV (PDF or Word). You can edit everything after.',
       uploadCvButton: 'Upload file',
       uploadCvUnreadable: "We couldn't read the CV: please fill in the profile manually.",
@@ -1572,7 +1591,7 @@ export const translations = {
       terms: 'Terms of service',
       controllerMissing:
         'Data controller details still to be completed: this page is not yet in its final version.',
-      back: '← Back',
+      back: 'Back',
       loadError: 'Could not load the page. Please try again.',
       acceptanceTitle: 'Privacy policy and terms of service',
       acceptanceIntro:

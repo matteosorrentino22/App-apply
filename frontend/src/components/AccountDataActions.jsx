@@ -6,7 +6,6 @@ import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useLegalInfo } from '../legal/useLegalInfo'
 import { useToast } from '@/components/ToastProvider'
-import { useDataExport } from '@/lib/dataExport'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -14,23 +13,11 @@ import { Field } from '@/components/ui/field'
 import { Modal, ModalActions, ModalContent, ModalDescription, ModalTitle } from '@/components/ui/modal'
 import { Trash2 } from 'lucide-react'
 
-// Export dei dati e cancellazione dell'account (Sprint 67): in Impostazioni
-// e nella schermata di accettazione, perché entrambe le azioni restano
-// disponibili anche a chi non ha (ancora) accettato informativa e termini.
+// Cancellazione dell'account (Sprint 67): in Impostazioni e nella schermata
+// di accettazione, perché resta disponibile anche a chi non ha (ancora)
+// accettato informativa e termini (l'export usa `useDataExport`, Sprint 78–79).
 // Sprint 78: finestra di eliminazione come `Modal` (mockup `settings-delete`),
 // stessi campi e stessa regola (password + spunta).
-export function ExportDataButton({ variant = 'secondary' }) {
-  const { t } = useLanguage()
-  const { showToast } = useToast()
-  const { busy, exportData } = useDataExport((key) => showToast(t(key)))
-
-  return (
-    <Button type="button" variant={variant} disabled={busy} onClick={exportData} className="w-fit">
-      {busy ? t('account.exportPreparing') : t('account.exportButton')}
-    </Button>
-  )
-}
-
 export function DeleteAccountButton({ fullWidth = false }) {
   const { t } = useLanguage()
   const { setUser } = useAuth()
