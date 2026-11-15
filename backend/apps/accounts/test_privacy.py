@@ -23,7 +23,7 @@ from apps.common.testing import LOCMEM_CACHES
 from apps.cv.models import CoverLetterDocument, CoverLetterDraft, CVDocument, CVDraft, ReferralMessageDocument
 from apps.jobs.models import DailyQuota, Job, JobFilterPreset, RunLog
 from apps.notifications.models import PushSubscription
-from apps.notifications.tasks import send_inactivity_notifications, send_morning_notification_for_user
+from apps.notifications.tasks import send_inactivity_notifications, send_new_jobs_notification
 from apps.profiles.models import Experience, Profile, Skill
 from apps.searches.models import SavedSearch
 
@@ -698,10 +698,8 @@ class NotificationPreferenceTests(APITestCase):
         self.user.refresh_from_db()
         Job.objects.create(user=self.user, external_id="n1", title="T", company="C", location="L", description="D")
 
-        with patch("apps.notifications.tasks.send_web_push") as send, patch(
-            "apps.notifications.tasks._is_around_ten_local", return_value=True
-        ):
-            self.assertFalse(send_morning_notification_for_user(self.user))
+        with patch("apps.notifications.tasks.send_web_push") as send:
+            self.assertFalse(send_new_jobs_notification(self.user))
             send_inactivity_notifications()
         send.assert_not_called()
 

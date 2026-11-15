@@ -11,7 +11,7 @@ Questa informativa è resa ai sensi degli artt. 13 e 14 del Regolamento (UE) 201
 Per qualunque richiesta relativa ai tuoi dati puoi scrivere a questo indirizzo. Non è stato nominato un Responsabile della protezione dei dati (DPO), non essendo obbligatorio.
 
 ## 2. Quali dati trattiamo
-- **Dati dell'account:** email di accesso, password (conservata solo in forma cifrata non reversibile), lingua dell'interfaccia, fuso orario, piano, saldo del credito, data di registrazione, stato di verifica dell'email, preferenza sulle notifiche, registrazione delle accettazioni di questa informativa e dei termini (versione e data).
+- **Dati dell'account:** email di accesso, password (conservata solo in forma cifrata non reversibile), lingua dell'interfaccia, fuso orario, piano, saldo del credito, data di registrazione, stato di verifica dell'email, preferenza sulle notifiche, attivazione e orario della raccolta automatica (piano Pro), registrazione delle accettazioni di questa informativa e dei termini (versione e data).
 - **Dati del profilo professionale**, che inserisci tu o che l'app estrae dal CV che carichi in onboarding: nome, cognome, telefono, email di contatto, città e paese, profilo LinkedIn, foto (facoltativa), sommario, esperienze lavorative, istruzione, competenze, certificazioni, lingue, obiettivo professionale. Il file del CV caricato viene letto per compilare il profilo e **non viene conservato**.
 - **Dati di utilizzo del servizio:** ricerche salvate, offerte raccolte o importate con i relativi punteggi e motivazioni, documenti generati (CV, cover letter, messaggi), bozze, cronologia delle chat con l'assistente AI, istruzioni che fornisci, preferiti, filtri salvati, stato delle candidature.
 - **Dati di terzi che inserisci o che compaiono nelle offerte:** nome e profilo pubblico del recruiter indicati nell'annuncio; nome e profilo LinkedIn del destinatario di un messaggio di networking che scrivi tu. Ti chiediamo di inserirli solo se hai un motivo legittimo per contattare quella persona.
@@ -22,7 +22,7 @@ Per qualunque richiesta relativa ai tuoi dati puoi scrivere a questo indirizzo. 
 ## 3. Finalità e basi giuridiche
 | Finalità | Base giuridica |
 |---|---|
-| Creare e gestire il tuo account; fornire il servizio (raccolta e valutazione delle offerte, generazione e modifica dei documenti, chat, notifiche mattutine sui nuovi job e promemoria in caso di inattività) | Esecuzione del contratto (art. 6.1.b) |
+| Creare e gestire il tuo account; fornire il servizio (raccolta e valutazione delle offerte, generazione e modifica dei documenti, chat, notifiche sui nuovi job a fine raccolta automatica e promemoria in caso di inattività) | Esecuzione del contratto (art. 6.1.b) |
 | Invio di email di servizio (verifica dell'indirizzo, recupero password, conferma di cancellazione) | Esecuzione del contratto (art. 6.1.b) |
 | Notifiche push sul dispositivo | Consenso, espresso tramite il permesso del browser e revocabile in ogni momento dall'app o dalle impostazioni del browser (art. 6.1.a) |
 | Sicurezza del servizio, prevenzione di abusi e frodi, limiti di frequenza, log tecnici | Legittimo interesse del titolare a proteggere il servizio e i dati degli utenti (art. 6.1.f) |

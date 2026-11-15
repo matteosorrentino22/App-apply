@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor del redesign UI)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor del redesign UI, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -18,7 +18,7 @@
 
 La v6 fonde le due versioni divergenti precedenti: la v4 in radice, che aveva recepito lo sprint-39 e lo sprint-47 ma non il documento 03, e la v5 in `Docs/`, che aveva recepito il documento 03 ma non gli sprint 39 e 47. Allinea poi il testo a quanto fatto negli sprint 40–64. Novità rispetto a v4/v5:
 
-1. **Niente più CV automatici** (Sprint 45). Il ciclo notturno fa solo raccolta e scoring. Ogni CV si genera su richiesta, per qualunque punteggio (§4.4, §4.7).
+1. **Niente più CV automatici** (Sprint 45). La raccolta fa solo raccolta e scoring. Ogni CV si genera su richiesta, per qualunque punteggio (§4.4, §4.7).
 2. **Niente più limiti di raccolta** (Sprint 46): via il tetto di 50/100 job per notte e il cap di intake di 15 job al giorno. Resta solo il limite tecnico di 150 risultati per chiamata alla fonte (§4.4).
 3. **Punteggio da 1 a 10** con rubrica per fascia (Sprint 47). Match e gap hanno una motivazione espandibile (Sprint 46). Il punteggio è limitato a 3 se l'offerta richiede una lingua assente dal profilo (Sprint 48) (§4.4).
 4. **Ricerche di tipo Job role / Company** (sprint-39), 1 attiva per tipo sul piano Free (§4.2).
@@ -70,20 +70,20 @@ La v6 fonde le due versioni divergenti precedenti: la v4 in radice, che aveva re
 L'applicazione centralizza e automatizza il lavoro ripetitivo della ricerca di impiego. Oggi ogni candidato ripete a mano lo stesso ciclo: cerca posizioni, capisce quali sono davvero adatte al suo profilo, riscrive CV e lettera su misura per ognuna e prepara i messaggi ai contatti.
 
 Il prodotto toglie la parte ripetitiva:
-- raccoglie ogni notte le offerte che corrispondono alle ricerche dell'utente;
+- raccoglie ogni giorno le offerte che corrispondono alle ricerche dell'utente (in automatico all'orario scelto per i Pro, con "Raccogli" per tutti, dallo Sprint 77);
 - ne valuta l'affinità con il profilo e spiega cosa combacia e cosa manca;
 - su richiesta, per ogni offerta, produce con un clic un **CV personalizzato**, una **cover letter** e **messaggi di networking**, che l'utente può rifinire in un editor con un assistente AI.
 
-L'utente definisce una volta profilo e ricerche. Da lì l'app lavora in background e ogni mattina presenta una lista di opportunità già valutate e ordinate. Il valore centrale è *"svegliarsi con la selezione già fatta"*: non cercare, non filtrare, e avere i documenti di candidatura pronti in pochi clic, senza riscriverli da zero.
+L'utente definisce una volta profilo e ricerche. Da lì l'app (per i Pro anche in automatico, ogni giorno) presenta una lista di opportunità già valutate e ordinate. Il valore centrale è *"svegliarsi con la selezione già fatta"*: non cercare, non filtrare, e avere i documenti di candidatura pronti in pochi clic, senza riscriverli da zero.
 
 > **Rispetto alle versioni precedenti.** La promessa originale ("CV già pronti al risveglio per le offerte più affini") non vale più: dallo Sprint 45 nessun CV viene generato in automatico. Ogni documento si produce su richiesta (§4.7).
 
 **Confine del problema risolto:** il prodotto arriva fino ai documenti pronti e al link della candidatura. La candidatura vera e propria resta manuale: l'utente si candida sul portale di origine. L'app offre un tracciamento minimo ("candidatura fatta") come punto unico da cui vedere a che punto è ciascuna offerta. L'automazione della candidatura è fuori perimetro.
 
-**Cadenza:** il ciclo è giornaliero.
-- I nuovi job vengono raccolti di notte (02:00, ora italiana) e sono disponibili dal mattino.
-- Alle 10:00 locali l'utente riceve una notifica, se ci sono offerte nuove.
-- Una volta al giorno l'utente può avviare anche una raccolta manuale (§4.14).
+**Cadenza:** il ciclo è giornaliero, con **una raccolta al giorno per utente** (Sprint 77).
+- **Pro:** raccolta automatica una volta al giorno all'orario scelto (nel fuso dell'utente), con una notifica a fine raccolta se ci sono offerte nuove; in alternativa la raccolta manuale, che conta come la raccolta del giorno.
+- **Free:** solo raccolta manuale, una al giorno (§4.14).
+- Fino allo Sprint 76 c'erano la raccolta notturna delle 02:00 per tutti e la notifica delle 10:00: entrambe rimosse.
 
 ---
 
@@ -129,13 +129,13 @@ Formato: *come [utente], voglio [azione], per [beneficio]*.
 ### Ricerche
 - Come utente, voglio **creare ricerche salvate con tipo, keywords e località**, per raccogliere solo le offerte pertinenti.
 - Come utente, voglio **scegliere se una ricerca è per ruolo (*Job role keyword*) o per azienda (*Company*)**, per distinguere "voglio questo tipo di ruolo" da "voglio lavorare in questa azienda".
-- Come utente, voglio **attivare o disattivare una ricerca senza cancellarla**, per decidere cosa gira ogni notte.
+- Come utente, voglio **attivare o disattivare una ricerca senza cancellarla**, per decidere su cosa raccogliere.
 - Come utente Free, voglio **sapere che posso tenere attiva una sola ricerca per tipo** e che attivandone un'altra dello stesso tipo la precedente si disattiva.
 
 ### Ciclo quotidiano e lista
-- Come utente, voglio **ricevere una notifica alle 10:00** quando ci sono nuovi job.
+- Come utente Pro, voglio una **raccolta automatica** ogni giorno all'orario che scelgo e una **notifica** quando trova nuovi job.
 - Come utente, voglio **vedere le mie statistiche** (pannello "Raccogli nuovi job" della lista) (job trovati, CV generati, candidature fatte: oggi, ultima settimana, totali).
-- Come utente, voglio **avviare una raccolta manuale ("Raccogli ora")**, al massimo una volta al giorno, per non aspettare la notte.
+- Come utente, voglio **avviare una raccolta manuale ("Raccogli ora")**, al massimo una volta al giorno (raccolta automatica compresa).
 - Come utente, voglio **vedere la lista dei job ordinata per punteggio**, con titolo, azienda, località, punteggio, gap principali, numero di candidati e presenza di un recruiter, per decidere rapidamente cosa approfondire.
 - Come utente, voglio **filtrare la lista** per intervallo di date, località, ricerca di provenienza, punteggio, stato, numero di candidati e presenza di un recruiter.
 - Come utente, voglio **salvare una combinazione di filtri con un nome** e riapplicarla con un clic.
@@ -255,7 +255,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
   - Esempi: *Job role — "IT Project Manager" — Rome, Italy*; *Company — "Nome Azienda" — Milan, Italy*.
   - Per le ricerche **Company** la fonte filtra davvero per azienda, non per corrispondenza testuale sulle keywords (sprint-39). È l'unica deviazione accettata dal vincolo "solo keywords e località" (§5.10).
 - Le ricerche si gestiscono dalla pagina **Impostazioni**: si creano, si modificano, si eliminano, si attivano e si disattivano. La prima si crea in onboarding.
-- Una ricerca nuova creata da Impostazioni **nasce disattivata**. Solo le ricerche **attive** producono job, sia nella raccolta notturna sia in quella manuale.
+- Una ricerca nuova creata da Impostazioni **nasce disattivata**. Solo le ricerche **attive** producono job, sia nella raccolta automatica sia in quella manuale.
 - **Limiti per piano:**
   - **Free:** fino a **10 ricerche salvate**, di cui al massimo **1 attiva per tipo** (quindi fino a 2 in totale: 1 Job role e 1 Company). Se si attiva una ricerca di un tipo che ne ha già una attiva, la precedente viene **disattivata automaticamente**; la ricerca dell'altro tipo non cambia. Un avviso indica il nome della ricerca disattivata (Sprint 68). Lo stesso vale se si **cambia il tipo** di una ricerca attiva (Job role ↔ Company): conta come un'attivazione nel nuovo tipo e spegne l'eventuale altra ricerca attiva di quel tipo, con lo stesso avviso.
   - **Pro:** fino a **100 ricerche salvate**, di cui fino a **50 attive** in totale, divisibili liberamente tra i due tipi. Oltre i limiti l'operazione è rifiutata con un messaggio.
@@ -266,7 +266,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 ### 4.3 Fonte delle offerte
 
 - **Unica fonte: LinkedIn.**
-  - La raccolta (notturna e manuale) passa da un servizio di scraping esterno.
+  - La raccolta (automatica e manuale) passa da un servizio di scraping esterno.
   - L'import da link (§4.9) legge invece la pagina pubblica dell'offerta.
   - La fonte è un componente sostituibile.
 - **Campi obbligatori** perché un'offerta raccolta venga mostrata: *titolo, azienda, località, descrizione, link di candidatura*. Se ne manca uno, l'offerta viene scartata.
@@ -284,7 +284,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 
 ### 4.4 Ciclo quotidiano
 
-- **Raccolta notturna** alle **02:00 (Europe/Rome)**, per tutti gli utenti con ricerche attive.
+- **Una raccolta al giorno per utente** (Sprint 77, al posto della raccolta notturna delle 02:00 per tutti): **automatica** per i Pro che la attivano, all'orario scelto (§4.14), oppure **manuale** con "Raccogli ora" (tutti i piani). Il giorno è quello di Europe/Rome (azzeramento a mezzanotte, come gli altri massimali); senza ricerche attive non si raccoglie e il giorno non viene consumato.
   - Riguarda le offerte pubblicate nelle **24 ore precedenti**; il vincolo è applicato alla fonte.
   - Le ricerche attive dell'utente sono raggruppate per tipo e località: una richiesta alla fonte per gruppo, con al massimo **150 risultati per richiesta** (`MAX_ITEMS_PER_CALL`).
   - **Non esiste più alcun tetto per piano o per notte**, né un cap di intake: tutte le offerte valide raccolte vengono valutate e mostrate (Sprint 46). Il piano non influisce sul volume raccolto.
@@ -302,14 +302,13 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - **Limite per lingua richiesta** (Sprint 48). Se l'offerta richiede una lingua (dichiarata necessaria, oppure annuncio scritto interamente in una lingua diversa dall'inglese) che **non è nel profilo a nessun livello**, il punteggio è limitato a **3** (`LANGUAGE_MISMATCH_SCORE_CAP`).
   - La motivazione si apre con "Punteggio limitato a 3/10: lingua richiesta (…) assente dal profilo." oppure, per chi ha l'interfaccia in inglese, "Score capped at 3/10: required language (…) missing from the profile." (Sprint 71): vale la lingua dell'interfaccia del momento in cui l'offerta viene valutata, e la frase non cambia se poi l'utente cambia lingua. Il resto della motivazione è scritto dall'AI e non dipende dalla lingua dell'interfaccia.
   - Fanno eccezione le offerte che dichiarano un ambiente internazionale o di lavoro in inglese.
-- **Nessuna generazione automatica di CV** (Sprint 45): il ciclo notturno è solo raccolta più scoring. Tutti i job nascono in stato "nuovo" (§4.6).
+- **Nessuna generazione automatica di CV** (Sprint 45): la raccolta è solo raccolta più scoring. Tutti i job nascono in stato "nuovo" (§4.6).
 - **Fallimenti:**
   - se la richiesta alla fonte di un gruppo di ricerche (tipo × località) fallisce, si perdono solo le offerte di quel gruppo: gli altri gruppi dell'utente vengono raccolti normalmente (Sprint 68). Nessun messaggio d'errore per l'utente (§6);
-  - se lo scoring di una singola offerta fallisce (o la raccolta si interrompe prima dello scoring), il job **resta in lista senza punteggio**, in fondo all'ordinamento, e viene **ritentato al ciclo notturno successivo**, fino a **3 tentativi falliti** per job (Sprint 68);
-  - se è in corso una raccolta manuale dello stesso utente, il ciclo notturno lo salta per quella notte (e viceversa la raccolta manuale è rifiutata mentre gira il ciclo notturno dell'utente).
+  - se lo scoring di una singola offerta fallisce (o la raccolta si interrompe prima dello scoring), il job **resta in lista senza punteggio**, in fondo all'ordinamento, e viene **ritentato alla raccolta successiva** (automatica o manuale; dallo Sprint 77, prima al ciclo notturno), fino a **3 tentativi falliti** per job (Sprint 68); chi non raccoglie non ha ritenti;
+  - se è in corso una raccolta manuale dello stesso utente, la raccolta automatica è saltata (e viceversa la manuale è rifiutata mentre gira l'automatica).
 - **Storico dei punteggi:** i punteggi dati sulla vecchia scala 1–5 (prima del 24/09/2026) sono stati **riscalati ×2** (1→2 … 5→10) nello Sprint 68. Il limite per lingua non è stato applicato retroattivamente a quei job (richiederebbe una nuova valutazione AI per ciascuno).
-- **Notifica** alle 10:00 locali **solo se** ci sono nuovi job (§4.12).
-- In aggiunta, l'utente può avviare **una raccolta manuale al giorno** (§4.14).
+- **Notifica** ai Pro a fine raccolta automatica, **solo se** ci sono nuovi job (§4.12).
 
 ### 4.5 Vista lista e navigazione
 
@@ -525,7 +524,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 
 ### 4.11 Monetizzazione
 
-**Piani.** Esistono due piani, **Free** e **Pro**. Le differenze sono solo nei massimali qui sotto e nelle ricerche. La raccolta notturna, lo scoring e tutte le altre funzioni sono uguali per entrambi.
+**Piani.** Esistono due piani, **Free** e **Pro**. Le differenze sono nei massimali qui sotto, nelle ricerche e, dallo Sprint 77, nella **raccolta automatica** (solo Pro, §4.14). Scoring e tutte le altre funzioni sono uguali per entrambi.
 
 **Massimali giornalieri e prezzi extra.** Ogni azione ha un **contatore giornaliero proprio**, indipendente dagli altri. Oltre il massimale si prosegue **a credito**, scalando il prezzo unitario dal saldo. Con saldo insufficiente l'azione è **bloccata con un messaggio**.
 
@@ -536,12 +535,12 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 | Messaggio di networking — §4.20 | 1/giorno | 10/giorno | a credito | **1,00 €** (`PRICE_REFERRAL_MESSAGE_EXTRA`) |
 | Import job da link LinkedIn — §4.9 | **non disponibile** (nemmeno a credito) | 3/giorno | a credito | **0,50 €** (`PRICE_IMPORT_EXTRA`) |
 | Creazione manuale di un job — §4.15 | 3/giorno | 3/giorno | a credito | **0,50 €** (`PRICE_MANUAL_JOB_EXTRA`) |
-| Raccolta manuale "Raccogli ora" — §4.14 | 1/giorno | 1/giorno | **nessuna estensione** | — (`COLLECTION_DAILY_LIMIT`) |
+| Raccolta del giorno (automatica o manuale) — §4.14 | 1/giorno (solo manuale) | 1/giorno (automatica o manuale) | **nessuna estensione** | — (`COLLECTION_DAILY_LIMIT`) |
 | Messaggio nella chat dell'editor CV — §4.17 | — | — | **sempre a credito**, nessun messaggio gratuito | **0,20 €**/messaggio (`PRICE_CV_DRAFT_CHAT_MESSAGE`) |
 | Messaggio nella chat dell'editor cover letter — §4.19 | — | — | **sempre a credito**, nessun messaggio gratuito | **0,20 €**/messaggio (`PRICE_COVER_LETTER_DRAFT_CHAT_MESSAGE`) |
 
 **Senza costo e senza contatore:**
-- raccolta notturna e scoring;
+- scoring e raccolta manuale;
 - import del CV in onboarding (al massimo **5 al giorno**, senza estensione a credito; un import non riuscito per un errore del servizio AI non viene conteggiato);
 - modifica, anteprima e **PDF finale** degli editor di CV e cover letter;
 - preferiti, archiviazione, filtri salvati (massimo 50 per utente, §4.21);
@@ -575,15 +574,13 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni** con "Attiva notifiche": l'app chiede il permesso del browser e registra il dispositivo.
 - Su iOS l'app invita prima ad aggiungerla alla schermata Home.
 - **Preferenza "Ricevi notifiche push"** (Sprint 67), nello stesso riquadro, attiva di default:
-  - togliendo la spunta le notifiche si spengono per l'account: l'app **elimina le registrazioni di tutti i dispositivi**, annulla quella del browser in uso e mostra "Notifiche disattivate: non riceverai notifiche su nessun dispositivo…"; nessuna notifica (mattutina o di inattività) viene più inviata;
+  - togliendo la spunta le notifiche si spengono per l'account: l'app **elimina le registrazioni di tutti i dispositivi**, annulla quella del browser in uso e mostra "Notifiche disattivate: non riceverai notifiche su nessun dispositivo…"; nessuna notifica (di fine raccolta o di inattività) viene più inviata;
   - per riattivarle si rimette la spunta e si preme di nuovo "Attiva notifiche" su ogni dispositivo. Anche attivare le notifiche su un dispositivo riaccende la preferenza.
 - **Logout** (Sprint 70): il dispositivo da cui si esce smette di ricevere le notifiche dell'account (registrazione eliminata sul server e annullata nel browser); gli altri dispositivi restano registrati. Dopo un nuovo accesso le notifiche vanno riattivate con "Attiva notifiche".
-- **Riattivazione** (Sprint 70): rimettendo la spunta, o attivando le notifiche su un dispositivo dopo averle spente, la notifica mattutina riparte da quel momento: i job creati mentre le notifiche erano spente non la fanno partire.
+- **Riattivazione** (Sprint 70): rimettendo la spunta, o attivando le notifiche su un dispositivo dopo averle spente, le notifiche ripartono da quel momento.
 
-**Notifica mattutina.**
-- Parte nella fascia **10:00–10:59 locali**, **solo se** esistono **nuovi job**: job creati **dopo l'ultima notifica mattutina** inviata a quell'utente (o dopo la registrazione).
-- Contano tutti i job nuovi: raccolti di notte o con la raccolta manuale, importati, creati a mano, anche senza punteggio.
-- Ogni batch viene annunciato **una sola volta**.
+**Notifica di fine raccolta** (Sprint 77, al posto della notifica mattutina delle 10:00, rimossa per tutti).
+- Solo **Pro con la raccolta automatica**: parte alla fine della raccolta automatica **solo se** ha trovato **job nuovi**. Nessuna notifica dopo una raccolta manuale (l'utente è nell'app), un import o un job creato a mano.
 - Testo: "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista" (in inglese: "New jobs ready" / "There are new job offers to review in your list").
 
 **Notifica di inattività.**
@@ -595,7 +592,7 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 **Valgono per entrambe:**
 - un clic sulla notifica apre l'app sulla lista;
 - i testi sono in italiano o in inglese secondo la **lingua dell'interfaccia** salvata sull'account al momento dell'invio (Sprint 71; prima solo in italiano);
-- l'"ora locale" è quella del fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
+- l'orario della raccolta automatica è nel fuso dell'utente, impostabile in Impostazioni dallo Sprint 70 (default: il fuso del dispositivo alla registrazione; Europe/Rome per gli account precedenti).
 
 ### 4.13 Statistiche e raccolta (Sprint 44; dallo Sprint 73–74 in Jobs)
 
@@ -613,17 +610,29 @@ La raccolta manuale (§4.14) è in un pannello a parte, aperto dal pulsante Racc
 
 Le statistiche si caricano all'apertura della lista e si ricaricano dopo una raccolta manuale riuscita, insieme alla lista. Non ci sono altre metriche.
 
-### 4.14 Raccolta manuale "Raccogli ora"
+### 4.14 Raccolta del giorno: manuale "Raccogli ora" e automatica Pro (Sprint 44; Sprint 77)
 
-- Dal pannello **"Raccogli nuovi job"** (pulsante Raccogli accanto al titolo della lista, o "Raccogli ora" nello stato vuoto di Raccolti), il pulsante **"Raccogli ora"** esegue subito, per il solo utente, la stessa raccolta + scoring della notte, sulle sue ricerche attive (con la finestra delle 24 ore).
-- Al termine l'avviso "Raccolta completata." e, nel pannello, "Ultima raccolta: N job trovati, M tenuti dopo lo scoring"; la lista e le statistiche si ricaricano. Sotto il pulsante l'indicazione del limite ("Incluso nel piano: ne restano X su 1 oggi").
-- **Limite:** **1 al giorno** (azzeramento a mezzanotte Europe/Rome), uguale per tutti i piani, **senza estensione a credito**. Oltre: "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
-- **Una sola raccolta per volta.** Se ne è già in corso una: "Raccolta già in corso per questo account." Un blocco rimasto appeso si considera scaduto dopo **2 ore**.
-- **Fallimento:** "Raccolta non riuscita. Riprova più tardi.", con il tentativo giornaliero restituito. Se fallisce solo una parte dei gruppi di ricerche, la raccolta conta come riuscita con le offerte degli altri gruppi.
-- **Testi del pannello** (Sprint 74, mockup `collect-free` senza il riquadro della raccolta automatica, che arriva con lo Sprint 77): avvia subito la ricerca sulle ricerche attive; un riquadro spiega che il raccoglitore prende **solo i job pubblicati nelle ultime 24 ore**; la raccolta notturna gira comunque.
+**Regola (Sprint 77).** **Una raccolta al giorno per utente**, automatica o manuale, su tutti i piani, **senza estensione a credito**: ogni raccolta costa chiamate alla fonte (Apify). Il giorno è quello di **Europe/Rome** (azzeramento a mezzanotte). Senza ricerche attive non si chiama la fonte e il giorno **non** viene consumato.
+
+**Pannello "Raccogli nuovi job"** (pulsante Raccogli accanto al titolo della lista, o "Raccogli ora" nello stato vuoto di Raccolti; mockup `collect-free`, `collect-pro`, `collect-running`): testo introduttivo, riquadro che spiega che il raccoglitore prende **solo i job pubblicati nelle ultime 24 ore**, pulsante **"Raccogli ora"**, la riga "1 raccolta al giorno, automatica o manuale" e, sotto, il riquadro **"Raccolta automatica"**. Il mockup `collect-pro` mostra automatica e manuale come due limiti separati: vale la regola della raccolta unica.
+
+**Raccolta manuale "Raccogli ora".**
+- Esegue subito, per il solo utente, la stessa raccolta + scoring dell'automatica, sulle sue ricerche attive (finestra delle 24 ore).
+- Al termine l'avviso "Raccolta completata." e "Ultima raccolta: N job trovati, M tenuti dopo lo scoring"; la lista e le statistiche si ricaricano.
+- Se la raccolta di oggi è già stata fatta (a mano o in automatico) il pulsante è **disattivato** e sotto c'è il motivo: "Raccolta di oggi già eseguita alle HH:MM." (data e ora nel fuso dell'utente; con la data se il suo "oggi" è diverso da quello di Roma). Il server risponde comunque 409 con lo stesso testo.
+- **Una sola raccolta per volta.** Se ne è già in corso una (manuale o automatica): "Raccolta già in corso per questo account." Un blocco rimasto appeso si considera scaduto dopo **2 ore**.
+- **Fallimento:** "Raccolta non riuscita. Riprova più tardi.", con il giorno restituito se la raccolta fallisce del tutto. Se fallisce solo una parte dei gruppi di ricerche (chiamate già pagate), la raccolta conta come fatta con le offerte degli altri gruppi.
+- **Attesa:** la raccolta avviene mentre l'utente aspetta sulla pagina e può durare minuti: il pannello mostra un indicatore con "Raccolta in corso…" e non si chiude finché non finisce.
 - Per concedere una seconda raccolta lo stesso giorno l'amministratore usa un'azione dedicata in Django Admin (Sprint 68).
-- **Attesa:** la raccolta avviene mentre l'utente aspetta sulla pagina e può durare minuti: il pannello mostra un indicatore con "Raccolta in corso…" e non si chiude finché non finisce (mockup `collect-running`).
-- La raccolta manuale **non sostituisce** quella notturna, che gira comunque per tutte le ricerche attive.
+
+**Raccolta automatica (solo Pro).**
+- Interruttore "Raccolta automatica" e **orario di avvio** a quarti d'ora (predefinito 07:00), nel **fuso dell'utente** (il pannello lo indica: "Ora italiana" per Europe/Rome). I nuovi Pro partono con l'automatica spenta; ai Pro già esistenti al rilascio dello Sprint 77 è stata attivata alle 07:00, a partire dal giorno dopo.
+- **Free:** il riquadro è bloccato (badge PRO con lucchetto, interruttore disattivato) con l'invito "Con il piano Pro i nuovi job arrivano da soli…" e "Scopri il piano Pro" (porta a Impostazioni, dove c'è il piano; nessun acquisto in app).
+- Parte entro un quarto d'ora dall'orario scelto, una volta per giorno locale. Se a quell'ora la raccolta di oggi è già stata fatta a mano, o è in corso, o non ci sono ricerche attive, quel giorno è **saltata**. Attivandola o cambiando l'orario dopo l'orario di oggi, la prima raccolta è domani.
+- Se fallisce del tutto il giorno viene restituito (si può raccogliere a mano); non viene ritentata in automatico lo stesso giorno.
+- Ora legale: un orario che quel giorno non esiste (es. 02:30 al passaggio all'ora legale) parte alle 03:00; uno ripetuto al ritorno all'ora solare parte una volta sola. Un orario vicino alla mezzanotte può partire dopo la mezzanotte e conta per il nuovo giorno.
+- A fine raccolta, se ci sono job nuovi, una notifica (§4.12).
+- Un Pro tornato Free non raccoglie più in automatico (l'impostazione resta salvata, inattiva).
 
 ### 4.15 Creazione manuale di un job (Sprint 43)
 
@@ -845,7 +854,7 @@ Si salva con il pulsante "Salva". Limiti della pagina:
 1. **Piano e credito:** piano (Free/Pro) e saldo del credito extra, in sola lettura (§4.11).
 2. **I tuoi limiti di oggi** (Sprint 70): contatori, massimali e prezzi (§4.11).
 3. **Ricerche salvate:** creazione, modifica, eliminazione, attivazione e disattivazione (§4.2).
-4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e delle statistiche e l'ora della notifica mattutina), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
+4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e delle statistiche e l'orario della raccolta automatica), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
 5. **Notifiche push:** preferenza "Ricevi notifiche push" (Sprint 67) e attivazione sul dispositivo (§4.12).
 6. **Privacy e sicurezza** (Sprint 67):
    - **Email di accesso** (Sprint 70): email attuale e cambio con nuovo indirizzo + password. Il server invia un link di conferma (valido 3 giorni) al nuovo indirizzo e un avviso a quello attuale ("se non sei stato tu, cambia la password"); l'app mostra "Ti abbiamo inviato un link di conferma a …". L'email di accesso cambia solo quando si apre il link (pagina "Nuova email di accesso", che funziona anche da un dispositivo non collegato); il link vale una volta sola. Se il nuovo indirizzo appartiene già a un altro account la risposta è la stessa ma non parte nessuna email; se lo diventa prima della conferma, la conferma è rifiutata. Senza invio di email configurato il riquadro dice che il cambio non è disponibile. L'email mostrata sul CV (Profilo) è un dato diverso e non cambia;
@@ -875,7 +884,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 8. **Ricalcolo dello score** dopo "colma i gap", dopo una modifica del profilo o dopo modifiche nell'editor. Non c'è nemmeno la rivalutazione dello storico dopo un cambio delle regole di scoring.
 9. **Generazione automatica di CV** (o di cover letter e messaggi) per qualunque job. Rimossa nello Sprint 45: tutto è su richiesta.
 10. **Filtri delle ricerche salvate oltre tipo, keywords e località**: tipo di contratto, modalità di lavoro e altri criteri non sono disponibili. Il tipo (Job role/Company) è l'unica deviazione accettata (sprint-39).
-11. **Notifiche diverse** da quella mattutina e da quella di inattività, come avvisi al cambio stato o riepiloghi via email. Le uniche email inviate sono quelle di servizio dello Sprint 67 (verifica dell'indirizzo, tentativo di registrazione, recupero password, conferma di cancellazione, §4.1).
+11. **Notifiche diverse** da quella di fine raccolta automatica (Pro) e da quella di inattività, come avvisi al cambio stato o riepiloghi via email. Le uniche email inviate sono quelle di servizio dello Sprint 67 (verifica dell'indirizzo, tentativo di registrazione, recupero password, conferma di cancellazione, §4.1).
 12. *(Voce rimossa in v6: l'editor in-app del CV esiste dallo Sprint 51, §4.16.)*
 13. **Più profili master per utente.** Il profilo è uno solo (vedi §8).
 14. **Aggiornamento automatico dei documenti già prodotti** dopo una modifica del profilo. L'utente può solo rigenerarli (con consumo di massimale) o modificarli negli editor.
@@ -915,8 +924,8 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - **trasparenza AI**: i punti in cui l'app genera testo con l'AI mostrano l'avviso "Contenuto generato con l'AI: verificalo prima di usarlo." (§4.7).
 - **Fuso orario.**
   - Il "giorno" della lista e delle statistiche (compreso il default "oggi" del filtro date) e l'orario delle notifiche seguono il fuso dell'utente, impostabile in Impostazioni e in onboarding (Sprint 70). I nuovi account ricevono il fuso del dispositivo; quelli precedenti restano su Europe/Rome finché l'utente non lo cambia.
-  - Raccolta notturna e azzeramento dei massimali seguono sempre Europe/Rome.
-- **Freschezza dei dati.** Al mattino si vedono le offerte pubblicate nelle 24 ore precedenti la raccolta notturna (o quella manuale).
+  - L'azzeramento dei massimali e il giorno della raccolta seguono sempre Europe/Rome; l'orario della raccolta automatica segue il fuso dell'utente (Sprint 77): per chi vive lontano da Roma il "giorno" della raccolta può non coincidere con il suo.
+- **Freschezza dei dati.** Si vedono le offerte pubblicate nelle 24 ore precedenti l'ultima raccolta (automatica o manuale); chi non raccoglie per qualche giorno perde le offerte di quei giorni.
 - **Reattività — lista:** si apre senza attesa percepibile. Si intende reattività del server, **non** cache offline (§5.20).
 - **Reattività — azioni AI** (CV, cover letter, messaggi, chat):
   - avvengono mentre l'utente attende, con un indicatore di caricamento sul pulsante;
@@ -926,7 +935,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 - **Aggiornamenti dell'app** (Sprint 70). Quando viene pubblicata una nuova versione, una scheda già aperta mostra in basso "Nuova versione disponibile" con il pulsante **"Aggiorna"**, che ricarica la pagina. L'app non si ricarica mai da sola, così non si perdono modifiche non salvate; il controllo avviene ogni 30 minuti e quando si torna sulla scheda.
 - **Gestione dei fallimenti.**
   - Se un'azione AI fallisce, l'utente vede un messaggio semplice ("Non siamo riusciti a generare … Riprova."), non un errore tecnico, e **non perde** massimale né credito.
-  - Se la raccolta notturna fallisce, all'utente semplicemente non arrivano job nuovi.
+  - Se la raccolta automatica fallisce, all'utente semplicemente non arrivano job nuovi (il giorno torna disponibile per una raccolta manuale).
   - Lo scoring fallito lascia il job senza punteggio, senza messaggi.
   - La diagnosi resta lato server.
 - **Lingua dell'interfaccia:**
@@ -988,14 +997,15 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Un'offerta già presente tra i job dell'utente non viene ricreata.
 - ☐ Ogni job valutato ha un punteggio da 1 a 10, una motivazione breve e match/gap, ciascuno con una motivazione.
 - ☐ Se l'offerta richiede una lingua assente dal profilo, senza eccezione internazionale, il punteggio non supera 3 e la motivazione lo dichiara.
-- ☐ Il ciclo notturno non genera alcun CV.
+- ☐ La raccolta (automatica o manuale) non genera alcun CV.
 - ☐ Se lo scoring di un job fallisce, il job resta visibile senza punteggio, in fondo alla lista.
 
 ### Statistiche e raccolta manuale
 - ☐ Nella sezione Raccolti il riepilogo mostra i job trovati oggi e in settimana; aperto mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, settimana e totali (Sprint 74).
 - ☐ "Raccogli ora" (pannello aperto dal pulsante Raccogli) esegue raccolta + scoring sulle ricerche attive, mostra i job trovati e quelli tenuti e ricarica lista e statistiche.
-- ☐ Una seconda raccolta manuale nello stesso giorno è rifiutata con "Massimo 1 al giorno", su tutti i piani e senza estensione a credito.
-- ☐ Una raccolta manuale fallita non consuma il tentativo giornaliero.
+- ☐ Una raccolta al giorno in totale, automatica o manuale, su tutti i piani e senza estensione a credito: dopo la raccolta di oggi "Raccogli ora" è disattivato con "Raccolta di oggi già eseguita alle HH:MM" (Sprint 77).
+- ☐ Una raccolta fallita del tutto non consuma il giorno (restituito sulla stessa giornata in cui era stato riservato); senza ricerche attive il giorno non si consuma.
+- ☐ Solo i Pro attivano la raccolta automatica e scelgono l'orario (quarti d'ora, fuso dell'utente); parte una volta per giorno locale ed è saltata se la raccolta di oggi è già stata fatta; per i Free il riquadro è bloccato con l'invito al Pro (Sprint 77).
 
 ### Lista, sezioni, filtri e ricerca
 - ☐ Esistono quattro sezioni: Raccolti, Importati, Preferiti, Archiviati.
@@ -1082,9 +1092,9 @@ Formato: checklist di condizioni verificabili sull'as-is.
 ### Notifiche
 - ☐ Le notifiche si attivano da Impostazioni.
 - ☐ Togliendo la spunta "Ricevi notifiche push" l'utente non riceve più alcuna notifica e le registrazioni di tutti i suoi dispositivi vengono eliminate; riattivando le notifiche su un dispositivo la preferenza torna attiva (Sprint 67).
-- ☐ Con job creati dopo l'ultima notifica mattutina, l'utente riceve la notifica tra le 10:00 e le 10:59 locali. Senza job nuovi, nessuna notifica.
+- ☐ A fine raccolta automatica con job nuovi il Pro riceve la notifica; senza job nuovi, o dopo una raccolta manuale, nessuna notifica. Nessuna notifica alle 10:00 (Sprint 77).
 - ☐ Uno stesso batch non viene annunciato due volte.
-- ☐ Dopo il logout il dispositivo non riceve più notifiche dell'account; riattivando le notifiche, i job creati mentre erano spente non fanno partire la notifica mattutina (Sprint 70).
+- ☐ Dopo il logout il dispositivo non riceve più notifiche dell'account; riattivando le notifiche, ripartono da quel momento (Sprint 70).
 - ☐ Dopo 7 giorni senza "candidatura fatta" (a partire dalla registrazione o dall'ultima candidatura) l'utente riceve una volta il promemoria di inattività.
 
 ### Requisiti trasversali
@@ -1106,7 +1116,7 @@ Questa sezione elenca comportamenti anomali, limiti e incongruenze riscontrati n
 
 **Lista, scoring e dati storici**
 1. **Job scartati dal vecchio cap ancora visibili.** *(Risolto nello Sprint 68.)* I job marcati (988 al 2026-11-14, nessuno con documenti o bozze) vengono eliminati e il marcatore rimosso. Prima dello Sprint 46 il cap dei 15 job al giorno marcava come scartati i job in eccesso. Il marcatore è rimasto sui job storici, ma né la lista né le statistiche lo considerano. I job scartati in passato (circa un migliaio, mai reintegrati) compaiono quindi in lista e nei conteggi della Home come job normali.
-2. **Scoring fallito, job senza punteggio.** *(Risolto nello Sprint 68.)* I job senza punteggio sono ritentati al ciclo notturno successivo (massimo 3 fallimenti per job) e con un comando manuale; per il job creato a mano la valutazione viene ritentata, il massimale non è restituito (il job esiste). Se lo scoring di un job fallisce, il job resta in lista senza punteggio, in fondo all'ordinamento, e **non viene mai ritentato**. Non esiste un comando per rivalutarlo.
+2. **Scoring fallito, job senza punteggio.** *(Risolto nello Sprint 68.)* I job senza punteggio sono ritentati alla raccolta successiva (fino allo Sprint 76 al ciclo notturno; massimo 3 fallimenti per job) e con un comando manuale; per il job creato a mano la valutazione viene ritentata, il massimale non è restituito (il job esiste). Se lo scoring di un job fallisce, il job resta in lista senza punteggio, in fondo all'ordinamento, e **non viene mai ritentato**. Non esiste un comando per rivalutarlo.
    - Lo stesso succede quando una raccolta si interrompe a metà: i job già creati restano senza punteggio.
    - Per un job creato a mano, il massimale è comunque consumato anche se la valutazione fallisce.
 3. **Storico dei punteggi su scala 1–5 non riscalato.** *(Risolto nello Sprint 68.)* I punteggi storici sono riscalati ×2. Resta aperto: il limite per lingua dello Sprint 48 non è stato applicato ai job valutati prima (servirebbe una nuova valutazione AI per ognuno). I job valutati prima dello Sprint 47 conservano il punteggio su 1–5:

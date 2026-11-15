@@ -182,7 +182,7 @@ Lo sprint contiene tre migrazioni `jobs/0017` (nuovi campi), `jobs/0018` (backfi
    ```
    Taglio di default 2026-09-24 21:00 UTC (passaggio reale alla scala 1–10, verificato sui dati: vedi `sprints/sprint-68.md`). Il dry-run segnala eventuali punteggi > 5 prima del taglio, che non vengono toccati.
 7. **Avvio**: `docker compose -f docker-compose.prod.yml up -d` (`web` applica la `jobs/0019` e le migrazioni non ancora applicate; `frontend-build` ricompila la PWA).
-8. **Facoltativo — job senza punteggio**: il ciclo notturno li ritenta da solo (al massimo 3 fallimenti per job). Per farlo subito: `docker compose -f docker-compose.prod.yml exec web python manage.py retry_unscored_jobs --dry-run`, poi senza `--dry-run` (una chiamata AI per job).
+8. **Facoltativo — job senza punteggio**: la raccolta successiva (automatica o manuale; fino allo Sprint 76 il ciclo notturno) li ritenta da sola (al massimo 3 fallimenti per job). Per farlo subito: `docker compose -f docker-compose.prod.yml exec web python manage.py retry_unscored_jobs --dry-run`, poi senza `--dry-run` (una chiamata AI per job).
 9. **Verifiche**: coerenza dello stack (§4.3); in Admin la lista Job non ha più il filtro "discarded by cap", i job riscalati hanno `score_rescaled_from_legacy`; la mattina dopo, `RunLog` `collection` con le righe per gruppo e i contatori degli scarti.
 
 ### 4.8 Rilascio dello Sprint 70 (account, profilo, notifiche, frontend)
@@ -215,14 +215,23 @@ docker run --rm -u root -v "$PWD/backend:/app" -e DJANGO_DEBUG=true app-apply-we
 
 Poi completare in `backend/locale/en/LC_MESSAGES/django.po` le voci con `msgstr ""` e togliere i `#, fuzzy` (makemessages propone in automatico traduzioni di frasi simili, spesso sbagliate: vanno controllate e il flag rimosso), rilanciare lo stesso comando per ricompilare il `.mo` e committare entrambi i file. `apps/common/test_i18n.py` fallisce se restano voci vuote o fuzzy o se il `.mo` non corrisponde al `.po`. Il comando non usa il database e scrive solo in `backend/locale/`; i file creati da root nel bind mount vanno eventualmente riassegnati all'utente del repository.
 
+### 4.10 Rilascio dello Sprint 77 (raccolta automatica Pro, niente ciclo notturno) — passi una tantum, in ordine
+
+Migrazioni: `accounts/0011` e `0012` (campi della raccolta automatica; **attiva l'automatica alle 07:00 per tutti gli utenti già Pro**, a partire dal giorno dopo il rilascio), `jobs/0021` e `0022` (**toglie il PeriodicTask del ciclo notturno delle 02:00** e crea "Raccolte automatiche Pro (ogni 15 minuti)"), `notifications/0003` (**toglie la notifica delle 10:00**). Nessuna variabile d'ambiente nuova. L'informativa passa alla versione 1.1: tutti gli utenti la riaccettano al primo accesso.
+
+1. **Prima:** backup del database (§6) e verifica di coerenza dello stack (§4.3). Rilasciare in un orario lontano dalle 02:00 (nessun ciclo notturno in corso) e possibilmente dopo le 02:00 del giorno: la prima automatica dei Pro esistenti è il giorno dopo, quindi il giorno del rilascio resta coperto dal ciclo notturno appena girato.
+2. **Build e avvio** di `web`, `worker`, `beat` e `frontend-build` da `docker-compose.prod.yml` (§4.1): le migrazioni partono con il `web`. Il `beat` (`DatabaseScheduler`) legge i PeriodicTask aggiornati da solo; riavviarlo comunque con gli altri.
+3. **Verifiche:** Django Admin → *Periodic tasks*: presenti "Raccolte automatiche Pro (ogni 15 minuti)", "Promemoria di inattività" e il backup; assenti "Ciclo notturno…" e "Notifica mattutina…". Admin → *Users*: i Pro hanno "auto collection enabled" e l'orario 07:00. Il giorno dopo, dopo le 07:00: `RunLog` `collection` dei Pro (SUCCESS, o SKIPPED se avevano già raccolto a mano).
+4. **Ritorno indietro** (solo se necessario, prima che i Pro cambino le impostazioni): `migrate jobs 0021` e `migrate notifications 0002` ricreano il ciclo delle 02:00 e la notifica delle 10:00 (il codice va riportato alla versione precedente, perché i task vecchi non esistono più nella nuova).
+
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 
 Creati da migrazioni dati (modificabili da Django Admin → Periodic tasks):
 
 | Task | Quando | Migrazione |
 |---|---|---|
-| Ciclo notturno — `apps.jobs.tasks.run_nightly_cycle` (oggi solo raccolta + scoring: cap di intake e CV automatici rimossi; il nome del PeriodicTask è rimasto quello storico) | 02:00 Europe/Rome | `jobs/0003_schedule_nightly_cycle` |
-| Notifica mattutina (nuovi job) e promemoria di inattività (7 giorni) | ogni 15 minuti; la notifica mattutina parte solo nell'ora 10 locale dell'utente | `notifications/0002_schedule_notification_tasks` |
+| Raccolte automatiche Pro — `apps.jobs.tasks.run_automatic_collections`: avvia nel worker la raccolta dei Pro con l'automatica attiva quando, nel loro fuso, arriva l'orario scelto (una volta per giorno locale; consuma la quota di una raccolta al giorno) | ogni 15 minuti | `jobs/0022_replace_nightly_cycle_schedule` (che ha tolto il ciclo notturno delle 02:00, `jobs/0003`) |
+| Promemoria di inattività (7 giorni) | ogni 15 minuti | `notifications/0002_schedule_notification_tasks` (la notifica mattutina della stessa migrazione è stata tolta da `notifications/0003`) |
 | Backup giornaliero database + media (S3 se configurato, altrimenti locale ruotato a 7 giorni) | 03:30 Europe/Rome | `common/0001_schedule_backup` |
 
 ## 6. Backup e ripristino
@@ -270,7 +279,7 @@ Ripristino di prova (**mai contro la produzione**: `pg_restore --clean --if-exis
 Comandi da lanciare in `/root/App-apply`. Abbreviazione usata sotto: `SHELL_DJANGO='docker compose -f docker-compose.prod.yml exec -T web python manage.py shell -c'`. Identificare sempre l'utente per id (`User.objects.get(pk=<id>)`), non scrivere email nei documenti.
 
 ### 7.1 Raccolta offerte fallita con 403 da Apify / credito Apify esaurito
-Sintomo: raccolta notturna e "Collect now" falliscono per **tutti** gli utenti, `RunLog` di tipo `collection` in `failure` con 403 dall'endpoint `run-sync-get-dataset-items`. Causa tipica: credito mensile dell'account Apify esaurito (piano free = 5 $/mese), non token invalido.
+Sintomo: raccolta automatica e "Raccogli ora" falliscono per **tutti** gli utenti, `RunLog` di tipo `collection` in `failure` con 403 dall'endpoint `run-sync-get-dataset-items`. Causa tipica: credito mensile dell'account Apify esaurito (piano free = 5 $/mese), non token invalido.
 1. Verificare il consumo: `GET https://api.apify.com/v2/users/me/limits` con il token (dal container `web`).
 2. Ricaricare credito / cambiare piano sull'account, **oppure** passare a un token di un altro account con credito: aggiornare `APIFY_API_TOKEN` in `.env` (si può tenere il vecchio valore in una variabile di comodo con altro nome: il codice legge solo `APIFY_API_TOKEN`).
 3. Ricreare `web worker beat` (§4.2) e verificare `GET https://api.apify.com/v2/users/me` → 200.
@@ -278,19 +287,19 @@ Sintomo: raccolta notturna e "Collect now" falliscono per **tutti** gli utenti, 
 ### 7.2 Credenziali/modello Bedrock
 Le chiamate AI passano tutte da `apps/common/ai.py`. Per ruotare le chiavi AWS o cambiare modello: aggiornare `AWS_*` / `BEDROCK_*` in `.env` e ricreare i container (§4.2). Errori di quota/credenziali compaiono nei `RunLog` (scoring, generazioni, chat).
 
-### 7.3 Utente bloccato dalla quota "Collect now" (409)
-Il limite è `COLLECTION_DAILY_LIMIT = 1` raccolta manuale al giorno per utente, uguale per Free e Pro (`apps/jobs/tasks.py`). Per concederne un'altra oggi (Sprint 68): Django Admin → **Users**, selezionare l'utente e scegliere l'azione **"Azzera la quota di raccolta manuale di oggi"**. L'azione **"Azzera tutti i contatori giornalieri di oggi"** azzera anche gli altri contatori (`manual_cv_count`, `cover_letter_count`, `referral_message_count`, `import_count`, `manual_job_count`, `collection_count`, `cv_import_count`); dalla lista **Daily quotas** l'azione "Azzera tutti i contatori delle righe selezionate" vale per righe di qualunque giorno. Il "giorno" è quello di Europe/Rome.
+### 7.3 Utente bloccato dalla quota di raccolta (409 "già eseguita oggi")
+Il limite è `COLLECTION_DAILY_LIMIT = 1` raccolta al giorno per utente, **automatica o manuale**, uguale per Free e Pro (`apps/jobs/tasks.py`, Sprint 77); senza ricerche attive non si consuma. Per concederne un'altra oggi (Sprint 68): Django Admin → **Users**, selezionare l'utente e scegliere l'azione **"Azzera la quota di raccolta manuale di oggi"**. L'azione **"Azzera tutti i contatori giornalieri di oggi"** azzera anche gli altri contatori (`manual_cv_count`, `cover_letter_count`, `referral_message_count`, `import_count`, `manual_job_count`, `collection_count`, `cv_import_count`); dalla lista **Daily quotas** l'azione "Azzera tutti i contatori delle righe selezionate" vale per righe di qualunque giorno. Il "giorno" è quello di Europe/Rome.
 
-Il 409 può anche indicare una raccolta già in corso (`User.collection_in_progress`, visibile e modificabile nella scheda utente in Admin, sezione "Raccolta e inattività"): dallo Sprint 68 la guardia è condivisa con il ciclo notturno, quindi una raccolta manuale è respinta anche mentre gira il ciclo notturno di quell'utente. Il lock scade da solo dopo 2 ore (`COLLECTION_STALE_AFTER`).
+Il 409 può anche indicare una raccolta già in corso (`User.collection_in_progress`, visibile e modificabile nella scheda utente in Admin, sezione "Raccolta e inattività"): la guardia è condivisa con la raccolta automatica, quindi una raccolta manuale è respinta anche mentre gira l'automatica di quell'utente. Il lock scade da solo dopo 2 ore (`COLLECTION_STALE_AFTER`).
 
-### 7.4 Rilanciare la raccolta notturna per un solo utente
-Non esiste un task Celery per singolo utente: si chiama la funzione da shell.
+### 7.4 Rilanciare la raccolta di un solo utente
+Da shell, con la stessa funzione della raccolta automatica (Sprint 77; prima `run_nightly_cycle_for_user`):
 ```
 $SHELL_DJANGO "
-from apps.accounts.models import User; from apps.jobs.tasks import run_nightly_cycle_for_user
-print(run_nightly_cycle_for_user(User.objects.get(pk=<id>)))"
+from apps.accounts.models import User; from apps.jobs.tasks import run_automatic_collection_for_user
+print(run_automatic_collection_for_user(User.objects.get(pk=<id>)))"
 ```
-Dallo Sprint 68 questo percorso usa la stessa guardia della raccolta manuale (se è in corso una raccolta l'utente viene saltato con un `RunLog` `skipped`), non consuma la quota giornaliera e ritenta anche i job senza punteggio. **Ogni gruppo ricerca×location è una chiamata Apify a pagamento** (≥150 risultati fatturati). I job già presenti non vengono duplicati (dedup su `external_id`).
+Usa la stessa guardia e **la stessa quota** della raccolta manuale: se la raccolta di oggi è già stata fatta, è in corso o non ci sono ricerche attive l'utente viene saltato con un `RunLog` `skipped` (per forzarla, prima azzerare la quota come in §7.3). Ritenta anche i job senza punteggio e, se trova job nuovi, invia la notifica push. Non controlla piano né attivazione (lo fa il task Celery). **Ogni gruppo ricerca×location è una chiamata Apify a pagamento** (≥150 risultati fatturati). I job già presenti non vengono duplicati (dedup su `external_id`).
 
 ### 7.5 Cambiare piano o credito di un utente
 Da Django Admin (`/admin/` → Users: campi `plan`, `extra_credit`) oppure da shell (`u.plan = User.Plan.PRO; u.save(update_fields=['plan'])`). Il passaggio Pro→Free disattiva tutte le ricerche (regola di downgrade, specifiche funzionali §4.2).
@@ -324,7 +333,7 @@ Un `restart` **non basta**: i container leggono `.env` solo quando vengono creat
 - Utente che non vuole accettare la nuova versione di informativa/termini: dalla schermata di accettazione può comunque esportare i dati o eliminare l'account. Il registro delle accettazioni è in Django Admin → Legal acceptances (sola lettura).
 - Richieste sui dati da parte di un utente (accesso, cancellazione): l'utente le fa da solo da Impostazioni ("Esporta i miei dati", "Elimina account"). Anche eliminare un utente da Django Admin (o da shell con `user.delete()`) cancella tutte le sue righe, i suoi file su disco e il testo dei suoi `RunLog` (segnali di `apps/accounts/signals.py`); solo l'email di conferma parte esclusivamente dalla cancellazione fatta dall'utente.
 - Copie delle email inviate: Gmail conserva ogni messaggio nella cartella "Posta inviata" dell'account mittente (indirizzo del destinatario e testo, nessun dato del profilo); vanno ripulite periodicamente a mano.
-- Job senza punteggio (Sprint 68): il ciclo notturno li ritenta finché `Job.scoring_failures` non arriva a 3; a mano `python manage.py retry_unscored_jobs [--dry-run] [--user-id <id>] [--ignore-limit]` (`--ignore-limit` include quelli già arrivati a 3).
+- Job senza punteggio (Sprint 68): ogni raccolta (automatica o manuale) li ritenta finché `Job.scoring_failures` non arriva a 3; a mano `python manage.py retry_unscored_jobs [--dry-run] [--user-id <id>] [--ignore-limit]` (`--ignore-limit` include quelli già arrivati a 3).
 - Raccolta parziale: il `RunLog` `collection` riporta una riga per gruppo (`gruppo <tipo> · <città>, <paese>: ok, offerte=N` oppure `ERRORE …`) e gli scarti (`scartati_campi_mancanti`, `scartati_troppo_lunghi`, `scartati_duplicati`); con almeno un gruppo fallito lo stato è `failure` anche se gli altri gruppi sono stati raccolti.
 
 ## 8. Sicurezza HTTP, log e conservazione (Sprint 66)

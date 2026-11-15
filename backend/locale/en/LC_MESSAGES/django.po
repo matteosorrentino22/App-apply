@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: App-apply\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-14 17:16+0100\n"
+"POT-Creation-Date: 2026-11-15 14:01+0100\n"
 "PO-Revision-Date: 2026-11-14 17:00+0100\n"
 "Last-Translator: App-apply\n"
 "Language-Team: English\n"
@@ -229,6 +229,14 @@ msgstr "Invalid credentials."
 #: apps/accounts/serializers.py
 msgid "Fuso orario non valido."
 msgstr "Invalid time zone."
+
+#: apps/accounts/serializers.py
+msgid "Scegli un orario a quarti d'ora (es. 07:00, 07:15)."
+msgstr "Choose a time on the quarter hour (e.g. 07:00, 07:15)."
+
+#: apps/accounts/serializers.py
+msgid "La raccolta automatica è riservata al piano Pro."
+msgstr "Automatic collection is reserved for the Pro plan."
 
 #: apps/accounts/serializers.py
 msgid "Password non corretta."
@@ -522,12 +530,24 @@ msgid "Deve essere \"\", \"yes\" o \"no\"."
 msgstr "Must be \"\", \"yes\" or \"no\"."
 
 #: apps/jobs/tasks.py
-msgid "Raccolta già in corso per questo account."
-msgstr "Collection already in progress for this account."
+msgid "La raccolta di oggi è già stata fatta. Massimo 1 al giorno."
+msgstr "Today's collection has already been done. At most 1 per day."
 
 #: apps/jobs/tasks.py
-msgid "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno."
-msgstr "You have already used the manual collection today. At most 1 per day."
+#, python-format
+msgid "Raccolta di oggi già eseguita alle %(time)s. Massimo 1 al giorno."
+msgstr "Today's collection already ran at %(time)s. At most 1 per day."
+
+#: apps/jobs/tasks.py
+#, python-format
+msgid ""
+"Raccolta di oggi già eseguita il %(date)s alle %(time)s. Massimo 1 al giorno."
+msgstr ""
+"Today's collection already ran on %(date)s at %(time)s. At most 1 per day."
+
+#: apps/jobs/tasks.py
+msgid "Raccolta già in corso per questo account."
+msgstr "Collection already in progress for this account."
 
 #: apps/jobs/tasks.py
 msgid "Raccolta non riuscita. Riprova più tardi."

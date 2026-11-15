@@ -13,7 +13,7 @@ from .models import Job, RunLog
 
 # Tentativi di scoring per job (Sprint 68): un job rimasto senza punteggio
 # (errore Bedrock/output fuori schema, raccolta interrotta prima dello
-# scoring) viene ritentato dal ciclo notturno finché i fallimenti non
+# scoring) viene ritentato a ogni raccolta (automatica o manuale, Sprint 77) finché i fallimenti non
 # arrivano a questo numero, poi resta senza punteggio (ritentabile solo a
 # mano con `retry_unscored_jobs --ignore-limit`).
 MAX_SCORING_FAILURES = 3
@@ -96,7 +96,7 @@ def _apply_score_result(job, result, profile):
         score = cap
         # Il prefisso è salvato nel DB insieme alla motivazione: lingua
         # dell'interfaccia del proprietario al momento dello scoring
-        # (Sprint 71; lo scoring gira nel ciclo notturno, fuori da una
+        # (Sprint 71; lo scoring gira anche nella raccolta automatica, fuori da una
         # richiesta). La motivazione scritta dal modello non cambia.
         with translation.override(job.user.interface_language):
             prefix = _("Punteggio limitato a %(cap)s/10: lingua richiesta (%(language)s) assente dal profilo.") % {

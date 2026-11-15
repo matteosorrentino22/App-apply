@@ -1,5 +1,4 @@
 import logging
-import zoneinfo
 from datetime import timedelta
 
 from celery import shared_task
@@ -8,7 +7,6 @@ from django.utils import timezone as dj_timezone
 from django.utils import translation
 from django.utils.translation import gettext_lazy
 
-from apps.jobs.models import Job
 
 from .services import send_web_push
 
@@ -22,7 +20,9 @@ INACTIVITY_THRESHOLD = timedelta(days=7)
 # Testi tradotti nella lingua dell'interfaccia dell'utente al momento
 # dell'invio (Sprint 71): il task gira fuori da una richiesta, la lingua non
 # arriva da Accept-Language ma da `User.interface_language`.
-MORNING_NOTIFICATION_PAYLOAD = {
+# Sprint 77: inviata a fine raccolta automatica (solo Pro) se ci sono job
+# nuovi, al posto della notifica mattutina delle 10:00 (stessi testi).
+NEW_JOBS_NOTIFICATION_PAYLOAD = {
     "title": gettext_lazy("Nuovi job pronti"),
     "body": gettext_lazy("Ci sono nuove offerte da valutare nella tua lista."),
 }
@@ -58,44 +58,18 @@ def _for_each_user(task_name, function):
             logger.exception("%s: errore per l'utente %s, si prosegue", task_name, user.pk)
 
 
-def _local_now(user):
-    return dj_timezone.now().astimezone(zoneinfo.ZoneInfo(user.timezone))
-
-
-def _is_around_ten_local(user):
-    # "Circa le 10:00 locali" (§5.5 tecniche): lo scheduler gira ogni ~15
-    # minuti, una finestura di un'ora intera è tollerante a questa cadenza;
-    # il vero anti-doppio-invio è il confronto con `last_notified_at`, non
-    # l'ampiezza della finestra.
-    return _local_now(user).hour == 10
-
-
-def send_morning_notification_for_user(user):
-    """Notifica mattutina (§5.5 tecniche): se sono circa le 10:00 locali
-    dell'utente ed esistono Job raccolti dopo l'ultima notifica, invia e
-    aggiorna `last_notified_at`. Nessun caso speciale per fusi orari: la
-    definizione "raccolti dopo l'ultima notifica" copre anche gli utenti a
-    est dell'Europa la cui giornata locale inizia prima del batch 02:00
-    Europe/Rome."""
-    if not user.notifications_enabled or not _is_around_ten_local(user):
+def send_new_jobs_notification(user):
+    """Notifica a fine raccolta automatica (Sprint 77, SPEC-DELTA B4):
+    chiamata da `apps.jobs.tasks.run_automatic_collection_for_user` quando la
+    raccolta ha creato job nuovi. Rispetta la preferenza notifiche e
+    aggiorna `last_notified_at`. Nessuna notifica dopo una raccolta manuale
+    (l'utente è già nell'app)."""
+    user.refresh_from_db(fields=["notifications_enabled"])
+    if not user.notifications_enabled:
         return False
-
-    has_new_jobs = Job.objects.filter(
-        user=user, date_collected__gt=user.last_notified_at
-    ).exists()
-    if not has_new_jobs:
-        return False
-
-    now = dj_timezone.now()
-    _send_to_all_subscriptions(user, MORNING_NOTIFICATION_PAYLOAD)
-
-    User.objects.filter(pk=user.pk).update(last_notified_at=now)
+    _send_to_all_subscriptions(user, NEW_JOBS_NOTIFICATION_PAYLOAD)
+    User.objects.filter(pk=user.pk).update(last_notified_at=dj_timezone.now())
     return True
-
-
-@shared_task
-def send_morning_notifications():
-    _for_each_user("send_morning_notifications", send_morning_notification_for_user)
 
 
 def send_inactivity_notification_for_user(user):

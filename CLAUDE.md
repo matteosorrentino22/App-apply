@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Progetto
-App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn ogni notte e ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap). L'utente riceve una notifica mattutina e trova la lista già pronta; su ogni offerta genera su richiesta CV personalizzato in PDF (con "colma i gap"), cover letter e messaggi di networking, li rifinisce con editor + chat AI e traccia la candidatura. Nessuna generazione automatica di CV (rimossa, Sprint 45).
+App che centralizza e automatizza la ricerca di lavoro: raccoglie offerte da LinkedIn (una raccolta al giorno per utente: automatica all'orario scelto per i Pro, manuale "Raccogli" per tutti; Sprint 77) e ne valuta l'affinità con il profilo dell'utente (punteggio 1–10 + match/gap). I Pro ricevono una notifica a fine raccolta automatica se ci sono job nuovi e trovano la lista già pronta; su ogni offerta genera su richiesta CV personalizzato in PDF (con "colma i gap"), cover letter e messaggi di networking, li rifinisce con editor + chat AI e traccia la candidatura. Nessuna generazione automatica di CV (rimossa, Sprint 45).
 
 Riferimenti (documenti vivi, sempre allineati all'as-is):
 - `Docs/01-specifiche-funzionali-v6.md` — cosa fa l'app
@@ -12,11 +12,11 @@ Riferimenti (documenti vivi, sempre allineati all'as-is):
 
 ## Stack
 - **Backend:** Python + Django (+ Django REST Framework per l'API interna consumata dalla PWA)
-- **Task in background:** Celery + Redis (ciclo notturno raccolta+scoring, notifiche, backup). Le azioni su richiesta (generazione CV/cover letter/messaggi, chat degli editor, raccolta manuale "Collect now") girano invece in modo **sincrono** nella richiesta HTTP (gunicorn `--timeout 1800`)
-- **Scheduler:** Celery Beat con `DatabaseScheduler` (ciclo notturno alle 02:00 Europe/Rome, notifiche ogni 15 min con invio alle 10:00 locali, promemoria inattività, backup 03:30)
+- **Task in background:** Celery + Redis (raccolte automatiche Pro raccolta+scoring, promemoria di inattività, backup). Le azioni su richiesta (generazione CV/cover letter/messaggi, chat degli editor, raccolta manuale "Raccogli ora") girano invece in modo **sincrono** nella richiesta HTTP (gunicorn `--timeout 1800`)
+- **Scheduler:** Celery Beat con `DatabaseScheduler` (ogni 15 min: raccolte automatiche dei Pro all'orario scelto nel loro fuso e promemoria di inattività; backup 03:30 Europe/Rome). Nessun ciclo notturno né notifica delle 10:00 (rimossi nello Sprint 77). **Una raccolta al giorno per utente**, automatica o manuale (`COLLECTION_DAILY_LIMIT`, giorno Europe/Rome): ogni raccolta costa chiamate Apify
 - **Frontend:** React come PWA (no pubblicazione store, no cache offline — solo reattività dell'API)
 - **Database:** PostgreSQL
-- **Fonte offerte:** Apify (actor `cheap_scraper~linkedin-job-scraper`), dietro un'interfaccia interna sostituibile — una chiamata per gruppo (tipo ricerca × location) per utente/notte, non per singola ricerca salvata (sprint-39); nessun tetto di piano sui job creati né cap di intake (rimossi, Sprint 45–46: ogni chiamata è già a pagamento indipendentemente dai risultati usati). Resta solo il limite per singola chiamata Apify (`MAX_ITEMS_PER_CALL=150`, minimo billing pay-per-result dell'actor). L'import di un singolo job da URL usa invece l'API guest di LinkedIn (sprint-24), senza Apify
+- **Fonte offerte:** Apify (actor `cheap_scraper~linkedin-job-scraper`), dietro un'interfaccia interna sostituibile — una chiamata per gruppo (tipo ricerca × location) per utente/raccolta, non per singola ricerca salvata (sprint-39); nessun tetto di piano sui job creati né cap di intake (rimossi, Sprint 45–46: ogni chiamata è già a pagamento indipendentemente dai risultati usati). Resta solo il limite per singola chiamata Apify (`MAX_ITEMS_PER_CALL=150`, minimo billing pay-per-result dell'actor). L'import di un singolo job da URL usa invece l'API guest di LinkedIn (sprint-24), senza Apify
 - **Motore AI:** Claude via AWS Bedrock (SDK `anthropic`, client `AnthropicBedrock`, non l'API Anthropic diretta — passaggio 18/08/2026 per credito esaurito sulla chiave Anthropic) — scoring, generazione CV/cover letter/messaggi di networking, chat degli editor, parsing del CV caricato in onboarding. Modelli per uso configurati da env (`BEDROCK_SCORING_MODEL`, `BEDROCK_CV_GENERATION_MODEL`, `BEDROCK_CV_PARSING_MODEL`). Bedrock non supporta l'output strutturato nativo (`output_config.format`): l'helper condiviso `apps/common/ai.py` forza lo schema via tool-use (`tool_choice`), unico punto da toccare per tutte le chiamate AI
 - **Generazione CV/cover letter:** template HTML/CSS → PDF (WeasyPrint, font Caladea compatibile Cambria installato nell'immagine). Solo PDF, nessuna pipeline Word. Editor in-app con bozza (`CVDraft`/`CoverLetterDraft`) e chat AI a proposta→conferma (Sprint 51–63)
 - **Credito extra:** saldo in euro (`Decimal`) con listino prezzi unitari configurabile per azione
@@ -77,11 +77,8 @@ VPS per debug rapido, va sempre riportato a `docker-compose.prod.yml` con
 - Nuovi dati personali raccolti, nuovi fornitori che li ricevono o nuove conservazioni vanno riportati nell'informativa (`frontend/src/legal/`, copia in `Docs/legal/`) aumentandone la versione in `apps/accounts/legal.py` (gli utenti la riaccettano al prossimo accesso), e coperti da export e cancellazione account.
 - Testi liberi che finiscono al modello AI o nei PDF hanno sempre un `max_length` lato server.
 
-## Redesign UI in corso (branch `design/redesign-ui`)
-Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS.md`, `SPEC-DELTA.md`, `IMPLEMENTATION-PLAN.md`; sprint da 72). Finché uno sprint non lo implementa, **le specifiche in `Docs/01…03` e il codice restano l'as-is**. Decisioni già prese che cambieranno il comportamento (sprint 77, non prima):
-- **Utenti Free: nessuna raccolta automatica** (nemmeno quella notturna delle 02:00); solo raccolta manuale, 1 volta al giorno.
-- **Utenti Pro: una raccolta automatica al giorno all'orario scelto**, che sostituisce la raccolta notturna delle 02:00.
-- Fino allo sprint 77 il ciclo notturno e le sue regole (sezioni Progetto/Stack sopra) restano valide. Le voci ancora **da decidere** sono in `SPEC-DELTA.md §B`: in caso di dubbio chiedere, non assumere.
+## Redesign UI (sprint 72–80)
+Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS.md`, `SPEC-DELTA.md`, `IMPLEMENTATION-PLAN.md`; sprint da 72). Finché uno sprint non lo implementa, **le specifiche in `Docs/01…03` e il codice restano l'as-is**. Le decisioni sulla raccolta (SPEC-DELTA A4/A5, B1–B4) sono implementate nello Sprint 77 e descritte nelle specifiche: Free solo raccolta manuale 1/giorno; Pro raccolta automatica all'orario scelto (nel fuso dell'utente) che condivide la stessa quota giornaliera della manuale; nessun ciclo notturno per nessuno. Le voci ancora **da decidere** sono in `SPEC-DELTA.md §B`: in caso di dubbio chiedere, non assumere.
 - Il template PDF del CV è fuori dal redesign; nessun font o risorsa da servizi esterni.
 
 ## Cosa NON fare

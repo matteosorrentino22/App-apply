@@ -38,7 +38,7 @@ from .tasks import (
     CollectionDailyLimitReached,
     ManualCollectionFailed,
     run_manual_collection_for_user,
-    run_nightly_cycle_for_user,
+    run_automatic_collection_for_user,
 )
 
 User = get_user_model()
@@ -332,10 +332,13 @@ class ScoreJobTests(TestCase):
         self.assertEqual(job.score, 9)
 
 
-class RunNightlyCycleForUserTests(TestCase):
+class RunAutomaticCollectionForUserTests(TestCase):
+    """Sprint 77: la raccolta automatica dei Pro (al posto del ciclo
+    notturno) usa la stessa pipeline raccolta → scoring, con RunLog."""
+
     def setUp(self):
         self.user = User.objects.create_user(
-            username="nightly@example.com", email="nightly@example.com", password="pw-Night-12345!"
+            username="nightly@example.com", email="nightly@example.com", password="pw-Night-12345!", plan="pro"
         )
         SavedSearch.objects.create(
             user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True
@@ -347,7 +350,7 @@ class RunNightlyCycleForUserTests(TestCase):
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE_RESULT
         ):
             mock_get_source.return_value = _fake_source(offers)
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_automatic_collection_for_user(self.user)
 
         self.assertEqual(summary["collected"], 20)
         self.assertEqual(summary["scored"], 20)
@@ -360,7 +363,7 @@ class RunNightlyCycleForUserTests(TestCase):
         self.assertNotIn("scartati_cap", run_log.message)
 
 
-class NoAutomaticCvGenerationInNightlyCycleTests(TestCase):
+class NoAutomaticCvGenerationInCollectionTests(TestCase):
     """La generazione automatica di CV è stata rimossa: il ciclo
     di raccolta lascia sempre i job in `new`, indipendentemente dallo score —
     la generazione resta sempre manuale (§4.7/§4.11 funzionali)."""
@@ -384,7 +387,7 @@ class NoAutomaticCvGenerationInNightlyCycleTests(TestCase):
             "apps.jobs.scoring.score_job_with_claude", side_effect=fake_score
         ), patch("apps.cv.generation.generate_cv") as mock_generate_cv:
             mock_get_source.return_value = _fake_source(offers)
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_automatic_collection_for_user(self.user)
 
         self.assertNotIn("cv_generated", summary)
         mock_generate_cv.assert_not_called()
@@ -565,54 +568,14 @@ class CollectJobsApiTests(APITestCase):
         self.assertEqual(second.status_code, 409)
 
 
-class NightlyCycleScheduleTests(TestCase):
-    def test_periodic_task_is_scheduled_at_2am_europe_rome(self):
-        task = PeriodicTask.objects.get(
-            name="Ciclo notturno (raccolta, scoring, cap di intake)"
-        )
-        self.assertEqual(task.task, "apps.jobs.tasks.run_nightly_cycle")
+class CollectionScheduleTests(TestCase):
+    def test_nightly_cycle_is_replaced_by_the_automatic_collections_every_15_minutes(self):
+        # Sprint 77: niente più ciclo notturno delle 02:00.
+        self.assertFalse(PeriodicTask.objects.filter(name="Ciclo notturno (raccolta, scoring, cap di intake)").exists())
+        task = PeriodicTask.objects.get(name="Raccolte automatiche Pro (ogni 15 minuti)")
+        self.assertEqual(task.task, "apps.jobs.tasks.run_automatic_collections")
         self.assertTrue(task.enabled)
-        self.assertEqual(task.crontab.hour, "2")
-        self.assertEqual(task.crontab.minute, "0")
-        self.assertEqual(str(task.crontab.timezone), "Europe/Rome")
-
-
-class RunNightlyCycleOrchestratorTests(TestCase):
-    """Sprint 22, §6 "comportamento in caso di fonte non disponibile": un
-    fallimento per un singolo utente (es. sorgente Apify irraggiungibile) non
-    deve bloccare la raccolta per gli utenti successivi del batch — bug reale
-    trovato durante la QA di fine sprint (`run_nightly_cycle` non isolava le
-    eccezioni per utente)."""
-
-    def setUp(self):
-        self.failing_user = User.objects.create_user(
-            username="nightly-fail@example.com",
-            email="nightly-fail@example.com",
-            password="pw-Fail-12345!",
-        )
-        self.healthy_user = User.objects.create_user(
-            username="nightly-ok@example.com", email="nightly-ok@example.com", password="pw-Ok-12345!"
-        )
-
-    def test_failure_for_one_user_does_not_block_the_rest_of_the_batch(self):
-        from . import tasks as tasks_module
-
-        processed = []
-
-        def fake_run_for_user(user):
-            processed.append(user.pk)
-            if user.pk == self.failing_user.pk:
-                raise ConnectionError("fonte non raggiungibile")
-            return {}
-
-        with patch.object(tasks_module, "run_nightly_cycle_for_user", side_effect=fake_run_for_user):
-            tasks_module.run_nightly_cycle()
-
-        self.assertEqual(set(processed), {self.failing_user.pk, self.healthy_user.pk})
-
-        run_log = RunLog.objects.get(user=self.failing_user, task_type=RunLog.TaskType.COLLECTION)
-        self.assertEqual(run_log.status, RunLog.Status.FAILURE)
-        self.assertIn("fonte non raggiungibile", run_log.message)
+        self.assertEqual((task.interval.every, task.interval.period), (15, "minutes"))
 
 
 VALID_LINKEDIN_URL = "https://www.linkedin.com/jobs/view/1234567890"

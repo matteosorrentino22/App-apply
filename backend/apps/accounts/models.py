@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone as django_timezone
@@ -62,6 +64,15 @@ class User(AbstractUser):
     # Preferenza notifiche (Sprint 67): con False i task di notifica saltano
     # l'utente; spegnendola si eliminano anche le sottoscrizioni push.
     notifications_enabled = models.BooleanField(default=True)
+    # Raccolta automatica (Sprint 77, solo Pro): una al giorno all'orario
+    # scelto nel fuso `timezone`, al posto del ciclo notturno delle 02:00;
+    # consuma la stessa quota giornaliera della raccolta manuale.
+    # `auto_collection_last_local_date` è la data locale dell'ultima
+    # raccolta automatica avviata: il task che gira ogni 15 minuti non la
+    # ripete nello stesso giorno.
+    auto_collection_enabled = models.BooleanField(default=False)
+    auto_collection_time = models.TimeField(default=datetime.time(7, 0))
+    auto_collection_last_local_date = models.DateField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding

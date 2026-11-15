@@ -67,6 +67,10 @@ def usage_for_user(user):
             "price": str(price) if price is not None else None,
             "next_charge": _next_charge(used, limit, price, available, credit),
         }
+    # Ora della raccolta di oggi (Sprint 77, automatica o manuale): la PWA la
+    # mostra nel fuso dell'utente ("già eseguita oggi alle HH:MM").
+    done_at = quota.collection_done_at if quota is not None else None
+    actions["collection"]["done_at"] = done_at.isoformat() if done_at else None
     # I massimali ripartono alla mezzanotte Europe/Rome (TIME_ZONE), non
     # nel fuso dell'utente (§7 tecniche).
     resets_at = timezone.make_aware(datetime.combine(now.date() + timedelta(days=1), time.min))

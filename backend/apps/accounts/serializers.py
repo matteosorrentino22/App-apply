@@ -9,6 +9,7 @@ from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 from rest_framework import serializers
 
+from apps.jobs.tasks import user_zone
 from apps.profiles.models import Profile
 
 from .emails import email_enabled
@@ -132,6 +133,8 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             "objective_statement",
             "email_verified",
             "notifications_enabled",
+            "auto_collection_enabled",
+            "auto_collection_time",
             "legal_acceptance_required",
             "legal_missing",
             "legal_acceptances",
@@ -143,6 +146,9 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "email", "plan", "extra_credit", "email_verified"]
         extra_kwargs = {"objective_statement": {"max_length": 2000}}
 
+    # Raccolta automatica (Sprint 77): orario a quarti d'ora nel fuso
+    # dell'utente, "HH:MM".
+    auto_collection_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"], required=False)
     legal_acceptance_required = serializers.SerializerMethodField()
     legal_missing = serializers.SerializerMethodField()
     legal_acceptances = serializers.SerializerMethodField()
@@ -182,6 +188,19 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(_("Fuso orario non valido."))
         return value
 
+    def validate_auto_collection_time(self, value):
+        if value.minute % 15 or value.second:
+            raise serializers.ValidationError(_("Scegli un orario a quarti d'ora (es. 07:00, 07:15)."))
+        return value
+
+    def validate(self, attrs):
+        # Solo i Pro possono attivarla (spegnerla è sempre permesso).
+        if attrs.get("auto_collection_enabled") and self.instance is not None and self.instance.plan != User.Plan.PRO:
+            raise serializers.ValidationError(
+                {"auto_collection_enabled": _("La raccolta automatica è riservata al piano Pro.")}
+            )
+        return attrs
+
     def update(self, instance, validated_data):
         # Notifiche riaccese (Sprint 70): `last_notified_at` riparte da ora,
         # così la prima notifica mattutina non conta i job del periodo di
@@ -192,8 +211,22 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
         # letto all'autenticazione — un save() completo riscriverebbe anche
         # `extra_credit` con il valore di allora, annullando un addebito o
         # una ricarica avvenuti nel frattempo.
+        # Raccolta automatica attivata o orario cambiato (Sprint 77): se
+        # l'orario di oggi è già passato si parte da domani, invece di
+        # raccogliere subito al primo giro del task.
+        schedule_changed = (
+            validated_data.get("auto_collection_enabled") is True and not instance.auto_collection_enabled
+        ) or (
+            "auto_collection_time" in validated_data and validated_data["auto_collection_time"] != instance.auto_collection_time
+        )
         for field, value in validated_data.items():
             setattr(instance, field, value)
+        if schedule_changed:
+            local_now = dj_timezone.now().astimezone(user_zone(instance))
+            instance.auto_collection_last_local_date = (
+                local_now.date() if local_now.time() >= instance.auto_collection_time else None
+            )
+            validated_data["auto_collection_last_local_date"] = instance.auto_collection_last_local_date
         instance.save(update_fields=list(validated_data))
         if validated_data.get("notifications_enabled") is False:
             # Notifiche spente (Sprint 67): via anche le sottoscrizioni push

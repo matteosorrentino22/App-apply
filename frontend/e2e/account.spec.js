@@ -157,4 +157,8 @@ test('Impostazioni: titolo corretto e limiti di oggi con massimali e prezzi', as
   await expect(cvRow).toContainText('0 / 1')
   await expect(cvRow).toContainText('1,50')
   await expect(page.getByTestId('usage-row-import')).toContainText('Solo piano Pro')
+  // Sprint 77: una sola riga per la raccolta del giorno (automatica o manuale).
+  const collectionRow = page.getByTestId('usage-row-collection')
+  await expect(collectionRow).toContainText('Raccolta giornaliera')
+  await expect(collectionRow).toContainText('0 / 1')
 })

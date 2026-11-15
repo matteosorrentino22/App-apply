@@ -145,6 +145,6 @@ def import_job_from_url(user, url):
         _refund_import(user, charge_mode)
         raise
     # Uno scoring fallito non fa fallire l'import né restituisce la quota: il
-    # job c'è, e il ciclo notturno ritenta lo scoring (Sprint 68).
+    # job c'è, e la raccolta successiva ritenta lo scoring (Sprint 68).
     score_job(job)
     return job

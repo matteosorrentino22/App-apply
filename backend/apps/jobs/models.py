@@ -61,7 +61,7 @@ class Job(models.Model):
     )
     # Opzionale (Sprint 43): per un job inserito manualmente l'utente può non
     # avere ancora un link di candidatura (es. si candida di persona/via
-    # email) — per LinkedIn/raccolta notturna resta sempre popolato.
+    # email) — per LinkedIn/raccolta resta sempre popolato.
     apply_url = models.URLField(max_length=1000, blank=True, default="")
     published_at = models.DateTimeField(null=True, blank=True)
     salary = models.CharField(max_length=255, blank=True, default="")
@@ -119,7 +119,7 @@ class Job(models.Model):
     )
     score_rescaled_from_legacy = models.BooleanField(default=False)
     # Scoring falliti per questo job (Sprint 68): un job senza punteggio viene
-    # ritentato dal ciclo notturno finché non arriva a MAX_SCORING_FAILURES
+    # ritentato a ogni raccolta (Sprint 77) finché non arriva a MAX_SCORING_FAILURES
     # (apps.jobs.scoring), per non spendere chiamate AI all'infinito su
     # un'offerta che il modello non riesce a valutare.
     scoring_failures = models.PositiveSmallIntegerField(default=0)
@@ -177,10 +177,13 @@ class DailyQuota(models.Model):
     # Massimale separato da CV/cover letter (Sprint 50): budget indipendente
     # anche per i messaggi di networking/referral.
     referral_message_count = models.PositiveIntegerField(default=0)
-    # Raccolta manuale (sezione Home): massimo 1/utente/giorno, uguale per
-    # tutti i piani e senza estensione a credito — il limite esiste per non
-    # sprecare chiamate Apify, che pagare per superarlo vanificherebbe.
+    # Raccolta del giorno (Sprint 77: automatica o manuale, una sola):
+    # massimo 1/utente/giorno, uguale per tutti i piani e senza estensione a
+    # credito — il limite esiste per non sprecare chiamate Apify, che pagare
+    # per superarlo vanificherebbe. `collection_done_at`: inizio della
+    # raccolta di oggi, per il messaggio "già eseguita oggi alle HH:MM".
     collection_count = models.PositiveIntegerField(default=0)
+    collection_done_at = models.DateTimeField(null=True, blank=True)
     # Import del CV in onboarding/profilo (Sprint 66): chiamata AI costosa,
     # tetto giornaliero uguale per tutti i piani, nessuna estensione a credito.
     cv_import_count = models.PositiveIntegerField(default=0)
@@ -207,8 +210,8 @@ class RunLog(models.Model):
     class Status(models.TextChoices):
         SUCCESS = "success", "Successo"
         FAILURE = "failure", "Fallimento"
-        # Ciclo notturno non eseguito per un utente con una raccolta manuale
-        # in corso (guardia condivisa, Sprint 68).
+        # Raccolta automatica non eseguita (Sprint 77): raccolta già in corso,
+        # nessuna ricerca attiva o raccolta di oggi già fatta (es. a mano).
         SKIPPED = "skipped", "Saltato"
 
     user = models.ForeignKey(

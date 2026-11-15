@@ -46,7 +46,8 @@ function PrivacyIt({ info, version, date, minAge }) {
           <li>
             <strong>Dati dell'account:</strong> email di accesso, password (conservata solo in forma cifrata non
             reversibile), lingua dell'interfaccia, fuso orario, piano, saldo del credito, data di registrazione, stato
-            di verifica dell'email, preferenza sulle notifiche, registrazione delle accettazioni di questa informativa e
+            di verifica dell'email, preferenza sulle notifiche, attivazione e orario della raccolta automatica (piano Pro),
+            registrazione delle accettazioni di questa informativa e
             dei termini (versione e data).
           </li>
           <li>
@@ -83,7 +84,7 @@ function PrivacyIt({ info, version, date, minAge }) {
           head={['Finalità', 'Base giuridica']}
           rows={[
             [
-              "Creare e gestire il tuo account; fornire il servizio (raccolta e valutazione delle offerte, generazione e modifica dei documenti, chat, notifiche mattutine sui nuovi job e promemoria in caso di inattività)",
+              "Creare e gestire il tuo account; fornire il servizio (raccolta e valutazione delle offerte, generazione e modifica dei documenti, chat, notifiche sui nuovi job a fine raccolta automatica e promemoria in caso di inattività)",
               'Esecuzione del contratto (art. 6.1.b)',
             ],
             [
@@ -296,7 +297,8 @@ function PrivacyEn({ info, version, date, minAge }) {
           <li>
             <strong>Account data:</strong> login email, password (stored only in non-reversible encrypted form),
             interface language, time zone, plan, credit balance, registration date, email verification status,
-            notification preference, record of your acceptance of this privacy policy and of the terms (version and
+            notification preference, automatic collection on/off and time (Pro plan), record of your acceptance of this
+            privacy policy and of the terms (version and
             date).
           </li>
           <li>
@@ -335,7 +337,7 @@ function PrivacyEn({ info, version, date, minAge }) {
           head={['Purpose', 'Legal basis']}
           rows={[
             [
-              'Creating and managing your account; providing the service (collecting and assessing job offers, generating and editing documents, chat, morning notifications about new jobs and reminders in case of inactivity)',
+              'Creating and managing your account; providing the service (collecting and assessing job offers, generating and editing documents, chat, notifications about new jobs at the end of the automatic collection and reminders in case of inactivity)',
               'Performance of a contract (Art. 6(1)(b))',
             ],
             [

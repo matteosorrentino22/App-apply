@@ -11,7 +11,7 @@ This privacy policy is provided pursuant to Articles 13 and 14 of Regulation (EU
 You can write to this address with any request concerning your data. No Data Protection Officer (DPO) has been appointed, as this is not mandatory.
 
 ## 2. What data we process
-- **Account data:** login email, password (stored only in non-reversible encrypted form), interface language, time zone, plan, credit balance, registration date, email verification status, notification preference, record of your acceptance of this privacy policy and of the terms (version and date).
+- **Account data:** login email, password (stored only in non-reversible encrypted form), interface language, time zone, plan, credit balance, registration date, email verification status, notification preference, automatic collection on/off and time (Pro plan), record of your acceptance of this privacy policy and of the terms (version and date).
 - **Professional profile data**, which you enter yourself or which the app extracts from the CV you upload during onboarding: first name, last name, phone number, contact email, city and country, LinkedIn profile, photo (optional), summary, work experience, education, skills, certifications, languages, career goal. The uploaded CV file is read to fill in the profile and **is not stored**.
 - **Service usage data:** saved searches, collected or imported job offers with their scores and explanations, generated documents (CVs, cover letters, messages), drafts, history of chats with the AI assistant, instructions you provide, favourites, saved filters, application status.
 - **Third-party data that you enter or that appears in job offers:** name and public profile of the recruiter mentioned in the job posting; name and LinkedIn profile of the recipient of a networking message you write. We ask you to enter such data only if you have a legitimate reason to contact that person.
@@ -22,7 +22,7 @@ You can write to this address with any request concerning your data. No Data Pro
 ## 3. Purposes and legal bases
 | Purpose | Legal basis |
 |---|---|
-| Creating and managing your account; providing the service (collecting and assessing job offers, generating and editing documents, chat, morning notifications about new jobs and reminders in case of inactivity) | Performance of a contract (Art. 6(1)(b)) |
+| Creating and managing your account; providing the service (collecting and assessing job offers, generating and editing documents, chat, notifications about new jobs at the end of the automatic collection and reminders in case of inactivity) | Performance of a contract (Art. 6(1)(b)) |
 | Sending service emails (address verification, password recovery, deletion confirmation) | Performance of a contract (Art. 6(1)(b)) |
 | Push notifications on your device | Consent, given through the browser permission and revocable at any time from the app or from the browser settings (Art. 6(1)(a)) |
 | Security of the service, prevention of abuse and fraud, rate limits, technical logs | Legitimate interest of the controller in protecting the service and users' data (Art. 6(1)(f)) |

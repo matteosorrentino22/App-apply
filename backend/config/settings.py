@@ -134,7 +134,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# Europe/Rome governa il batch notturno e il reset delle quote giornaliere
+# Europe/Rome governa il reset delle quote giornaliere
 # (02-specifiche-tecniche-v3.md §7): fuso di sistema unico per Django/Celery Beat.
 TIME_ZONE = "Europe/Rome"
 # Testi rivolti all'utente (Sprint 71): sorgenti in italiano con gettext,

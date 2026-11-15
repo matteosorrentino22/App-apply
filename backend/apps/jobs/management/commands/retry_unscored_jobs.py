@@ -8,7 +8,7 @@ User = get_user_model()
 
 class Command(BaseCommand):
     help = (
-        "Ritenta lo scoring dei job senza punteggio (Sprint 68), gli stessi che il ciclo notturno "
+        "Ritenta lo scoring dei job senza punteggio (Sprint 68), gli stessi che ogni raccolta "
         f"ritenta da solo fino a {MAX_SCORING_FAILURES} fallimenti per job."
     )
 

@@ -16,7 +16,7 @@ from apps.cv.manual_generation import MANUAL_CV_PLAN_LIMITS
 from apps.jobs.models import DailyQuota, Job
 from apps.jobs.scoring import score_job
 from apps.notifications.models import PushSubscription
-from apps.notifications.tasks import send_inactivity_notification_for_user, send_morning_notification_for_user
+from apps.notifications.tasks import send_inactivity_notification_for_user, send_new_jobs_notification
 from apps.profiles.models import Education, Profile
 
 from .testing import LOCMEM_CACHES
@@ -167,14 +167,19 @@ class ApiMessagesLanguageTests(_ApiLanguageMixin, APITestCase):
         self.assertEqual(en.data["detail"], "Manual job import is reserved for the Pro plan.")
 
     def test_manual_collection_already_used_today(self):
+        # Sprint 77: una raccolta al giorno (automatica o manuale); senza
+        # ricerche attive non si consuma la quota, quindi ne serve una.
+        from apps.searches.models import SavedSearch
+
         user = self._user()
+        SavedSearch.objects.create(user=user, keywords="PM", city="Roma", country="Italia", is_active=True)
         DailyQuota.objects.create(user=user, date=timezone.localtime(timezone.now()).date(), collection_count=1)
         self.client.force_authenticate(user)
         it = self.post("/api/jobs/collect/", None, "it")
         en = self.post("/api/jobs/collect/", None, "en")
         self.assertEqual(it.status_code, 409)
-        self.assertEqual(it.data["detail"], "Hai già usato la raccolta manuale per oggi. Massimo 1 al giorno.")
-        self.assertEqual(en.data["detail"], "You have already used the manual collection today. At most 1 per day.")
+        self.assertEqual(it.data["detail"], "La raccolta di oggi è già stata fatta. Massimo 1 al giorno.")
+        self.assertEqual(en.data["detail"], "Today's collection has already been done. At most 1 per day.")
 
     def test_length_validation(self):
         # Messaggio standard di DRF: tradotto dalle sue traduzioni (it/en).
@@ -251,24 +256,21 @@ class BackgroundTextsLanguageTests(TestCase):
             company="Acme", location="Roma", description="Descrizione.",
         )
 
-    def _morning_payload(self, user):
-        user.last_notified_at = timezone.now() - timedelta(days=1)
-        user.save(update_fields=["last_notified_at"])
-        self._job(user, f"ext-morning-{user.interface_language}")
-        with patch("apps.notifications.tasks._is_around_ten_local", return_value=True), patch(
-            "apps.notifications.tasks.send_web_push"
-        ) as mock_send:
-            self.assertTrue(send_morning_notification_for_user(user))
+    def _new_jobs_payload(self, user):
+        # Sprint 77: notifica a fine raccolta automatica (stessi testi della
+        # vecchia notifica mattutina).
+        with patch("apps.notifications.tasks.send_web_push") as mock_send:
+            self.assertTrue(send_new_jobs_notification(user))
         return mock_send.call_args.args[1]
 
-    def test_morning_notification_payload(self):
+    def test_new_jobs_notification_payload(self):
         self.assertEqual(
-            self._morning_payload(self._user("it")),
+            self._new_jobs_payload(self._user("it")),
             {"title": "Nuovi job pronti", "body": "Ci sono nuove offerte da valutare nella tua lista."},
         )
         # Anche con un'altra lingua attiva sul thread (es. dopo una richiesta).
         with translation.override("it"):
-            payload = self._morning_payload(self._user("en"))
+            payload = self._new_jobs_payload(self._user("en"))
         self.assertEqual(payload, {"title": "New jobs ready", "body": "There are new job offers to review in your list."})
 
     def test_inactivity_notification_payload(self):

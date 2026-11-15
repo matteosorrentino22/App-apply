@@ -609,10 +609,10 @@ class CreateManualJobView(APIView):
 
 
 class CollectJobsView(APIView):
-    """Raccolta manuale per il solo utente autenticato (sezione Home): stessa
-    pipeline raccolta→scoring del ciclo notturno, innescata a richiesta per
-    avere subito le offerte delle ultime 24 ore; la raccolta notturna gira
-    comunque."""
+    """Raccolta manuale per il solo utente autenticato ("Raccogli" della
+    lista): stessa pipeline raccolta→scoring della raccolta automatica dei
+    Pro, con cui condivide la quota di una raccolta al giorno (Sprint 77).
+    409 se è già in corso o se la raccolta di oggi è già stata fatta."""
 
 
     def post(self, request):

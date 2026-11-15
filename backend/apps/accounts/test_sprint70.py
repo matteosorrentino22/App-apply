@@ -16,7 +16,6 @@ from rest_framework.test import APITestCase
 
 from apps.jobs.models import DailyQuota, Job
 from apps.notifications.models import PushSubscription
-from apps.notifications.tasks import send_morning_notification_for_user
 from apps.profiles.models import Education, Experience, Profile, Skill
 
 from .tokens import create_token
@@ -214,9 +213,6 @@ class NotificationRealignTests(APITestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.notifications_enabled)
         self.assertGreater(self.user.last_notified_at, timezone.now() - timedelta(minutes=1))
-        # Alle 10 locali i job del periodo di silenzio non fanno partire la notifica.
-        with patch("apps.notifications.tasks._is_around_ten_local", return_value=True):
-            self.assertFalse(send_morning_notification_for_user(self.user))
 
     def test_reenabling_the_preference_realigns_last_notified_at(self):
         response = self.client.patch("/api/accounts/me/", {"notifications_enabled": True}, format="json")

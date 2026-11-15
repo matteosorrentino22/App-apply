@@ -77,6 +77,8 @@ def build_export(user):
             "plan", "extra_credit", "timezone", "interface_language", "cv_language_mode",
             "cv_include_photo", "objective_statement", "email_verified", "notifications_enabled",
             "last_activity_reset", "last_notified_at", "last_inactivity_notified_at",
+            # Raccolta automatica (Sprint 77).
+            "auto_collection_enabled", "auto_collection_time", "auto_collection_last_local_date",
         ]
     }
 

@@ -74,7 +74,7 @@ def create_manual_job(user, data):
 
     Se la creazione fallisce dopo la riserva, quota o credito vengono
     restituiti (Sprint 68). Uno scoring fallito invece non restituisce nulla:
-    il job esiste (è ciò che la quota paga) e il ciclo notturno ritenta lo
+    il job esiste (è ciò che la quota paga) e la raccolta successiva ritenta lo
     scoring come per i job raccolti."""
     charge_mode = _reserve_quota_or_credit(user)
 

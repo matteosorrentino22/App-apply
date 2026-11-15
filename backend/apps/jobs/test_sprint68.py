@@ -30,7 +30,7 @@ from .tasks import (
     CollectionAlreadyInProgress,
     ManualCollectionFailed,
     run_manual_collection_for_user,
-    run_nightly_cycle_for_user,
+    run_automatic_collection_for_user,
 )
 
 User = get_user_model()
@@ -215,13 +215,15 @@ class RetryUnscoredJobsTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.scoring_failures, 2)
 
-    def test_nightly_cycle_retries_unscored_jobs_until_the_limit(self):
+    def test_collection_retries_unscored_jobs_until_the_limit(self):
+        # Sprint 77: i ritenti avvengono a ogni raccolta; senza ricerche
+        # attive la manuale non consuma la quota e ritenta comunque.
         retryable = _job(self.user, "retry", scoring_failures=MAX_SCORING_FAILURES - 1)
         exhausted = _job(self.user, "exhausted", scoring_failures=MAX_SCORING_FAILURES)
         other_user_job = _job(_user("other@example.com"), "other")
 
         with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE) as mock_score:
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_manual_collection_for_user(self.user)
 
         self.assertEqual([call.args[0].pk for call in mock_score.call_args_list], [retryable.pk])
         self.assertEqual(summary["retried"], 1)
@@ -235,11 +237,11 @@ class RetryUnscoredJobsTests(TestCase):
         log = RunLog.objects.get(user=self.user, task_type=RunLog.TaskType.COLLECTION)
         self.assertIn("ritentati=1 ritentati_scorati=1", log.message)
 
-    def test_a_job_failing_every_night_stops_being_retried(self):
+    def test_a_job_failing_at_every_collection_stops_being_retried(self):
         job = _job(self.user, "always-fails")
         with patch("apps.jobs.scoring.score_job_with_claude", side_effect=RuntimeError("x")) as mock_score:
             for _ in range(MAX_SCORING_FAILURES + 2):
-                run_nightly_cycle_for_user(self.user)
+                run_manual_collection_for_user(self.user)
         self.assertEqual(mock_score.call_count, MAX_SCORING_FAILURES)
         job.refresh_from_db()
         self.assertEqual(job.scoring_failures, MAX_SCORING_FAILURES)
@@ -381,7 +383,7 @@ class ApifyGroupIsolationTests(TestCase):
         with patch("apps.jobs.collection.get_job_source", return_value=source), patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE
         ):
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_manual_collection_for_user(self.user)
 
         self.assertEqual(summary["collected"], 2)
         self.assertEqual(summary["groups_failed"], 1)
@@ -417,7 +419,7 @@ class DiscardedOffersCountTests(TestCase):
         with patch("apps.jobs.collection.get_job_source", return_value=_source(_group(offers))), patch(
             "apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE
         ):
-            run_nightly_cycle_for_user(user)
+            run_manual_collection_for_user(user)
 
         log = RunLog.objects.get(user=user, task_type=RunLog.TaskType.COLLECTION)
         self.assertIn("raccolti=1", log.message)
@@ -429,29 +431,29 @@ class SharedCollectionGuardTests(TestCase):
         self.user = _user()
         SavedSearch.objects.create(user=self.user, keywords="PM", city="Roma", country="Italia", is_active=True)
 
-    def test_nightly_cycle_skips_a_user_with_a_manual_collection_in_progress(self):
+    def test_automatic_collection_skips_a_user_with_a_manual_collection_in_progress(self):
         User.objects.filter(pk=self.user.pk).update(
             collection_in_progress=True, collection_started_at=timezone.now()
         )
         with patch("apps.jobs.collection.get_job_source") as mock_get_source:
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_automatic_collection_for_user(self.user)
 
-        self.assertEqual(summary, {"skipped": True})
+        self.assertEqual(summary, {"skipped": "in_progress"})
         mock_get_source.assert_not_called()
         log = RunLog.objects.get(user=self.user)
         self.assertEqual(log.status, RunLog.Status.SKIPPED)
         self.user.refresh_from_db()
         self.assertTrue(self.user.collection_in_progress)
 
-    def test_stale_lock_does_not_skip_the_nightly_cycle(self):
+    def test_stale_lock_does_not_skip_the_automatic_collection(self):
         User.objects.filter(pk=self.user.pk).update(
             collection_in_progress=True, collection_started_at=timezone.now() - timedelta(hours=3)
         )
         with patch("apps.jobs.collection.get_job_source", return_value=_source(_group([]))):
-            summary = run_nightly_cycle_for_user(self.user)
+            summary = run_automatic_collection_for_user(self.user)
         self.assertNotIn("skipped", summary)
 
-    def test_manual_collection_is_rejected_while_the_nightly_cycle_runs(self):
+    def test_manual_collection_is_rejected_while_the_automatic_collection_runs(self):
         seen = {}
 
         def fetch_groups(searches, window_hours):
@@ -465,19 +467,21 @@ class SharedCollectionGuardTests(TestCase):
         with patch(
             "apps.jobs.collection.get_job_source", return_value=MagicMock(fetch_groups=fetch_groups)
         ):
-            run_nightly_cycle_for_user(self.user)
+            run_automatic_collection_for_user(self.user)
 
         self.assertEqual(seen, {"locked": True, "manual_rejected": True})
         self.user.refresh_from_db()
         self.assertFalse(self.user.collection_in_progress)
-        self.assertFalse(DailyQuota.objects.filter(user=self.user, collection_count__gt=0).exists())
+        # La quota è quella consumata dall'automatica (una sola, Sprint 77).
+        self.assertEqual(DailyQuota.objects.get(user=self.user).collection_count, 1)
 
-    def test_lock_is_released_when_the_nightly_cycle_fails(self):
+    def test_lock_is_released_and_quota_refunded_when_the_automatic_collection_fails(self):
         with patch("apps.jobs.collection.get_job_source", side_effect=ConnectionError("x")):
-            with self.assertRaises(ConnectionError):
-                run_nightly_cycle_for_user(self.user)
+            self.assertEqual(run_automatic_collection_for_user(self.user), {"failed": True})
         self.user.refresh_from_db()
         self.assertFalse(self.user.collection_in_progress)
+        self.assertEqual(DailyQuota.objects.get(user=self.user).collection_count, 0)
+        self.assertEqual(RunLog.objects.get(user=self.user).status, RunLog.Status.FAILURE)
 
 
 class QuotaAdminActionsTests(TestCase):
@@ -645,7 +649,7 @@ class ManualJobRefundTests(APITestCase):
         self.assertEqual(DailyQuota.objects.get(user=self.user).manual_job_count, 1)
 
         with patch("apps.jobs.scoring.score_job_with_claude", return_value=FAKE_SCORE):
-            run_nightly_cycle_for_user(self.user)
+            run_manual_collection_for_user(self.user)
         job.refresh_from_db()
         self.assertEqual(job.score, 7)
 
