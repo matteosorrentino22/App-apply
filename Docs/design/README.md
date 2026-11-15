@@ -1,6 +1,6 @@
 # Redesign UI di App-apply — documentazione di design
 
-> **Stato:** in implementazione a sprint (`IMPLEMENTATION-PLAN.md`): **Sprint 72 (fondamenta), 73 (AppShell e navigazione), 74 (lista Jobs), 75 (dettaglio job), 76 (editor) e 77 (raccolta automatica Pro) fatti** — token, componenti `ui/`, logo e icone PWA; navigazione a 3 voci, Home eliminata, "Esci" in Impostazioni. Le specifiche in `Docs/01…03` descrivono l'app **as-is** e restano il riferimento finché uno sprint non le aggiorna (regola in `CLAUDE.md`).
+> **Stato:** in implementazione a sprint (`IMPLEMENTATION-PLAN.md`): **Sprint 72 (fondamenta), 73 (AppShell e navigazione), 74 (lista Jobs), 75 (dettaglio job), 76 (editor), 77 (raccolta automatica Pro) e 78 (profilo e impostazioni) fatti** — token, componenti `ui/`, logo e icone PWA; navigazione a 3 voci, Home eliminata, "Esci" in Impostazioni. Le specifiche in `Docs/01…03` descrivono l'app **as-is** e restano il riferimento finché uno sprint non le aggiorna (regola in `CLAUDE.md`).
 > **Data:** 2026-11-14 · **As-is di partenza:** Sprint 71 (branch `design/redesign-ui`, mai su `main`).
 
 ## Obiettivo

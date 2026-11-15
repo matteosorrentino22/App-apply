@@ -1,52 +1,37 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { deleteAccount, requestDataExport } from '../api/auth'
+import { deleteAccount } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useLanguage } from '../i18n/LanguageContext'
 import { useLegalInfo } from '../legal/useLegalInfo'
 import { useToast } from '@/components/ToastProvider'
+import { useDataExport } from '@/lib/dataExport'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Field } from '@/components/ui/field'
+import { Modal, ModalActions, ModalContent, ModalDescription, ModalTitle } from '@/components/ui/modal'
+import { Trash2 } from 'lucide-react'
 
 // Export dei dati e cancellazione dell'account (Sprint 67): in Impostazioni
 // e nella schermata di accettazione, perché entrambe le azioni restano
 // disponibili anche a chi non ha (ancora) accettato informativa e termini.
+// Sprint 78: finestra di eliminazione come `Modal` (mockup `settings-delete`),
+// stessi campi e stessa regola (password + spunta).
 export function ExportDataButton({ variant = 'secondary' }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const [busy, setBusy] = useState(false)
-
-  async function handleExport() {
-    setBusy(true)
-    try {
-      const url = await requestDataExport()
-      window.location.assign(url)
-    } catch (err) {
-      showToast(err instanceof ApiError && err.status === 429 ? t('account.exportTooMany') : t('common.genericError'))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const { busy, exportData } = useDataExport((key) => showToast(t(key)))
 
   return (
-    <Button type="button" variant={variant} disabled={busy} onClick={handleExport} className="w-fit">
+    <Button type="button" variant={variant} disabled={busy} onClick={exportData} className="w-fit">
       {busy ? t('account.exportPreparing') : t('account.exportButton')}
     </Button>
   )
 }
 
-export function DeleteAccountButton() {
+export function DeleteAccountButton({ fullWidth = false }) {
   const { t } = useLanguage()
   const { setUser } = useAuth()
   const { showToast } = useToast()
@@ -89,59 +74,61 @@ export function DeleteAccountButton() {
 
   return (
     <>
-      <Button type="button" variant="destructive" onClick={openDialog} className="w-fit">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={openDialog}
+        className={fullWidth ? 'w-full border-destructive-border text-destructive-text hover:bg-destructive-soft' : 'w-fit border-destructive-border text-destructive-text hover:bg-destructive-soft'}
+      >
+        <Trash2 className="h-5 w-5" aria-hidden="true" />
         {t('account.deleteButton')}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('account.deleteDialogTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('account.deleteDialogBody')}
-              {legalInfo?.email_enabled && ` ${t('account.deleteDialogEmail')}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="delete-account-password">{t('account.deletePasswordLabel')}</Label>
-              <Input
-                id="delete-account-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-              />
-            </div>
-            <label htmlFor="delete-account-confirm" className="flex items-start gap-2.5 text-sm">
-              <Checkbox
-                id="delete-account-confirm"
-                className="mt-0.5"
-                checked={confirmed}
-                onCheckedChange={(checked) => setConfirmed(checked === true)}
-              />
-              <span>{t('account.deleteConfirmLabel')}</span>
-            </label>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              {t('account.cancel')}
-            </Button>
+      <Modal open={open} onOpenChange={(next) => !busy && setOpen(next)}>
+        <ModalContent>
+          <ModalTitle>{t('account.deleteDialogTitle')}</ModalTitle>
+          <ModalDescription className="text-[15px]">
+            {t('account.deleteDialogBody')}
+            {legalInfo?.email_enabled && ` ${t('account.deleteDialogEmail')}`}
+          </ModalDescription>
+          <Field label={t('account.deletePasswordLabel')}>
+            <Input
+              id="delete-account-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </Field>
+          <label htmlFor="delete-account-confirm" className="flex items-start gap-3 text-[15px] leading-snug">
+            <Checkbox
+              id="delete-account-confirm"
+              className="mt-px"
+              checked={confirmed}
+              onCheckedChange={(checked) => setConfirmed(checked === true)}
+            />
+            <span>{t('account.deleteConfirmLabel')}</span>
+          </label>
+          {error && (
+            <p role="alert" className="text-sm text-destructive-text">
+              {error}
+            </p>
+          )}
+          <ModalActions>
             <Button
               type="button"
               variant="destructive"
+              size="lg"
               disabled={busy || !confirmed || !password}
               onClick={handleDelete}
             >
               {busy ? t('account.deleting') : t('account.deleteSubmit')}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button type="button" variant="text" disabled={busy} onClick={() => setOpen(false)}>
+              {t('account.cancel')}
+            </Button>
+          </ModalActions>
+        </ModalContent>
+      </Modal>
     </>
   )
 }

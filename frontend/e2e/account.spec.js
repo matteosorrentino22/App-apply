@@ -59,28 +59,52 @@ test('la schermata account mostra piano e saldo credito impostati da amministrat
   await expect(page.getByText('42,00 €')).toBeVisible()
 })
 
+// Sprint 78: le ricerche sono nella sottopagina /settings/searches; la nuova
+// ricerca si crea in un pannello, attivazione con l'interruttore della card,
+// eliminazione con conferma.
+async function addSearchFromSheet(page, keywords, city, country) {
+  await page.getByRole('button', { name: 'Nuova ricerca' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nuova ricerca' })
+  await expect(sheet.getByText('La nuova ricerca nasce disattivata')).toBeVisible()
+  await sheet.getByLabel('Parole chiave').fill(keywords)
+  await sheet.getByLabel('Città', { exact: true }).fill(city)
+  await sheet.getByLabel('Paese', { exact: true }).fill(country)
+  await sheet.getByRole('button', { name: 'Aggiungi ricerca' }).click()
+  return sheet
+}
+
 test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, request, baseURL }) => {
   const { email, password } = await registerUser(request, baseURL)
   await login(page, email, password)
+  await page.getByRole('link', { name: /Ricerche salvate/ }).click()
+  await expect(page).toHaveURL(/\/settings\/searches$/)
 
-  await page.getByLabel('Parole chiave').fill('project manager')
-  await page.getByLabel('Città', { exact: true }).fill('Milano')
-  await page.getByLabel('Paese', { exact: true }).fill('Italia')
-  await page.getByRole('button', { name: 'Aggiungi ricerca' }).click()
+  const sheet = await addSearchFromSheet(page, 'project manager', 'Milano', 'Italia')
+  await expect(sheet).not.toBeVisible()
+  const card = page.getByTestId('search-card')
+  await expect(card.getByText('project manager', { exact: true })).toBeVisible()
+  await expect(card.getByText('Milano, Italia')).toBeVisible()
+  await expect(card.getByText('Disattivata')).toBeVisible()
 
-  await expect(page.getByText('project manager', { exact: true })).toBeVisible()
-  await expect(page.getByText('Milano, Italia')).toBeVisible()
+  const toggle = card.getByRole('switch', { name: 'Usa la ricerca «project manager»' })
+  await toggle.click()
+  await expect(card.getByText('In uso')).toBeVisible()
+  await toggle.click()
+  await expect(card.getByText('Disattivata')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Attiva', exact: true }).click()
-  await expect(page.getByText('In uso')).toBeVisible()
-
-  await page.getByRole('button', { name: 'Disattiva' }).click()
-  await expect(page.getByText('In uso')).not.toBeVisible()
-
-  // Dallo Sprint 67 in pagina c'è anche "Elimina account": serve il nome esatto.
-  await page.getByRole('button', { name: 'Elimina', exact: true }).click()
+  await card.getByRole('button', { name: 'Elimina', exact: true }).click()
+  const modal = page.getByRole('dialog', { name: 'Eliminare la ricerca?' })
+  await modal.getByRole('button', { name: 'Annulla' }).click()
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: 'Elimina', exact: true }).click()
+  await modal.getByRole('button', { name: 'Elimina', exact: true }).click()
   await expect(page.getByText('Milano, Italia')).not.toBeVisible()
   await expect(page.getByText('Nessuna ricerca salvata.')).toBeVisible()
+
+  // Indietro del browser: si torna all'elenco delle Impostazioni.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page.getByRole('heading', { name: 'Impostazioni', level: 1 })).toBeVisible()
 })
 
 test('mostra il messaggio del limite di piano oltre le ricerche salvate consentite', async ({
@@ -99,14 +123,11 @@ test('mostra il messaggio del limite di piano oltre le ricerche salvate consenti
   }
 
   await login(page, email, password)
+  await page.goto('/settings/searches')
 
-  await page.getByLabel('Parole chiave').fill('developer')
-  await page.getByLabel('Città', { exact: true }).fill('Roma')
-  await page.getByLabel('Paese', { exact: true }).fill('Italia')
-  await page.getByRole('button', { name: 'Aggiungi ricerca' }).click()
-
+  const sheet = await addSearchFromSheet(page, 'developer', 'Roma', 'Italia')
   await expect(
-    page.getByText('Hai raggiunto il numero massimo di ricerche salvate per il tuo piano.'),
+    sheet.getByText('Hai raggiunto il numero massimo di ricerche salvate per il tuo piano.'),
   ).toBeVisible()
 })
 
@@ -114,14 +135,22 @@ test('le impostazioni persistono dopo il reload della pagina', async ({ page, re
   const { email, password } = await registerUser(request, baseURL)
   await login(page, email, password)
 
-  await page.getByText('Sempre in inglese').click()
-  await page.getByLabel('Includi la foto nel CV').check()
-  await expect(page.getByText('Impostazioni salvate.')).toBeVisible()
+  // Sprint 78: la lingua del CV in un pannello, la foto con un interruttore.
+  await page.getByTestId('settings-cv-language').click()
+  await page.getByRole('dialog', { name: 'Lingua del CV generato' }).getByText('Sempre in inglese').click()
+  await expect(page.getByText('Impostazioni salvate.').first()).toBeVisible()
+  await expect(page.getByTestId('settings-cv-language')).toContainText('Sempre in inglese')
+  const photo = page.getByRole('switch', { name: 'Includi la foto nel CV' })
+  await photo.click()
+  await expect(photo).toHaveAttribute('aria-checked', 'true')
 
   await page.reload()
 
-  await expect(page.getByRole('radio', { name: 'Sempre in inglese' })).toBeChecked()
-  await expect(page.getByLabel('Includi la foto nel CV')).toBeChecked()
+  await expect(page.getByTestId('settings-cv-language')).toContainText('Sempre in inglese')
+  await page.getByTestId('settings-cv-language').click()
+  await expect(page.getByRole('dialog', { name: 'Lingua del CV generato' }).getByRole('radio', { name: 'Sempre in inglese' })).toBeChecked()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('switch', { name: 'Includi la foto nel CV' })).toHaveAttribute('aria-checked', 'true')
 })
 
 test('su iOS senza installazione alla home mostra l\'istruzione dedicata', async ({
@@ -151,7 +180,9 @@ test('Impostazioni: titolo corretto e limiti di oggi con massimali e prezzi', as
   await login(page, email, password)
 
   await expect(page.getByRole('heading', { name: 'Impostazioni', level: 1 })).toBeVisible()
-  await expect(page.getByText('I tuoi limiti di oggi')).toBeVisible()
+  // Sprint 78: sottopagina /settings/limits.
+  await page.getByRole('link', { name: /I tuoi limiti di oggi/ }).click()
+  await expect(page.getByRole('heading', { name: 'I tuoi limiti di oggi', level: 1 })).toBeVisible()
   // Utente Free appena registrato: 0 generazioni CV su 1, 1,50 € oltre il massimale.
   const cvRow = page.getByTestId('usage-row-cv')
   await expect(cvRow).toContainText('0 / 1')
@@ -161,4 +192,79 @@ test('Impostazioni: titolo corretto e limiti di oggi con massimali e prezzi', as
   const collectionRow = page.getByTestId('usage-row-collection')
   await expect(collectionRow).toContainText('Raccolta giornaliera')
   await expect(collectionRow).toContainText('0 / 1')
+})
+
+// Sprint 78: privacy e sicurezza in una sottopagina con link diretto; cambio
+// password in un pannello, eliminazione dell'account in una finestra.
+test('privacy e sicurezza: link diretto, password, documenti, eliminazione account', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+  await page.goto('/settings/privacy')
+  await expect(page.getByRole('heading', { name: 'Privacy e sicurezza', level: 1 })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('link', { name: /Informativa privacy/ })).toContainText('accettata il')
+  await expect(page.getByText('Età minima')).toBeVisible()
+
+  await page.getByTestId('settings-password').click()
+  const sheet = page.getByRole('dialog', { name: 'Cambia password' })
+  await sheet.getByLabel('Password attuale').fill(password)
+  await sheet.getByLabel('Nuova password', { exact: true }).fill('NuovaPassword123!')
+  await sheet.getByLabel('Ripeti la nuova password').fill('Diversa123!')
+  await sheet.getByRole('button', { name: 'Cambia password' }).click()
+  await expect(sheet.getByText('Le due password non coincidono.')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: 'Elimina account' }).click()
+  const modal = page.getByRole('dialog', { name: 'Eliminare definitivamente l’account?' })
+  const submit = modal.getByRole('button', { name: 'Elimina definitivamente' })
+  await expect(submit).toBeDisabled()
+  await modal.getByLabel('Password').fill(password)
+  await expect(submit).toBeDisabled()
+  await modal.getByText('Ho capito che tutti i miei dati').click()
+  await expect(submit).toBeEnabled()
+  await modal.getByRole('button', { name: 'Annulla' }).click()
+  await expect(modal).not.toBeVisible()
+
+  await page.getByRole('link', { name: 'Impostazioni' }).first().click()
+  await expect(page).toHaveURL(/\/settings$/)
+})
+
+test('raccolta automatica nell’elenco: bloccata per i Free, attivabile dai Pro con l’orario', async ({ page, request, baseURL }) => {
+  const free = await registerUser(request, baseURL)
+  await login(page, free.email, free.password)
+  const row = page.getByTestId('settings-auto-collection')
+  await expect(row).toContainText('Solo piano Pro')
+  await expect(row.getByRole('switch', { name: 'Raccolta automatica' })).toBeDisabled()
+
+  const pro = await registerUser(request, baseURL)
+  setAccount(pro.email, { plan: 'pro', credit: '0' })
+  await login(page, pro.email, pro.password)
+  const proRow = page.getByTestId('settings-auto-collection')
+  await proRow.getByRole('switch', { name: 'Raccolta automatica' }).click()
+  await expect(proRow).toContainText('Ogni giorno alle 07:00')
+  await expect(proRow.getByRole('combobox', { name: 'Orario di avvio' })).toHaveText('07:00')
+})
+
+test('profilo: sezioni a fisarmonica e "Salva modifiche" nella barra in basso', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+  await page.goto('/profile')
+  await expect(page.getByRole('heading', { name: 'Profilo', level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Dati di contatto' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('button', { name: /^Esperienze/ })).toHaveAttribute('aria-expanded', 'false')
+
+  await page.getByLabel('Nome', { exact: true }).fill('Mario')
+  await page.getByLabel('Cognome').fill('Rossi')
+  await page.getByLabel('Telefono').fill('+39 000 0000000')
+  await page.getByLabel('Città', { exact: true }).fill('Milano')
+  await page.getByLabel('Paese', { exact: true }).fill('Italia')
+  // Contatti chiusi con un campo obbligatorio vuoto: salvando la sezione si riapre.
+  await page.getByLabel('Nome', { exact: true }).fill('')
+  await page.getByRole('button', { name: 'Dati di contatto' }).click()
+  await page.getByRole('button', { name: 'Salva modifiche' }).click()
+  await expect(page.getByRole('button', { name: 'Dati di contatto' })).toHaveAttribute('aria-expanded', 'true')
+  await page.getByLabel('Nome', { exact: true }).fill('Mario')
+
+  await page.getByRole('button', { name: 'Salva modifiche' }).click()
+  await expect(page.getByText('Profilo aggiornato.').first()).toBeVisible()
+  await expect(page.getByText('Mario Rossi')).toBeVisible()
 })

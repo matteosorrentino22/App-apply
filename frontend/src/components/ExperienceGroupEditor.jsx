@@ -8,6 +8,8 @@ import ChipInput from '@/components/ChipInput'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 
 // Stessi limiti del backend (apps/profiles/serializers.py, Sprint 70).
+// Sprint 78: solo stile (larghezze minime dei campi e padding della scheda,
+// che a 360 px riducevano il campo Ruolo a poche lettere).
 const MAX_BULLETS = 15
 const MAX_BULLET_LENGTH = 400
 const MAX_TECHNOLOGY_LENGTH = 200
@@ -92,9 +94,9 @@ export default function ExperienceGroupEditor({
       <p className="-mt-2 text-sm text-muted-foreground">{t(hintKey)}</p>
 
       {companies.map((c) => (
-        <Card key={c._key} className="p-5">
-          <div className="mb-4 flex items-end justify-between gap-4">
-            <div className="flex max-w-sm flex-1 flex-col gap-1.5">
+        <Card key={c._key} className="p-4 sm:p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+            <div className="flex min-w-48 max-w-sm flex-1 flex-col gap-1.5">
               <Label htmlFor={`company-${c._key}`}>{t('onboarding.company')}</Label>
               <Input
                 id={`company-${c._key}`}
@@ -124,7 +126,7 @@ export default function ExperienceGroupEditor({
                 <div className={cnPad(index, c.roles.length)}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex flex-1 flex-wrap gap-4">
-                      <div className="flex max-w-60 flex-1 flex-col gap-1.5">
+                      <div className="flex min-w-40 max-w-60 flex-1 flex-col gap-1.5">
                         <Label htmlFor={`role-${r._key}`}>{t('onboarding.role')}</Label>
                         <Input
                           id={`role-${r._key}`}

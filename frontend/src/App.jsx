@@ -11,7 +11,10 @@ import JobListPage from './pages/JobListPage'
 import JobDetailPage from './pages/JobDetailPage'
 import CvDraftEditorPage from './pages/CvDraftEditorPage'
 import CoverLetterDraftEditorPage from './pages/CoverLetterDraftEditorPage'
-import AccountPage from './pages/AccountPage'
+import SettingsPage from './pages/settings/SettingsPage'
+import SearchesPage from './pages/settings/SearchesPage'
+import LimitsPage from './pages/settings/LimitsPage'
+import PrivacyPage from './pages/settings/PrivacyPage'
 import ProfilePage from './pages/ProfilePage'
 import LegalPage from './pages/LegalPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
@@ -101,10 +104,35 @@ export default function App() {
                   path="/settings"
                   element={
                     <ProtectedRoute>
-                      <AccountPage />
+                      <SettingsPage />
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/settings/searches"
+                  element={
+                    <ProtectedRoute>
+                      <SearchesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/limits"
+                  element={
+                    <ProtectedRoute>
+                      <LimitsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/privacy"
+                  element={
+                    <ProtectedRoute>
+                      <PrivacyPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/settings/*" element={<Navigate to="/settings" replace />} />
                 <Route
                   path="/profile"
                   element={

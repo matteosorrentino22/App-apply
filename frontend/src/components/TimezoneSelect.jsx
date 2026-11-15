@@ -13,7 +13,7 @@ export default function TimezoneSelect({ id, value, onChange, className, disable
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        'h-10 w-full max-w-xs rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none',
+        'h-12 w-full rounded-field border border-input bg-card px-3.5 text-base text-foreground outline-none',
         'focus:border-ring focus:ring-3 focus:ring-ring/20 disabled:opacity-45',
         className,
       )}

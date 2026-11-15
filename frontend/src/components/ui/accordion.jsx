@@ -6,14 +6,41 @@ import { cn } from '@/lib/utils'
 // `cv-editor`): pulsante con aria-expanded/aria-controls, titolo a sinistra,
 // riassunto (es. "6 aree") e freccia a destra. `nested` per le esperienze
 // dentro "Esperienze" (bordo più leggero, niente ombra).
-function AccordionSection({ title, summary, defaultOpen = false, nested = false, headingLevel = 2, className, children, ...props }) {
+// `keepMounted` (Sprint 78, Profilo): il contenuto resta nel DOM anche chiuso
+// (nascosto), così i campi obbligatori di un form continuano a essere
+// validati; se il browser segnala un campo non valido dentro una sezione
+// chiusa, la sezione si apre e il messaggio del browser compare sul campo.
+let lastReport = 0
+
+function AccordionSection({
+  title,
+  summary,
+  defaultOpen = false,
+  nested = false,
+  headingLevel = 2,
+  keepMounted = false,
+  className,
+  children,
+  ...props
+}) {
   const [open, setOpen] = useState(defaultOpen)
+
+  function handleInvalid(event) {
+    if (open) return
+    setOpen(true)
+    const field = event.target
+    const now = Date.now()
+    if (now - lastReport < 500) return
+    lastReport = now
+    requestAnimationFrame(() => field.reportValidity?.())
+  }
   const panelId = useId()
   const Heading = `h${headingLevel}`
   const Chevron = open ? ChevronUp : ChevronDown
   return (
     <section
       className={cn('rounded-card border border-border bg-card', nested ? '' : 'shadow-card', className)}
+      onInvalidCapture={keepMounted ? handleInvalid : undefined}
       {...props}
     >
       <Heading>
@@ -31,8 +58,8 @@ function AccordionSection({ title, summary, defaultOpen = false, nested = false,
           <Chevron className="h-5 w-5 shrink-0 text-chip-foreground" aria-hidden="true" />
         </button>
       </Heading>
-      {open ? (
-        <div id={panelId} className="flex flex-col gap-4 px-4 pb-4">
+      {open || keepMounted ? (
+        <div id={panelId} hidden={!open} className={cn('flex flex-col gap-4 px-4 pb-4', !open && 'hidden')}>
           {children}
         </div>
       ) : null}

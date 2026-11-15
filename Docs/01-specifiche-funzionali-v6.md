@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor del redesign UI, Sprint 77 raccolta automatica Pro)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor e Sprint 78 profilo e impostazioni del redesign UI, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -254,7 +254,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - Ogni ricerca salvata ha quattro campi: **tipo** (*Job role keyword* o *Company*), **keywords**, **città** e **paese**. Città e paese si scelgono con un autocompletamento geografico.
   - Esempi: *Job role — "IT Project Manager" — Rome, Italy*; *Company — "Nome Azienda" — Milan, Italy*.
   - Per le ricerche **Company** la fonte filtra davvero per azienda, non per corrispondenza testuale sulle keywords (sprint-39). È l'unica deviazione accettata dal vincolo "solo keywords e località" (§5.10).
-- Le ricerche si gestiscono dalla pagina **Impostazioni**: si creano, si modificano, si eliminano, si attivano e si disattivano. La prima si crea in onboarding.
+- Le ricerche si gestiscono da **Impostazioni → Ricerche salvate** (dallo Sprint 78 una sottopagina, §4.22): si creano, si modificano, si eliminano (con conferma), si attivano e si disattivano. La prima si crea in onboarding.
 - Una ricerca nuova creata da Impostazioni **nasce disattivata**. Solo le ricerche **attive** producono job, sia nella raccolta automatica sia in quella manuale.
 - **Limiti per piano:**
   - **Free:** fino a **10 ricerche salvate**, di cui al massimo **1 attiva per tipo** (quindi fino a 2 in totale: 1 Job role e 1 Company). Se si attiva una ricerca di un tipo che ne ha già una attiva, la precedente viene **disattivata automaticamente**; la ricerca dell'altro tipo non cambia. Un avviso indica il nome della ricerca disattivata (Sprint 68). Lo stesso vale se si **cambia il tipo** di una ricerca attiva (Job role ↔ Company): conta come un'attivazione nel nuovo tipo e spegne l'eventuale altra ricerca attiva di quel tipo, con lo stesso avviso.
@@ -571,8 +571,8 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 
 ### 4.12 Notifiche
 
-Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni** con "Attiva notifiche": l'app chiede il permesso del browser e registra il dispositivo.
-- Su iOS l'app invita prima ad aggiungerla alla schermata Home.
+Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni** (riga "Notifiche push", §4.22) con "Attiva notifiche": l'app chiede il permesso del browser e registra il dispositivo.
+- Su iPhone/iPad, finché l'app non è aperta dalla schermata Home, l'app spiega come aggiungerla (testo e pannello "Come fare" in tre passi). Dallo Sprint 78 il controllo su iOS precede quello sul supporto push: prima, su Safari fuori dalla Home (che non espone il push), compariva "non supportate" invece delle istruzioni.
 - **Preferenza "Ricevi notifiche push"** (Sprint 67), nello stesso riquadro, attiva di default:
   - togliendo la spunta le notifiche si spengono per l'account: l'app **elimina le registrazioni di tutti i dispositivi**, annulla quella del browser in uso e mostra "Notifiche disattivate: non riceverai notifiche su nessun dispositivo…"; nessuna notifica (di fine raccolta o di inattività) viene più inviata;
   - per riattivarle si rimette la spunta e si preme di nuovo "Attiva notifiche" su ogni dispositivo. Anche attivare le notifiche su un dispositivo riaccende la preferenza.
@@ -837,37 +837,45 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - **Ricerca eliminata:** se il filtro richiama una ricerca che non esiste più, quella parte non filtra nulla e gli altri valori continuano a valere.
 - I filtri salvati sono disattivati durante la ricerca testuale.
 
-### 4.22 Pagina Profilo e impostazioni account (Sprint 46)
+### 4.22 Pagina Profilo e impostazioni account (Sprint 46; redesign Sprint 78)
 
-**Profilo** (voce di menu "Profilo"). Pagina "Modifica profilo" con:
-- nome e cognome;
-- "Situazione / obiettivo attuale" (Sprint 70, con la nota che oggi non è usato nella generazione dei documenti);
-- sommario, telefono, email del CV, città e paese, LinkedIn;
-- **foto**: anteprima della foto attuale, caricamento di una nuova (salvata con "Salva modifiche") e, dallo Sprint 70, **"Rimuovi foto"** con conferma, che elimina subito anche il file dal server;
-- tutte le sezioni del profilo master (§4.1), con le **tecnologie** di ogni ruolo (Sprint 70).
+**Profilo** (voce di menu "Profilo", `/profile`; dallo Sprint 78 mockup `profilo`, `profile-exp`). Titolo "Profilo", in alto la foto (o le iniziali) con nome e "Il tuo profilo master, la base di ogni CV". Le parti sono **sezioni a fisarmonica**, chiuse con un riassunto ("6 aziende", "3 titoli", il numero di voci):
+- **Dati di contatto** (aperta all'apertura): nome e cognome, telefono, email del CV, città e paese, LinkedIn; **foto** con "Carica" (la nuova foto si salva con "Salva modifiche") e **"Rimuovi foto"**, con conferma in una finestra dell'app (prima del browser), che elimina subito anche il file dal server;
+- **Obiettivo**: "Situazione / obiettivo attuale" (Sprint 70, con la nota che oggi non è usato nella generazione dei documenti);
+- **Sommario professionale**;
+- **Esperienze** (raggruppate per azienda, con le **tecnologie** di ogni ruolo, Sprint 70): limite di 15 attività per ruolo da 400 caratteri, segnalato sotto il campo; con più di 5 esperienze un avviso spiega quali finiscono nel CV;
+- **Istruzione**, **Competenze**, **Certificazioni**, **Lingue** (§4.1).
 
-Si salva con il pulsante "Salva". Limiti della pagina:
+Si salva con **"Salva modifiche"** nella barra in basso (al posto della barra di tab), che salva tutte le sezioni; l'esito compare in cima e come avviso. I campi obbligatori valgono anche a sezione chiusa: salvando, la sezione con il campo da completare si apre. Limiti della pagina:
 - **non** si può importare un CV (solo in onboarding);
 - caricando una nuova foto la precedente viene eliminata (Sprint 67).
 
-**Impostazioni** (voce di menu "Impostazioni"; dallo Sprint 70 anche il titolo della pagina è "Impostazioni" / "Settings", prima era "Il tuo account"). Sette riquadri:
-1. **Piano e credito:** piano (Free/Pro) e saldo del credito extra, in sola lettura (§4.11).
-2. **I tuoi limiti di oggi** (Sprint 70): contatori, massimali e prezzi (§4.11).
-3. **Ricerche salvate:** creazione, modifica, eliminazione, attivazione e disattivazione (§4.2).
-4. **Preferenze** (prima "Impostazioni"): lingua dell'interfaccia, **fuso orario** (Sprint 70: elenco IANA; decide l'"oggi" della lista e delle statistiche e l'orario della raccolta automatica), lingua dei documenti (inglese o lingua dell'offerta), foto nel CV.
-5. **Notifiche push:** preferenza "Ricevi notifiche push" (Sprint 67) e attivazione sul dispositivo (§4.12).
-6. **Privacy e sicurezza** (Sprint 67):
-   - **Email di accesso** (Sprint 70): email attuale e cambio con nuovo indirizzo + password. Il server invia un link di conferma (valido 3 giorni) al nuovo indirizzo e un avviso a quello attuale ("se non sei stato tu, cambia la password"); l'app mostra "Ti abbiamo inviato un link di conferma a …". L'email di accesso cambia solo quando si apre il link (pagina "Nuova email di accesso", che funziona anche da un dispositivo non collegato); il link vale una volta sola. Se il nuovo indirizzo appartiene già a un altro account la risposta è la stessa ma non parte nessuna email; se lo diventa prima della conferma, la conferma è rifiutata. Senza invio di email configurato il riquadro dice che il cambio non è disponibile. L'email mostrata sul CV (Profilo) è un dato diverso e non cambia;
-   - **Cambia password:** password attuale, nuova password ripetuta due volte. Dopo il cambio gli **altri dispositivi vengono disconnessi**, quello in uso resta collegato ("Password cambiata. Gli altri dispositivi sono stati disconnessi."). Password attuale errata o nuova password troppo debole producono un messaggio d'errore;
-   - **Documenti legali:** link a informativa privacy e termini di servizio, ciascuno con la versione accettata e la data ("versione 1.0 accettata il …");
-   - **Esporta i miei dati:** scarica subito un **archivio ZIP** con tutti i dati dell'account in formato JSON (account, accettazioni, profilo, ricerche, offerte con punteggi e motivazioni, documenti generati, bozze e chat, messaggi di networking, filtri salvati, quote giornaliere, sessioni, dispositivi registrati per le notifiche, registri delle elaborazioni), i PDF di CV e cover letter, la foto e un file di istruzioni in italiano e inglese. La password non è inclusa. **Al massimo 3 export al giorno**; oltre: "Hai già esportato i dati 3 volte oggi: riprova domani.".
-7. **Zona pericolosa** (Sprint 67): **"Elimina account"**. Un popup chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
+**Impostazioni** (voce di menu "Impostazioni", `/settings`; dallo Sprint 78 mockup `impostazioni`: un **elenco a gruppi** al posto della pagina unica con sette riquadri). In cima la card del **piano** (Free/Pro) con il **saldo del credito extra**, in sola lettura (§4.11). Poi:
+1. **Ricerca job**
+   - **Ricerche salvate** ("N attive") → sottopagina `/settings/searches` (§4.2): una card per ricerca con tipo, parole chiave, città e paese, interruttore "In uso" / "Disattivata", "Modifica" (pannello) ed "Elimina" (conferma in una finestra; prima era immediato). "Nuova ricerca" nella barra in basso apre un pannello con tipo (Ruolo / Azienda), parole chiave, città e paese e l'avviso che la ricerca **nasce disattivata**. Sul Free, attivarne una spegne quella dello stesso tipo, con l'avviso che dice quale (Sprint 68). Errori del server (es. limite del piano) nel pannello o in cima alla pagina.
+   - **Raccolta automatica** (Sprint 77): interruttore nell'elenco e, se attiva, orario di avvio a quarti d'ora ("Ogni giorno alle HH:MM · Ora italiana"); per i Free bloccata (badge PRO, "Solo piano Pro") con l'invito al Pro. Stesse regole del pannello di raccolta (§4.14).
+2. **Documenti**: **Lingua del CV generato** (pannello: lingua dell'offerta o sempre in inglese) e **Includi la foto nel CV** (interruttore).
+3. **Account**
+   - **Email di accesso** (Sprint 70, pannello): email attuale e cambio con nuovo indirizzo + password. Il server invia un link di conferma (valido 3 giorni) al nuovo indirizzo e un avviso a quello attuale ("se non sei stato tu, cambia la password"); l'app mostra "Ti abbiamo inviato un link di conferma a …". L'email di accesso cambia solo quando si apre il link (pagina "Nuova email di accesso", che funziona anche da un dispositivo non collegato); il link vale una volta sola. Se il nuovo indirizzo appartiene già a un altro account la risposta è la stessa ma non parte nessuna email; se lo diventa prima della conferma, la conferma è rifiutata. Senza invio di email configurato il pannello dice che il cambio non è disponibile. L'email mostrata sul CV (Profilo) è un dato diverso e non cambia.
+   - **Fuso orario** (pannello con l'elenco IANA completo e "Salva"; Sprint 70): decide l'"oggi" della lista e delle statistiche e l'orario della raccolta automatica.
+   - **I tuoi limiti di oggi** (Sprint 70) → sottopagina `/settings/limits`: saldo del credito e, per ogni azione, usate oggi / massimale con una barra, prezzo oltre il massimale, le chat "sempre a credito" (§4.11).
+   - **Privacy e sicurezza** (Sprint 67) → sottopagina `/settings/privacy`:
+     - **Cambia password** (pannello): password attuale, nuova password (almeno 8 caratteri) ripetuta due volte. Dopo il cambio gli **altri dispositivi vengono disconnessi**, quello in uso resta collegato ("Password cambiata. Gli altri dispositivi sono stati disconnessi."). Password attuale errata, password diverse o nuova password troppo debole producono un messaggio d'errore;
+     - **Documenti legali:** informativa privacy e termini di servizio, ciascuno con la versione accettata e la data ("versione 1.1 accettata il …"), e la dichiarazione di età minima con la data;
+     - **Esporta i miei dati:** scarica subito un **archivio ZIP** con tutti i dati dell'account in formato JSON (account, accettazioni, profilo, ricerche, offerte con punteggi e motivazioni, documenti generati, bozze e chat, messaggi di networking, filtri salvati, quote giornaliere, sessioni, dispositivi registrati per le notifiche, registri delle elaborazioni), i PDF di CV e cover letter, la foto e un file di istruzioni in italiano e inglese. La password non è inclusa. **Al massimo 3 export al giorno**; oltre: "Hai già esportato i dati 3 volte oggi: riprova domani.";
+     - **Zona pericolosa:** **"Elimina account"**. Una finestra chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
+4. **App**
+   - **Notifiche push** (§4.12): interruttore = preferenza "Ricevi notifiche push" dell'account (Sprint 67); sotto, lo stato di questo dispositivo ("Attiva notifiche", "Notifiche attive su questo dispositivo.", permesso negato, non supportate). Su iPhone/iPad fuori dalla schermata Home, le istruzioni per aggiungerla e "Come fare" (pannello in tre passi).
+   - **Lingua interfaccia** (pannello: Italiano / English).
+5. **Esci** in fondo, con conferma (Sprint 73).
+
+Le sottopagine hanno un indirizzo proprio (si aprono anche da un link diretto) e "‹ Impostazioni" in alto; l'indietro del browser torna all'elenco. I collegamenti legali restano anche nel piè di pagina.
 
 Export ed eliminazione sono disponibili anche dalla schermata di accettazione dei testi legali (§4.1), senza dover prima accettare.
 
 **Lingua dell'interfaccia.**
 - Disponibile in italiano e inglese.
-- Si cambia in Impostazioni → Preferenze, dal selettore nella barra in alto su schermi da 1024 px e, prima del login, da quello in alto nelle pagine di accesso. La scelta viene salvata sull'account e al login successivo prevale.
+- Si cambia in Impostazioni → Lingua interfaccia, dal selettore nella barra in alto su schermi da 1024 px e, prima del login, da quello in alto nelle pagine di accesso. La scelta viene salvata sull'account e al login successivo prevale.
 - Al primo accesso il default è la lingua del dispositivo: italiano se è italiano, altrimenti inglese.
 
 ---
@@ -965,6 +973,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Il cambio password dalle Impostazioni richiede la password attuale e disconnette gli altri dispositivi, lasciando collegato quello in uso (Sprint 67).
 - ☐ Il cambio dell'email di accesso richiede la password; l'email cambia solo aprendo il link ricevuto al nuovo indirizzo, l'indirizzo attuale riceve un avviso, il link non vale una seconda volta; senza invio di email il cambio non è disponibile (Sprint 70).
 - ☐ "Esci" è in fondo a Impostazioni, chiede conferma (Annulla non esce) e disattiva le notifiche push del dispositivo (Sprint 73).
+- ☐ Impostazioni è un elenco a gruppi con sottopagine con indirizzo proprio (ricerche, limiti di oggi, privacy e sicurezza) e pannelli (lingua del CV, email, fuso orario, lingua, password); l'indietro del browser torna all'elenco; nessuna funzione della pagina precedente è stata tolta (Sprint 78).
+- ☐ Il Profilo ha sezioni a fisarmonica con riassunto, "Salva modifiche" nella barra in basso e la rimozione della foto con conferma in una finestra dell'app (Sprint 78).
 - ☐ La navigazione ha tre voci (Jobs, Profilo, Impostazioni): barra di tab in basso sotto i 1024 px, barra in alto con logo da 1024 px; `/home` porta alla lista; nessuna pagina è più larga dello schermo a 360 e 390 px (Sprint 73).
 - ☐ Con il profilo incompleto (nessun titolo di studio) ogni pagina, tranne onboarding e Profilo, mostra il banner con il link per completarlo (Sprint 70).
 - ☐ Un utente che non ha accettato le versioni correnti di informativa e termini vede solo la schermata di accettazione, da cui può accettare, esportare i dati, eliminare l'account o uscire; nessun'altra funzione risponde finché non accetta (Sprint 67).
@@ -1090,7 +1100,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Un'azione fallita non consuma né massimale né credito.
 
 ### Notifiche
-- ☐ Le notifiche si attivano da Impostazioni.
+- ☐ Le notifiche si attivano da Impostazioni; su iPhone/iPad fuori dalla schermata Home compaiono le istruzioni per aggiungerla (Sprint 78).
 - ☐ Togliendo la spunta "Ricevi notifiche push" l'utente non riceve più alcuna notifica e le registrazioni di tutti i suoi dispositivi vengono eliminate; riattivando le notifiche su un dispositivo la preferenza torna attiva (Sprint 67).
 - ☐ A fine raccolta automatica con job nuovi il Pro riceve la notifica; senza job nuovi, o dopo una raccolta manuale, nessuna notifica. Nessuna notifica alle 10:00 (Sprint 77).
 - ☐ Uno stesso batch non viene annunciato due volte.
