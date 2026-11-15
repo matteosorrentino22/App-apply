@@ -1,3 +1,4 @@
+import { DateRangeFields } from '@/components/ui/date-range'
 import { MapPin, Save, X } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
@@ -83,16 +84,16 @@ export default function JobFiltersSheet({
           </div>
 
           <Group title={t('jobs.datesGroupTitle')}>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[13px] font-semibold text-label">{t('jobs.dateFromLabel')}</span>
-                <Input type="date" value={dateFrom} onChange={(event) => onChange({ from: event.target.value })} className="px-3" />
-              </label>
-              <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[13px] font-semibold text-label">{t('jobs.dateToLabel')}</span>
-                <Input type="date" value={dateTo} onChange={(event) => onChange({ to: event.target.value })} className="px-3" />
-              </label>
-            </div>
+            <DateRangeFields
+              startId="filter-date-from"
+              endId="filter-date-to"
+              startLabel={t('jobs.dateFromLabel')}
+              endLabel={t('jobs.dateToLabel')}
+              start={dateFrom}
+              end={dateTo}
+              onStartChange={(value) => onChange({ from: value })}
+              onEndChange={(value) => onChange({ to: value })}
+            />
             {(dateFrom || dateTo) && (
               <button
                 type="button"

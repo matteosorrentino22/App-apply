@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
 import { updateMe } from '../api/auth'
@@ -141,6 +141,13 @@ function regroupSavedRoles(companies, savedRoles) {
 // (es. dopo un errore su una sezione successiva) non riconosce più le
 // righe già create in questa sessione come "esistenti" e le rimanda come
 // nuove, duplicandole sul server.
+// Sprint 81: istantanea del contenuto modificabile, senza le chiavi interne
+// (`_key` cambia da locale a id reale dopo il salvataggio senza che il
+// contenuto cambi). Serve a mostrare "Salva modifiche" solo con modifiche.
+function contentSnapshot(value) {
+  return JSON.stringify(value, (key, item) => (key === '_key' ? undefined : item))
+}
+
 async function saveSection(section, currentRows, initialIds) {
   const currentIds = new Set(currentRows.filter(isExistingRow).map((row) => row._key))
   for (const id of initialIds) {
@@ -207,6 +214,28 @@ export default function ProfilePage() {
     certifications: [],
     languages: [],
   })
+  // Contenuto all'ultimo caricamento o salvataggio riuscito (Sprint 81).
+  const [baseline, setBaseline] = useState(null)
+  const [needsBaseline, setNeedsBaseline] = useState(false)
+  const snapshot = useMemo(
+    () =>
+      contentSnapshot({
+        nameFields,
+        profileFields,
+        companies,
+        educations,
+        sections,
+        photo: photoFile ? photoFile.name : null,
+      }),
+    [nameFields, profileFields, companies, educations, sections, photoFile],
+  )
+  useEffect(() => {
+    if (needsBaseline) {
+      setBaseline(snapshot)
+      setNeedsBaseline(false)
+    }
+  }, [needsBaseline, snapshot])
+  const dirty = baseline != null && snapshot !== baseline
 
   const SKILL_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
   const CERTIFICATION_FIELDS = [{ name: 'name', label: t('onboarding.name') }]
@@ -260,7 +289,10 @@ export default function ProfilePage() {
     setError('')
     fetchProfile()
       .then((data) => {
-        if (!cancelled) applyProfileData(data)
+        if (!cancelled) {
+          applyProfileData(data)
+          setNeedsBaseline(true)
+        }
       })
       .catch(() => {
         if (!cancelled) setError(t('profile.loadError'))
@@ -309,9 +341,10 @@ export default function ProfilePage() {
       }
 
       setNotice(t('profile.saved'))
-      // La barra "Salva modifiche" è in fondo: l'esito anche come avviso.
+      // La barra "Salva modifiche" è in fondo (e sparisce): l'esito anche come avviso.
       showToast(t('profile.saved'))
       setPhotoFile(null)
+      setNeedsBaseline(true)
       // Aggiorna `profile_status` (banner del profilo incompleto).
       refreshUser().catch(() => {})
     } catch (err) {
@@ -577,11 +610,16 @@ export default function ProfilePage() {
         ))}
       </form>
 
-      <ActionBar>
-        <Button type="submit" form="profile-form" size="lg" disabled={saving}>
-          {saving ? t('profileExtras.saving') : t('profile.save')}
-        </Button>
-      </ActionBar>
+      {/* Sprint 81: sopra la barra di tab (che resta visibile, mockup
+          `profilo`) e solo con modifiche non salvate o un errore da
+          correggere; durante il salvataggio resta visibile. */}
+      {dirty || saving || error ? (
+        <ActionBar stacked>
+          <Button type="submit" form="profile-form" size="lg" disabled={saving}>
+            {saving ? t('profileExtras.saving') : t('profile.save')}
+          </Button>
+        </ActionBar>
+      ) : null}
 
       <Modal open={confirmPhotoRemoval} onOpenChange={setConfirmPhotoRemoval}>
         <ModalContent>

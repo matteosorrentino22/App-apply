@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,57 +43,62 @@ export default function ListSectionEditor({ title, addLabel, fields, rows, onCha
     onChange(rows.filter((row) => row._key !== key))
   }
 
+  // Sprint 81: righe in un riquadro leggero, campi a tutta larghezza
+  // (affiancati da 22rem di contenitore se più d'uno, es. lingua e
+  // livello), "Rimuovi" come pulsante di testo da 44 px.
   return (
-    <fieldset className="flex flex-col gap-3">
+    <fieldset className="flex min-w-0 flex-col gap-4">
       <legend className="mb-1 text-base font-semibold text-foreground">{title}</legend>
       {rows.map((row) => (
-        <div key={row._key} className="flex flex-wrap items-end gap-3 rounded-lg border border-border p-3">
-          {fields.map((field) => (
-            <div key={field.name} className="flex min-w-40 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-${field.name}`}>
-                {field.label}
-                {field.required && ' *'}
-              </Label>
-              {field.options ? (
-                <Select
-                  value={row[field.name] || undefined}
-                  onValueChange={(value) => updateRow(row._key, field.name, value)}
-                >
-                  <SelectTrigger id={`${row._key}-${field.name}`} aria-label={field.label}>
-                    <SelectValue placeholder={field.label} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {field.options.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id={`${row._key}-${field.name}`}
-                  type={field.type || 'text'}
-                  required={field.required}
-                  value={row[field.name] || ''}
-                  onChange={(event) => updateRow(row._key, field.name, event.target.value)}
-                />
-              )}
-            </div>
-          ))}
+        <div key={row._key} className="@container flex min-w-0 flex-col gap-2 rounded-field border border-border bg-tint p-3 sm:p-4" data-testid="list-row">
+          <div className={fields.length > 1 ? 'grid grid-cols-1 gap-4 @[22rem]:grid-cols-2 @[22rem]:gap-3' : 'flex flex-col'}>
+            {fields.map((field) => (
+              <div key={field.name} className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor={`${row._key}-${field.name}`}>
+                  {field.label}
+                  {field.required && ' *'}
+                </Label>
+                {field.options ? (
+                  <Select
+                    value={row[field.name] || undefined}
+                    onValueChange={(value) => updateRow(row._key, field.name, value)}
+                  >
+                    <SelectTrigger id={`${row._key}-${field.name}`} aria-label={field.label} className="w-full min-w-0">
+                      <SelectValue placeholder={field.label} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {field.options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id={`${row._key}-${field.name}`}
+                    type={field.type || 'text'}
+                    required={field.required}
+                    value={row[field.name] || ''}
+                    onChange={(event) => updateRow(row._key, field.name, event.target.value)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
+            variant="text"
             onClick={() => removeRow(row._key)}
-            className="text-muted-foreground hover:text-destructive"
+            className="-ml-2 self-start px-2 text-destructive-text hover:bg-destructive-soft"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
             {removeLabel}
           </Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" size="sm" onClick={addRow} className="w-fit">
+      <Button type="button" variant="secondary" onClick={addRow} className="w-fit">
+        <Plus className="h-4 w-4" aria-hidden="true" />
         {addLabel}
       </Button>
     </fieldset>

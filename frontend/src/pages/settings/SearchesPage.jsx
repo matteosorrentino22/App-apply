@@ -258,7 +258,8 @@ export default function SearchesPage() {
         ))
       )}
 
-      <ActionBar>
+      {/* Sprint 81: sopra la barra di tab, che resta visibile (mockup `ricerche`). */}
+      <ActionBar stacked>
         <Button size="lg" onClick={() => setCreating(true)}>
           <Plus className="h-5 w-5" aria-hidden="true" />
           {t('account.newSearch')}

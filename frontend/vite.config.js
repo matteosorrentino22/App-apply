@@ -44,7 +44,7 @@ export default defineConfig({
         name: 'App-apply',
         short_name: 'App-apply',
         description: 'Centralizza e automatizza la ricerca di lavoro',
-        theme_color: '#6b4a2e',
+        theme_color: '#fdfbf7',
         background_color: '#fdfbf7',
         display: 'standalone',
         start_url: '/',

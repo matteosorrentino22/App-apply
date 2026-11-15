@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { defineConfig } from '@playwright/test'
+import { defineConfig, devices } from '@playwright/test'
 
 // Chromium preinstallato dell'ambiente in cui la suite è nata; altrove (es.
 // un computer di sviluppo dopo `npx playwright install chromium`) Playwright
@@ -13,6 +13,13 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:5173',
     locale: 'it-IT',
-    launchOptions: chromiumPath ? { executablePath: chromiumPath } : {},
   },
+  // Sprint 81: tutti gli spec in Chromium; lo spec di impaginazione anche in
+  // WebKit con l'emulazione di iPhone (Safari rende diversamente, ad esempio,
+  // i campi data). `npx playwright test --project=chromium` per il solo Chromium.
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium', launchOptions: chromiumPath ? { executablePath: chromiumPath } : {} } },
+    { name: 'iphone-13', use: { ...devices['iPhone 13'], locale: 'it-IT' }, testMatch: /layout\.spec\.js/ },
+    { name: 'iphone-se', use: { ...devices['iPhone SE'], locale: 'it-IT' }, testMatch: /layout\.spec\.js/ },
+  ],
 })

@@ -346,17 +346,15 @@ class AutomaticCollectionSettingsApiTests(APITestCase):
 
 
 class ExistingProDataMigrationTests(TestCase):
-    def test_existing_pro_get_the_automatic_collection_at_seven_from_tomorrow(self):
+    def test_existing_pro_keep_the_automatic_collection_off(self):
+        # Sprint 81: la migrazione 0012 non attiva più l'automatica ai Pro
+        # esistenti (la accendono loro, se vogliono).
         pro = _user("old-pro@example.com", timezone="America/New_York")
         free = _user("old-free@example.com", plan="free")
         migration = import_module("apps.accounts.migrations.0012_enable_auto_collection_for_pro")
-        migration.enable_for_existing_pro(django_apps, None)
+        migration.leave_automatic_collection_off(django_apps, None)
         pro.refresh_from_db()
         free.refresh_from_db()
-        self.assertTrue(pro.auto_collection_enabled)
-        self.assertEqual(pro.auto_collection_time, datetime.time(7, 0))
-        self.assertEqual(
-            pro.auto_collection_last_local_date,
-            timezone.now().astimezone(zoneinfo.ZoneInfo("America/New_York")).date(),
-        )
+        self.assertFalse(pro.auto_collection_enabled)
+        self.assertIsNone(pro.auto_collection_last_local_date)
         self.assertFalse(free.auto_collection_enabled)

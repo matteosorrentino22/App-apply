@@ -128,6 +128,11 @@ export default function AppShell({ children, banner }) {
         showNav && 'pt-[env(safe-area-inset-top)] lg:pt-0',
       )}
     >
+      {/* Sprint 81: con viewport-fit=cover, scorrendo, il contenuto passava
+          sotto l'ora e le icone della barra di stato dell'iPhone. Una striscia
+          opaca alta quanto l'area sicura superiore lo copre (0 px dove non
+          c'è area sicura, quindi invisibile su desktop e Android). */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)] bg-background" />
       {showNav ? <DesktopTopBar /> : <PublicHeader />}
       {/* Avvisi di sistema (nuova versione, profilo incompleto): in cima alla
           colonna, anche nelle pagine senza navigazione (la nuova versione). */}

@@ -48,8 +48,11 @@ export default function CityAutocomplete({ city, country, onChange, cityId, coun
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 gap-2">
-      <div className="relative flex min-w-32 flex-1 flex-col gap-1.5">
+    // Sprint 81: città e paese affiancati solo se il contenitore è largo
+    // almeno 20rem; prima due minimi da 128 px uscivano dai riquadri stretti.
+    <div ref={containerRef} className="@container w-full min-w-0">
+      <div className="grid grid-cols-1 gap-4 @[20rem]:grid-cols-2 @[20rem]:gap-3">
+      <div className="relative flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={cityId}>{t('onboarding.searchCity')}</Label>
         <Input
           id={cityId}
@@ -76,7 +79,7 @@ export default function CityAutocomplete({ city, country, onChange, cityId, coun
           </ul>
         )}
       </div>
-      <div className="flex min-w-32 flex-1 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-1.5">
         <Label htmlFor={countryId}>{t('onboarding.searchCountry')}</Label>
         <Input
           id={countryId}
@@ -85,6 +88,7 @@ export default function CityAutocomplete({ city, country, onChange, cityId, coun
           onChange={(e) => onChange({ city, country: e.target.value })}
           required
         />
+      </div>
       </div>
     </div>
   )

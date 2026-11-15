@@ -1,28 +1,14 @@
-import datetime
-import zoneinfo
-
 from django.db import migrations
-from django.utils import timezone
 
 
-def enable_for_existing_pro(apps, schema_editor):
-    # Sprint 77: i Pro esistenti avevano la raccolta notturna delle 02:00, che
-    # viene tolta; per non lasciarli senza raccolta si attiva l'automatica
-    # alle 07:00 (nel loro fuso). La data locale di oggi si segna come già
-    # fatta: il giorno del rilascio il ciclo notturno ha già raccolto, la
-    # prima automatica parte domani (nessuna seconda chiamata Apify oggi).
-    # I nuovi Pro partono con l'automatica spenta (default del campo).
-    User = apps.get_model("accounts", "User")
-    now = timezone.now()
-    for user in User.objects.filter(plan="pro"):
-        try:
-            zone = zoneinfo.ZoneInfo(user.timezone or "Europe/Rome")
-        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-            zone = zoneinfo.ZoneInfo("Europe/Rome")
-        user.auto_collection_enabled = True
-        user.auto_collection_time = datetime.time(7, 0)
-        user.auto_collection_last_local_date = now.astimezone(zone).date()
-        user.save(update_fields=["auto_collection_enabled", "auto_collection_time", "auto_collection_last_local_date"])
+def leave_automatic_collection_off(apps, schema_editor):
+    # Sprint 77 attivava qui la raccolta automatica alle 07:00 per i Pro
+    # esistenti. Sprint 81, su richiesta del committente: nessuna attivazione
+    # preimpostata, anche per i Pro già presenti; ognuno la accende (e sceglie
+    # l'orario) dal pannello di raccolta o da Impostazioni. La migrazione
+    # resta, vuota, perché il nome è già nello storico delle migrazioni dei
+    # database di prova.
+    return None
 
 
 class Migration(migrations.Migration):
@@ -31,5 +17,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(enable_for_existing_pro, migrations.RunPython.noop),
+        migrations.RunPython(leave_automatic_collection_off, migrations.RunPython.noop),
     ]

@@ -1,15 +1,15 @@
-# RELEASE — rilascio del redesign (sprint 72→80) su `main` e in produzione
+# RELEASE — rilascio del redesign (sprint 72→81) su `main` e in produzione
 
 > **Stato:** procedura scritta nello Sprint 80 (2026-11-15), **non eseguita**. Si esegue solo con l'ok esplicito del committente, in una finestra concordata. Comandi generici: nessun dominio, nessun segreto (il repository è pubblico); `<dominio>` è il dominio reale, `<caddy>` il container Caddy della produzione.
 > **Riferimenti:** `DEPLOY.md` (§3 variabili, §4.1 rilascio, §4.3 coerenza dello stack, §4.10 Sprint 77, §6 backup, §10 anteprima), `CLAUDE.md` (mai mescolare `docker-compose.yml` e `docker-compose.prod.yml`).
 
 ## 0. Situazione di partenza (verificata il 2026-11-15)
 - Produzione: cartella del repository sul VPS (`/root/App-apply`), branch `main` al commit `f6584e5` (Sprint 71); tutti i container da `docker-compose.prod.yml`. Unica modifica locale non committata: `docker/caddy/Caddyfile.prod` con il blocco `anteprima.{$DOMAIN}`, **identico** alla versione committata nei branch del redesign (commit `4c78973`).
-- Branch del redesign, **lineari** (ognuno contiene il precedente): `sprint-72-fondamenta` → `sprint-73-appshell` → `sprint-74-lista` → `sprint-75-dettaglio` → `sprint-76-editor` → (commit anteprima) → `sprint-77-raccolta` → `sprint-78-profilo` → `sprint-79-accesso` → `sprint-80-rifinitura`. `main` è antenato di `sprint-80-rifinitura`: il merge è un **fast-forward**, senza conflitti.
+- Branch del redesign, **lineari** (ognuno contiene il precedente): `sprint-72-fondamenta` → `sprint-73-appshell` → `sprint-74-lista` → `sprint-75-dettaglio` → `sprint-76-editor` → (commit anteprima) → `sprint-77-raccolta` → `sprint-78-profilo` → `sprint-79-accesso` → `sprint-80-rifinitura` → `sprint-81-correzioni`. `main` è antenato di `sprint-81-correzioni`: il merge è un **fast-forward**, senza conflitti.
 - Copia di lavoro separata (`/root/App-apply-dev`) e anteprima (`/root/app-apply-preview`, stack `appapply-preview`): non sono la produzione.
 
 ## 1. Ordine di merge su `main`
-Il merge di `sprint-80-rifinitura` porta su `main` tutti gli sprint 72–80 nell'ordine giusto (sono commit successivi della stessa linea). Dalla copia di lavoro, non dalla cartella di produzione:
+Il merge di `sprint-81-correzioni` (l'ultimo) porta su `main` tutti gli sprint 72–81 nell'ordine giusto (sono commit successivi della stessa linea). Dalla copia di lavoro, non dalla cartella di produzione:
 
 ```
 cd /root/App-apply-dev
@@ -17,16 +17,16 @@ git fetch origin
 git status                                   # pulito, nessun file non committato
 git tag pre-redesign origin/main             # punto di ritorno (= f6584e5)
 git checkout -B main origin/main
-git merge --ff-only sprint-80-rifinitura     # deve dire "Fast-forward"; se no, fermarsi
-git log --oneline origin/main..main          # elenco atteso: commit da 9e10413 (Docs/design) a Sprint 80
+git merge --ff-only sprint-81-correzioni     # deve dire "Fast-forward"; se no, fermarsi
+git log --oneline origin/main..main          # elenco atteso: commit da 9e10413 (Docs/design) a Sprint 81
 git push origin main pre-redesign
 ```
 
-Chi preferisce passare da GitHub: una pull request `sprint-80-rifinitura` → `main` con "Rebase and merge" o "Create a merge commit" dà lo stesso codice; il tag `pre-redesign` va creato comunque su `f6584e5`. I branch `sprint-7x-*` si possono cancellare dopo il rilascio riuscito (non prima: sono il riferimento per sprint).
+Chi preferisce passare da GitHub: una pull request `sprint-81-correzioni` → `main` con "Rebase and merge" o "Create a merge commit" dà lo stesso codice; il tag `pre-redesign` va creato comunque su `f6584e5`. I branch `sprint-7x-*` si possono cancellare dopo il rilascio riuscito (non prima: sono il riferimento per sprint).
 
 ## 2. Prima del deploy (stesso giorno)
 ### 2.1 Variabili d'ambiente da controllare (`.env` di produzione)
-Nessuna variabile **nuova** negli sprint 72–80. Da controllare (mostrare solo "impostato / non impostato", mai i valori):
+Nessuna variabile **nuova** negli sprint 72–81. Da controllare (mostrare solo "impostato / non impostato", mai i valori):
 
 | Variabile | Stato al 2026-11-15 | Cosa fare |
 |---|---|---|
@@ -40,7 +40,7 @@ Nessuna variabile **nuova** negli sprint 72–80. Da controllare (mostrare solo 
 Dopo una modifica al `.env`: `docker compose -f docker-compose.prod.yml up -d --force-recreate web worker beat` (DEPLOY §4.2, §7.6) — si può fare nella stessa finestra del deploy, che ricrea comunque i container.
 
 ### 2.2 Orario
-- **Dopo le 02:00 e dopo la fine del ciclo notturno** di quella notte (Django Admin → *Run logs*: ultime righe `collection`/`scoring` della notte concluse; oppure `docker compose -f docker-compose.prod.yml logs --since 6h worker | tail`). Motivo: la migrazione `accounts/0012` segna "raccolta automatica di oggi già fatta" per i Pro (la notte ha già raccolto) e la prima automatica parte **il giorno dopo alle 07:00**; rilasciando prima delle 02:00 i Pro resterebbero un giorno senza raccolta.
+- **Dopo le 02:00 e dopo la fine del ciclo notturno** di quella notte (Django Admin → *Run logs*: ultime righe `collection`/`scoring` della notte concluse; oppure `docker compose -f docker-compose.prod.yml logs --since 6h worker | tail`). Motivo: con il rilascio sparisce il ciclo notturno; rilasciando dopo che ha girato, quella giornata ha ancora le offerte raccolte di notte. Dal giorno dopo nessuno ha raccolte automatiche finché non le attiva (Sprint 81: i Pro la accendono da sé, §3).
 - Meglio anche **dopo il backup delle 03:30** e in un momento di basso uso (es. mattina presto). Rilasciando prima delle 10:00 quel giorno non parte la notifica mattutina (tolta dallo Sprint 77).
 
 ### 2.3 Backup (obbligatorio, prima di toccare qualcosa)
@@ -78,7 +78,7 @@ Solo lo Sprint 77 ha migrazioni; gli sprint 72–76 e 78–80 sono solo frontend
 | Migrazione | Effetto sui dati di produzione | Reversibile |
 |---|---|---|
 | `accounts/0011_auto_collection` | Aggiunge a ogni utente `auto_collection_enabled` (falso), `auto_collection_time` (07:00), `auto_collection_last_local_date` (vuota) | sì (toglie le colonne) |
-| `accounts/0012_enable_auto_collection_for_pro` | **Tutti gli utenti già Pro**: raccolta automatica **attiva alle 07:00** nel loro fuso, con "oggi già fatta" → prima automatica **domani alle 07:00**. I Free non cambiano; i nuovi Pro partono con l'automatica spenta | il ritorno non fa nulla (le colonne spariscono con 0011) |
+| `accounts/0012_enable_auto_collection_for_pro` | **Nessun effetto** (Sprint 81, su richiesta del committente: niente raccolta automatica preimpostata). Tutti, Pro compresi, partono con l'automatica **spenta**; ogni Pro la attiva e sceglie l'orario dal pannello "Raccogli" o da Impostazioni. Fino ad allora i Pro hanno solo la raccolta manuale (una al giorno) | il ritorno non fa nulla |
 | `jobs/0021_auto_collection` | Aggiunge `collection_done_at` (vuoto) alle quote giornaliere | sì |
 | `jobs/0022_replace_nightly_cycle_schedule` | **Cancella il PeriodicTask "Ciclo notturno" delle 02:00** e crea "Raccolte automatiche Pro (ogni 15 minuti)" | sì (ricrea il ciclo delle 02:00) |
 | `notifications/0003_remove_morning_notification` | **Cancella la notifica mattutina delle 10:00**; resta il promemoria di inattività | sì (ricrea la notifica) |
@@ -113,7 +113,7 @@ Mai `docker compose up` con `docker-compose.yml` (dev) sul VPS.
 2. **Migrazioni:** `docker compose -f docker-compose.prod.yml exec web python manage.py showmigrations accounts jobs notifications | tail -12` → `[X]` su `accounts 0011, 0012`, `jobs 0021, 0022`, `notifications 0003`. `... exec web python manage.py check --deploy` senza problemi.
 3. **Log:** `docker compose -f docker-compose.prod.yml logs --since 10m web worker beat caddy | grep -iE "error|traceback"` → niente di nuovo.
 4. **Sito:** `https://<dominio>/` risponde 200; `https://<dominio>/api/legal/` riporta l'informativa alla versione `1.1` e i dati del titolare compilati (`complete: true`).
-5. **Django Admin → Periodic tasks:** presenti "Raccolte automatiche Pro (ogni 15 minuti)", "Promemoria di inattività", backup 03:30; **assenti** "Ciclo notturno…" e "Notifica mattutina…". **Users:** i Pro con "auto collection enabled" e 07:00.
+5. **Django Admin → Periodic tasks:** presenti "Raccolte automatiche Pro (ogni 15 minuti)", "Promemoria di inattività", backup 03:30; **assenti** "Ciclo notturno…" e "Notifica mattutina…". **Users:** "auto collection enabled" spento per tutti (nessuna attivazione preimpostata).
 6. **Dal telefono** (PWA dalla Home, e da browser):
    - accesso → schermata di riaccettazione (tre caselle, "Continua" attivo solo con tutte e tre) → lista Jobs;
    - barra di tab con 3 voci; nell'app installata nessun contenuto sotto la status bar o sotto l'indicatore Home;
@@ -123,7 +123,7 @@ Mai `docker compose up` con `docker-compose.yml` (dev) sul VPS.
    - Profilo: fisarmoniche, "Salva modifiche"; Impostazioni: sottopagine, pannelli, notifiche (stato del dispositivo), "Esci" con conferma;
    - `/privacy` e `/terms` senza login, sezioni a fisarmonica; un indirizzo inesistente mostra "Pagina non trovata".
 7. **Email** (una prova): "Password dimenticata?" con un proprio indirizzo → email ricevuta, link funzionante.
-8. **Il giorno dopo, dopo le 07:00:** Admin → *Run logs* `collection` dei Pro `SUCCESS` (o `SKIPPED` se avevano raccolto a mano); notifica push ricevuta se c'erano job nuovi; nessun ciclo alle 02:00.
+8. **Dopo che un Pro ha attivato l'automatica:** il giorno successivo all'orario scelto Admin → *Run logs* `collection` di quel Pro `SUCCESS` (o `SKIPPED` se aveva raccolto a mano); notifica push se c'erano job nuovi; nessun ciclo alle 02:00.
 9. Annotare l'esito in `DEPLOY.md §9` (storico verifiche) in forma generica.
 
 ## 6. Ritorno indietro se qualcosa va storto
@@ -173,6 +173,6 @@ Se il container era stato ricreato dopo il cambio di inode (§4), dopo il ripris
 ## 8. Cosa serve dal committente prima del rilascio
 - Ok al merge e alla finestra (§2.2).
 - Valori di `LEGAL_CONTROLLER_NAME` ed `LEGAL_CONTROLLER_EMAIL` inseriti nel `.env` (da lui o su sua indicazione, mai nel repository).
-- Prova dal telefono sull'anteprima (sprint 72–80) e, dopo il rilascio, sull'app vera da iPhone con la PWA dalla Home (area sicura, tastiera nella chat, notifiche): non verificabili nello stack di prova.
+- Prova dal telefono sull'anteprima (sprint 72–81) e, dopo il rilascio, sull'app vera da iPhone con la PWA dalla Home (area sicura, tastiera nella chat, notifiche): non verificabili nello stack di prova.
 - Decisioni ancora aperte o da confermare (`SPEC-DELTA.md`): B8 (tema scuro, tablet), B10 (proposta minima implementata), B11 (testo del 429). Nessuna blocca il rilascio.
-- Avviso ai tester: riaccettazione dell'informativa al primo accesso; da domani alle 07:00 la raccolta dei Pro è automatica e non c'è più la notturna; una raccolta al giorno per tutti.
+- Avviso ai tester: riaccettazione dell'informativa al primo accesso; non c'è più la raccolta notturna e **nessuna raccolta automatica è attiva**: i Pro che la vogliono la accendono dal pannello "Raccogli" (o da Impostazioni) e scelgono l'orario; una raccolta al giorno per tutti.

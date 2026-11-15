@@ -1,15 +1,17 @@
-import { Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card } from '@/components/ui/card'
+import { DateRangeFields } from '@/components/ui/date-range'
 import ChipInput from '@/components/ChipInput'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 
 // Stessi limiti del backend (apps/profiles/serializers.py, Sprint 70).
-// Sprint 78: solo stile (larghezze minime dei campi e padding della scheda,
-// che a 360 px riducevano il campo Ruolo a poche lettere).
+// Sprint 78: solo stile. Sprint 81: impaginazione rifatta (props, dati e
+// comportamento invariati): campi a tutta larghezza, ogni ruolo in un
+// riquadro, date con DateRangeFields, azioni come pulsanti di testo da 44 px.
 const MAX_BULLETS = 15
 const MAX_BULLET_LENGTH = 400
 const MAX_TECHNOLOGY_LENGTH = 200
@@ -89,151 +91,132 @@ export default function ExperienceGroupEditor({
   }
 
   return (
-    <fieldset className="flex flex-col gap-4">
+    <fieldset className="flex min-w-0 flex-col gap-4">
       <legend className="mb-1 text-base font-semibold text-foreground">{t(titleKey)}</legend>
       <p className="-mt-2 text-sm text-muted-foreground">{t(hintKey)}</p>
 
       {companies.map((c) => (
-        <Card key={c._key} className="p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-            <div className="flex min-w-48 max-w-sm flex-1 flex-col gap-1.5">
-              <Label htmlFor={`company-${c._key}`}>{t('onboarding.company')}</Label>
-              <Input
-                id={`company-${c._key}`}
-                value={c.company}
-                onChange={(e) => updateCompany(c._key, { company: e.target.value })}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => removeCompany(c._key)}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t('onboarding.removeCompany')}
-            </Button>
+        <Card key={c._key} className="flex min-w-0 flex-col gap-6 p-4 sm:p-5" data-testid="experience-company">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`company-${c._key}`}>{t('onboarding.company')}</Label>
+            <Input
+              id={`company-${c._key}`}
+              value={c.company}
+              onChange={(e) => updateCompany(c._key, { company: e.target.value })}
+            />
           </div>
 
-          <div className="flex flex-col">
-            {c.roles.map((r, index) => (
-              <div key={r._key} className="flex gap-3">
-                <div className="flex w-4 shrink-0 flex-col items-center">
-                  <span className="mt-[26px] h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
-                  {index < c.roles.length - 1 && <span className="mt-1 w-0.5 flex-1 bg-border" />}
+          <div className="flex flex-col gap-4">
+            {c.roles.map((r) => (
+              // Sprint 81: ogni ruolo in un riquadro leggero a tutta larghezza
+              // (prima rientrato con un puntino: a 360 px i campi si
+              // stringevano e "Data fine" usciva dalla card).
+              <div key={r._key} className="flex min-w-0 flex-col gap-4 rounded-field border border-border bg-tint p-3 sm:p-4" data-testid="experience-role">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`role-${r._key}`}>{t('onboarding.role')}</Label>
+                  <Input
+                    id={`role-${r._key}`}
+                    value={r.role}
+                    onChange={(e) => updateRole(c._key, r._key, { role: e.target.value })}
+                  />
                 </div>
-                <div className={cnPad(index, c.roles.length)}>
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-1 flex-wrap gap-4">
-                      <div className="flex min-w-40 max-w-60 flex-1 flex-col gap-1.5">
-                        <Label htmlFor={`role-${r._key}`}>{t('onboarding.role')}</Label>
-                        <Input
-                          id={`role-${r._key}`}
-                          value={r.role}
-                          onChange={(e) => updateRole(c._key, r._key, { role: e.target.value })}
-                        />
-                      </div>
-                      <CityOnlyAutocomplete
-                        cityId={`role-location-${r._key}`}
-                        label={t('onboarding.location')}
-                        city={r.location}
-                        onChange={({ city, countryCode }) =>
-                          updateRole(c._key, r._key, {
-                            location: city,
-                            location_country_code: countryCode ?? r.location_country_code,
-                          })
-                        }
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeRole(c._key, r._key)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {t('onboarding.removeRole')}
-                    </Button>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-end gap-4">
-                    <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                      <Label htmlFor={`role-start-${r._key}`}>{t('onboarding.startDate')}</Label>
-                      <Input
-                        id={`role-start-${r._key}`}
-                        type="date"
-                        value={r.start_date}
-                        onChange={(e) => updateRole(c._key, r._key, { start_date: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                      <Label htmlFor={`role-end-${r._key}`}>{t('onboarding.endDate')}</Label>
-                      <Input
-                        id={`role-end-${r._key}`}
-                        type="date"
-                        disabled={r.ongoing}
-                        value={r.end_date}
-                        onChange={(e) => updateRole(c._key, r._key, { end_date: e.target.value })}
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 pb-2 text-sm">
-                      <Checkbox
-                        checked={r.ongoing}
-                        onCheckedChange={(checked) =>
-                          updateRole(c._key, r._key, {
-                            ongoing: checked === true,
-                            end_date: checked === true ? '' : r.end_date,
-                          })
-                        }
-                      />
-                      {t('onboarding.ongoing')}
-                    </label>
-                  </div>
-                  <div className="mt-3 flex flex-col gap-1.5">
-                    <Label htmlFor={`activities-${r._key}`}>{t('onboarding.activities')}</Label>
-                    <ChipInput
-                      id={`activities-${r._key}`}
-                      value={r.bullets}
-                      onChange={(bullets) => updateRole(c._key, r._key, { bullets })}
-                      placeholder={t('onboarding.activitiesPlaceholder')}
-                      maxLength={MAX_BULLET_LENGTH}
-                      flagTooLong={typeof r._key !== 'number'}
+                <CityOnlyAutocomplete
+                  cityId={`role-location-${r._key}`}
+                  label={t('onboarding.location')}
+                  city={r.location}
+                  onChange={({ city, countryCode }) =>
+                    updateRole(c._key, r._key, {
+                      location: city,
+                      location_country_code: countryCode ?? r.location_country_code,
+                    })
+                  }
+                />
+                <div className="flex flex-col gap-1">
+                  <DateRangeFields
+                    startId={`role-start-${r._key}`}
+                    endId={`role-end-${r._key}`}
+                    startLabel={t('onboarding.startDate')}
+                    endLabel={t('onboarding.endDate')}
+                    start={r.start_date}
+                    end={r.end_date}
+                    endDisabled={r.ongoing}
+                    onStartChange={(value) => updateRole(c._key, r._key, { start_date: value })}
+                    onEndChange={(value) => updateRole(c._key, r._key, { end_date: value })}
+                  />
+                  <label className="flex min-h-11 w-fit cursor-pointer items-center gap-3 text-[15px] text-foreground">
+                    <Checkbox
+                      checked={r.ongoing}
+                      onCheckedChange={(checked) =>
+                        updateRole(c._key, r._key, {
+                          ongoing: checked === true,
+                          end_date: checked === true ? '' : r.end_date,
+                        })
+                      }
                     />
-                    <p className="text-xs text-muted-foreground">
-                      {t('profileExtras.bulletsHint')
-                        .replace('{max}', MAX_BULLETS)
-                        .replace('{length}', MAX_BULLET_LENGTH)}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex flex-col gap-1.5">
-                    <Label htmlFor={`technologies-${r._key}`}>{t('profileExtras.technologies')}</Label>
-                    <ChipInput
-                      id={`technologies-${r._key}`}
-                      value={r.technologies || []}
-                      onChange={(technologies) => updateRole(c._key, r._key, { technologies })}
-                      placeholder={t('profileExtras.technologiesPlaceholder')}
-                      maxLength={MAX_TECHNOLOGY_LENGTH}
-                    />
-                  </div>
+                    {t('onboarding.ongoing')}
+                  </label>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`activities-${r._key}`}>{t('onboarding.activities')}</Label>
+                  <ChipInput
+                    id={`activities-${r._key}`}
+                    value={r.bullets}
+                    onChange={(bullets) => updateRole(c._key, r._key, { bullets })}
+                    placeholder={t('onboarding.activitiesPlaceholder')}
+                    maxLength={MAX_BULLET_LENGTH}
+                    flagTooLong={typeof r._key !== 'number'}
+                  />
+                  <p className="text-xs leading-snug text-muted-foreground">
+                    {t('profileExtras.bulletsHint')
+                      .replace('{max}', MAX_BULLETS)
+                      .replace('{length}', MAX_BULLET_LENGTH)}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`technologies-${r._key}`}>{t('profileExtras.technologies')}</Label>
+                  <ChipInput
+                    id={`technologies-${r._key}`}
+                    value={r.technologies || []}
+                    onChange={(technologies) => updateRole(c._key, r._key, { technologies })}
+                    placeholder={t('profileExtras.technologiesPlaceholder')}
+                    maxLength={MAX_TECHNOLOGY_LENGTH}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="text"
+                  onClick={() => removeRole(c._key, r._key)}
+                  className="-ml-2 self-start px-2 text-destructive-text hover:bg-destructive-soft"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  {t('onboarding.removeRole')}
+                </Button>
               </div>
             ))}
           </div>
 
-          <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => addRole(c._key)}>
-            {t('onboarding.addRole')}
-          </Button>
+          <div className="flex flex-col items-start gap-1">
+            <Button type="button" variant="text" className="-ml-2 px-2 text-left" onClick={() => addRole(c._key)}>
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {t('onboarding.addRole')}
+            </Button>
+            <Button
+              type="button"
+              variant="text"
+              onClick={() => removeCompany(c._key)}
+              className="-ml-2 px-2 text-destructive-text hover:bg-destructive-soft"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {t('onboarding.removeCompany')}
+            </Button>
+          </div>
         </Card>
       ))}
 
       <Button type="button" variant="secondary" onClick={addCompany} className="w-fit">
+        <Plus className="h-4 w-4" aria-hidden="true" />
         {t('onboarding.addCompany')}
       </Button>
     </fieldset>
   )
-}
-
-function cnPad(index, total) {
-  return index < total - 1 ? 'flex-1 pb-5' : 'flex-1'
 }

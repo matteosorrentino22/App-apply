@@ -268,3 +268,57 @@ test('profilo: sezioni a fisarmonica e "Salva modifiche" nella barra in basso', 
   await expect(page.getByText('Profilo aggiornato.').first()).toBeVisible()
   await expect(page.getByText('Mario Rossi')).toBeVisible()
 })
+
+// Sprint 81 (prova su iPhone): nelle sezioni principali la barra di tab resta
+// visibile; "Salva modifiche" compare sopra di essa solo con modifiche non
+// salvate; "Nuova ricerca" sta sopra la barra di tab. Date: "In corso"
+// disattiva e svuota la data di fine.
+test.describe('barre in basso su mobile', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('Profilo e Ricerche: barra di tab sempre visibile, barra azione sopra', async ({ page, request, baseURL }) => {
+    const { email, password } = await registerUser(request, baseURL)
+    await login(page, email, password)
+    const tabbar = page.getByRole('navigation', { name: 'Navigazione principale' })
+    const bar = page.getByTestId('action-bar')
+
+    await page.goto('/profile')
+    await expect(page.getByRole('heading', { name: 'Profilo', level: 1 })).toBeVisible()
+    await expect(tabbar).toBeVisible()
+    await expect(bar).toHaveCount(0)
+
+    await page.getByLabel('Telefono').fill('+39 000 0000000')
+    await expect(bar.getByRole('button', { name: 'Salva modifiche' })).toBeVisible()
+    await expect(tabbar).toBeVisible()
+    const barBox = await bar.boundingBox()
+    const tabBox = await tabbar.boundingBox()
+    expect(barBox.y + barBox.height).toBeLessThanOrEqual(tabBox.y + 1)
+    // Il contenuto ha lo spazio in fondo per entrambe le barre.
+    const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#root > div')).paddingBottom))
+    expect(pad).toBeGreaterThanOrEqual(barBox.height + tabBox.height - 1)
+    // Tornare al valore di partenza = nessuna modifica: la barra sparisce.
+    await page.getByLabel('Telefono').fill('')
+    await expect(bar).toHaveCount(0)
+
+    // Esperienza: "In corso" disattiva e svuota la data di fine.
+    await page.getByRole('button', { name: /^Esperienze/ }).click()
+    await page.getByRole('button', { name: 'Aggiungi azienda' }).click()
+    await page.getByLabel('Data fine').fill('2024-06-30')
+    await expect(page.getByLabel('Data fine')).toHaveValue('2024-06-30')
+    await page.getByRole('checkbox', { name: 'In corso' }).click()
+    await expect(page.getByLabel('Data fine')).toBeDisabled()
+    await expect(page.getByLabel('Data fine')).toHaveValue('')
+    await expect(bar.getByRole('button', { name: 'Salva modifiche' })).toBeVisible()
+
+    // Dalla barra di tab si cambia sezione anche con modifiche in corso.
+    await tabbar.getByRole('link', { name: 'Impostazioni' }).click()
+    await expect(page).toHaveURL(/\/settings$/)
+
+    await page.goto('/settings/searches')
+    await expect(tabbar).toBeVisible()
+    await expect(bar.getByRole('button', { name: 'Nuova ricerca' })).toBeVisible()
+    const searchBar = await bar.boundingBox()
+    const searchTab = await tabbar.boundingBox()
+    expect(searchBar.y + searchBar.height).toBeLessThanOrEqual(searchTab.y + 1)
+  })
+})

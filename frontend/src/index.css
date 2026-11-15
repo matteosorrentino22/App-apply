@@ -181,11 +181,15 @@
 :root {
   --app-bottom-bar: 0px;
 }
+/* Sprint 81: altezza reale della barra di tab (bordo 1 + padding 8 +
+   voci 48 + padding inferiore max(8 px, area sicura)). */
 html.has-tabbar {
-  --app-bottom-bar: calc(64px + env(safe-area-inset-bottom));
+  --app-tabbar: calc(57px + max(8px, env(safe-area-inset-bottom)));
+  --app-bottom-bar: var(--app-tabbar);
 }
 @media (min-width: 1024px) {
   html.has-tabbar {
+    --app-tabbar: 0px;
     --app-bottom-bar: 0px;
   }
 }
@@ -195,10 +199,52 @@ html.has-tabbar {
    pulsante 52 + padding inferiore (28 px o area sicura + 12). */
 html.has-actionbar,
 html.has-actionbar.has-tabbar {
-  --app-bottom-bar: calc(65px + max(28px, 12px + env(safe-area-inset-bottom)));
+  /* Sprint 81: altezza misurata della barra (ActionBar la scrive in
+     --app-actionbar-h); il valore fisso vale solo prima della misura. Su
+     schermi stretti i pulsanti possono andare a capo e la barra crescere. */
+  --app-bottom-bar: var(--app-actionbar-h, calc(65px + max(28px, 12px + env(safe-area-inset-bottom))));
 }
 html.has-actionbar .app-tabbar {
   display: none;
+}
+/* Sprint 81: nelle sezioni principali (Profilo, Ricerche) la barra azione sta
+   SOPRA la barra di tab, che resta visibile. Barra azione: bordo 1 + padding
+   12 + pulsante 52 + padding 12 = 77 px. Da 1024 px (nessuna barra di tab) è
+   in fondo allo schermo come le altre barre azione. */
+html.has-actionbar-stacked.has-tabbar {
+  --app-bottom-bar: calc(var(--app-tabbar) + var(--app-actionbar-h, 77px));
+}
+@media (min-width: 1024px) {
+  html.has-actionbar-stacked.has-tabbar {
+    --app-bottom-bar: var(--app-actionbar-h, calc(65px + max(28px, 12px + env(safe-area-inset-bottom))));
+  }
+}
+
+/* Sprint 81: campi data e ora. Safari su iPhone dà agli input type=date una
+   larghezza propria (non riducibile) e senza valore li schiaccia in
+   altezza: affiancati uscivano dalla card. Larghezza del contenitore,
+   nessuna larghezza minima, stessa altezza degli altri campi. */
+input[type='date'],
+input[type='datetime-local'],
+input[type='month'],
+input[type='time'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 3rem;
+  /* Testo centrato in verticale come negli altri campi da 48 px (con
+     appearance none Safari lo allinea in alto). */
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  line-height: 1.5rem;
+}
+input[type='date']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.5em;
 }
 
 @layer base {

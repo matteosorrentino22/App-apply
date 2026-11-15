@@ -1,9 +1,10 @@
-import { Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
+import { DateRangeFields } from '@/components/ui/date-range'
 
 let nextKey = 0
 function makeKey() {
@@ -44,71 +45,53 @@ export default function EducationListEditor({ rows, onChange, t }) {
     onChange(rows.filter((row) => row._key !== key))
   }
 
+  // Sprint 81: stessa impaginazione delle esperienze (campi a tutta
+  // larghezza, date con DateRangeFields, azioni come pulsanti di testo).
   return (
-    <fieldset className="flex flex-col gap-3">
+    <fieldset className="flex min-w-0 flex-col gap-4">
       <legend className="mb-1 text-base font-semibold text-foreground">{t('onboarding.educations')}</legend>
       {rows.map((row) => (
-        <div key={row._key} className="flex flex-col gap-3 rounded-lg border border-border p-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-institution`}>{t('onboarding.institution')}</Label>
-              <Input
-                id={`${row._key}-institution`}
-                value={row.institution}
-                onChange={(e) => updateRow(row._key, { institution: e.target.value })}
-              />
-            </div>
-            <div className="flex min-w-40 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-title`}>{t('onboarding.titleField')}</Label>
-              <Input
-                id={`${row._key}-title`}
-                value={row.title}
-                onChange={(e) => updateRow(row._key, { title: e.target.value })}
-              />
-            </div>
-            <CityOnlyAutocomplete
-              cityId={`${row._key}-location`}
-              label={t('onboarding.location')}
-              city={row.location}
-              onChange={({ city, countryCode }) =>
-                updateRow(row._key, {
-                  location: city,
-                  location_country_code: countryCode ?? row.location_country_code,
-                })
-              }
+        <div key={row._key} className="flex min-w-0 flex-col gap-4 rounded-field border border-border bg-tint p-3 sm:p-4" data-testid="education-row">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${row._key}-institution`}>{t('onboarding.institution')}</Label>
+            <Input
+              id={`${row._key}-institution`}
+              value={row.institution}
+              onChange={(e) => updateRow(row._key, { institution: e.target.value })}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => removeRow(row._key)}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t('onboarding.remove')}
-            </Button>
           </div>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-start`}>{t('onboarding.startDate')}</Label>
-              <Input
-                id={`${row._key}-start`}
-                type="date"
-                value={row.start_date}
-                onChange={(e) => updateRow(row._key, { start_date: e.target.value })}
-              />
-            </div>
-            <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${row._key}-end`}>{t('onboarding.endDate')}</Label>
-              <Input
-                id={`${row._key}-end`}
-                type="date"
-                disabled={row.ongoing}
-                value={row.end_date}
-                onChange={(e) => updateRow(row._key, { end_date: e.target.value })}
-              />
-            </div>
-            <label className="flex items-center gap-2 pb-2 text-sm">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${row._key}-title`}>{t('onboarding.titleField')}</Label>
+            <Input
+              id={`${row._key}-title`}
+              value={row.title}
+              onChange={(e) => updateRow(row._key, { title: e.target.value })}
+            />
+          </div>
+          <CityOnlyAutocomplete
+            cityId={`${row._key}-location`}
+            label={t('onboarding.location')}
+            city={row.location}
+            onChange={({ city, countryCode }) =>
+              updateRow(row._key, {
+                location: city,
+                location_country_code: countryCode ?? row.location_country_code,
+              })
+            }
+          />
+          <div className="flex flex-col gap-1">
+            <DateRangeFields
+              startId={`${row._key}-start`}
+              endId={`${row._key}-end`}
+              startLabel={t('onboarding.startDate')}
+              endLabel={t('onboarding.endDate')}
+              start={row.start_date}
+              end={row.end_date}
+              endDisabled={row.ongoing}
+              onStartChange={(value) => updateRow(row._key, { start_date: value })}
+              onEndChange={(value) => updateRow(row._key, { end_date: value })}
+            />
+            <label className="flex min-h-11 w-fit cursor-pointer items-center gap-3 text-[15px] text-foreground">
               <Checkbox
                 checked={row.ongoing}
                 onCheckedChange={(checked) =>
@@ -129,9 +112,19 @@ export default function EducationListEditor({ rows, onChange, t }) {
               onChange={(e) => updateRow(row._key, { notes: e.target.value })}
             />
           </div>
+          <Button
+            type="button"
+            variant="text"
+            onClick={() => removeRow(row._key)}
+            className="-ml-2 self-start px-2 text-destructive-text hover:bg-destructive-soft"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            {t('onboarding.remove')}
+          </Button>
         </div>
       ))}
-      <Button type="button" variant="secondary" size="sm" onClick={addRow} className="w-fit">
+      <Button type="button" variant="secondary" onClick={addRow} className="w-fit">
+        <Plus className="h-4 w-4" aria-hidden="true" />
         {t('onboarding.addEducation')}
       </Button>
     </fieldset>

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '../i18n/LanguageContext'
 
 // `maxLength` (Sprint 70) limita il testo di una nuova voce; con
 // `flagTooLong` le voci già presenti oltre il limite (es. dal pre-compilamento
 // da CV) sono evidenziate, perché il server le rifiuterebbe.
 export default function ChipInput({ value, onChange, placeholder, className, id, maxLength, flagTooLong = false }) {
+  const { t } = useLanguage()
   const [draft, setDraft] = useState('')
 
   function commitDraft() {
@@ -31,7 +33,8 @@ export default function ChipInput({ value, onChange, placeholder, className, id,
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-card px-2 py-1.5',
+        // Sprint 81: alto e arrotondato come gli altri campi, a tutta larghezza.
+        'flex min-h-12 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-field border border-input bg-card px-2 py-1.5',
         'has-[input:focus]:border-ring has-[input:focus]:ring-3 has-[input:focus]:ring-ring/20',
         className,
       )}
@@ -43,16 +46,16 @@ export default function ChipInput({ value, onChange, placeholder, className, id,
         <span
           key={`${item}-${index}`}
           className={cn(
-            'inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-1 text-[13px] font-medium text-primary',
+            'inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-1 text-[13px] font-medium text-primary [overflow-wrap:anywhere]',
             flagTooLong && maxLength && item.length > maxLength && 'bg-destructive-soft text-destructive',
           )}
         >
           {item}
           <button
             type="button"
-            aria-label={`Rimuovi ${item}`}
+            aria-label={t('common.removeItem').replace('{item}', item)}
             onClick={() => removeAt(index)}
-            className="rounded-full p-0.5 text-primary hover:bg-primary/15"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-primary hover:bg-primary/15"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -67,7 +70,7 @@ export default function ChipInput({ value, onChange, placeholder, className, id,
         onKeyDown={handleKeyDown}
         onBlur={commitDraft}
         placeholder={value.length === 0 ? placeholder : ''}
-        className="min-w-[140px] flex-1 border-none bg-transparent px-1 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        className="min-w-[120px] flex-1 border-none bg-transparent px-1.5 py-1.5 text-base text-foreground outline-none placeholder:text-muted-foreground"
       />
     </div>
   )

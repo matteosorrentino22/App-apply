@@ -50,7 +50,7 @@ export default function CityOnlyAutocomplete({ city, onChange, cityId, label, re
   }
 
   return (
-    <div ref={containerRef} className="relative flex min-w-40 flex-1 flex-col gap-1.5">
+    <div ref={containerRef} className="relative flex w-full min-w-0 flex-col gap-1.5">
       <Label htmlFor={cityId}>{label}</Label>
       <Input
         id={cityId}

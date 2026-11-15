@@ -77,8 +77,8 @@ VPS per debug rapido, va sempre riportato a `docker-compose.prod.yml` con
 - Nuovi dati personali raccolti, nuovi fornitori che li ricevono o nuove conservazioni vanno riportati nell'informativa (`frontend/src/legal/`, copia in `Docs/legal/`) aumentandone la versione in `apps/accounts/legal.py` (gli utenti la riaccettano al prossimo accesso), e coperti da export e cancellazione account.
 - Testi liberi che finiscono al modello AI o nei PDF hanno sempre un `max_length` lato server.
 
-## Redesign UI (sprint 72–80)
-Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS.md`, `SPEC-DELTA.md`, `IMPLEMENTATION-PLAN.md`; sprint da 72). Finché uno sprint non lo implementa, **le specifiche in `Docs/01…03` e il codice restano l'as-is**. Le decisioni sulla raccolta (SPEC-DELTA A4/A5, B1–B4) sono implementate nello Sprint 77 e descritte nelle specifiche: Free solo raccolta manuale 1/giorno; Pro raccolta automatica all'orario scelto (nel fuso dell'utente) che condivide la stessa quota giornaliera della manuale; nessun ciclo notturno per nessuno. Le voci ancora **da decidere** sono in `SPEC-DELTA.md §B`: in caso di dubbio chiedere, non assumere.
+## Redesign UI (sprint 72–81)
+Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS.md`, `SPEC-DELTA.md`, `IMPLEMENTATION-PLAN.md`; sprint da 72). Finché uno sprint non lo implementa, **le specifiche in `Docs/01…03` e il codice restano l'as-is**. Le decisioni sulla raccolta (SPEC-DELTA A4/A5, B1–B4) sono implementate nello Sprint 77 e descritte nelle specifiche: Free solo raccolta manuale 1/giorno; Pro raccolta automatica all'orario scelto (nel fuso dell'utente; la attiva l'utente, mai preimpostata — Sprint 81) che condivide la stessa quota giornaliera della manuale; nessun ciclo notturno per nessuno. Le voci ancora **da decidere** sono in `SPEC-DELTA.md §B`: in caso di dubbio chiedere, non assumere.
 - Il template PDF del CV è fuori dal redesign; nessun font o risorsa da servizi esterni.
 
 ## Cosa NON fare

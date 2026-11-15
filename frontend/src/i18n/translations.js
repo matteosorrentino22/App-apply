@@ -810,6 +810,8 @@ export const translations = {
       scoreNone: 'Punteggio non disponibile',
       // Sprint 80: errore di rete e pagina non trovata.
       networkError: 'Connessione non riuscita: controlla la rete e riprova.',
+      // Sprint 81: nome accessibile del pulsante ✕ di una voce (ChipInput, prima solo in italiano).
+      removeItem: 'Rimuovi {item}',
       offlineTitle: 'Nessuna connessione',
       retry: 'Riprova',
     },
@@ -1606,6 +1608,7 @@ export const translations = {
       scoreLabel: 'Score {score} out of 10',
       scoreNone: 'Score not available',
       networkError: 'Could not connect: check your network and try again.',
+      removeItem: 'Remove {item}',
       offlineTitle: 'No connection',
       retry: 'Try again',
     },

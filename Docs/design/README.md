@@ -1,6 +1,6 @@
 # Redesign UI di App-apply — documentazione di design
 
-> **Stato (2026-11-15, Sprint 80): implementato** negli sprint 72–80 (`IMPLEMENTATION-PLAN.md`), su branch derivati uno dall'altro (`sprint-72-fondamenta` … `sprint-80-rifinitura`), **non ancora su `main`** né in produzione. Le specifiche in `Docs/01…03` descrivono già l'app con il redesign (as-is del branch `sprint-80-rifinitura`); il rilascio è descritto in `RELEASE.md`.
+> **Stato (2026-11-15, Sprint 81): implementato** negli sprint 72–80 e corretto nello Sprint 81 dopo la prova su iPhone (`IMPLEMENTATION-PLAN.md`), su branch derivati uno dall'altro (`sprint-72-fondamenta` … `sprint-81-correzioni`), **non ancora su `main`** né in produzione. Le specifiche in `Docs/01…03` descrivono già l'app con il redesign (as-is del branch `sprint-81-correzioni`); il rilascio è descritto in `RELEASE.md`.
 > **Data della proposta:** 2026-11-14 · **As-is di partenza:** Sprint 71 (branch `design/redesign-ui`).
 
 ## Obiettivo
@@ -12,7 +12,7 @@ Rendere l'app più semplice e pulita: ogni schermata mostra in primo piano solo 
 3. `SCREENS.md` — schermata per schermata: cosa mostra, a quale route/file React corrisponde oggi, cosa cambia.
 4. `SPEC-DELTA.md` — **cambi funzionali** (non solo grafici) da recepire nelle specifiche 01/02 prima o durante l'implementazione.
 5. `IMPLEMENTATION-PLAN.md` — piano a sprint per Claude Code, con ordine, perimetro e criteri di chiusura (tutti ✅).
-6. `RELEASE.md` — rilascio su `main` e in produzione dei branch 72→80: backup, variabili, migrazioni, deploy, controlli, ripristino, anteprima (Sprint 80).
+6. `RELEASE.md` — rilascio su `main` e in produzione dei branch 72→81: backup, variabili, migrazioni, deploy, controlli, ripristino, anteprima (Sprint 80).
 
 ## Regole per chi implementa
 - I mockup sono il **riferimento visivo e di comportamento**, non pixel-perfect: i valori esatti (colori, raggi, spaziature) sono in `DESIGN.md`.
