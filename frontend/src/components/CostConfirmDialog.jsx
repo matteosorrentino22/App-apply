@@ -6,8 +6,8 @@ import { Modal, ModalActions, ModalContent, ModalDescription, ModalTitle } from 
 
 // Conferma di un addebito a credito in una finestra dell'app (Sprint 74,
 // SPEC-DELTA A11, mockup `confirm-cost`) al posto di `window.confirm`.
-// Stessa regola di `confirmCreditCharge` (lib/usage.js): si chiede conferma
-// solo quando la prossima richiesta andrebbe a credito; senza dati di
+// Si chiede conferma solo quando la prossima richiesta andrebbe a credito
+// (`next_charge = credit`, lib/usage.js); senza dati di
 // consumo non si blocca (il backend applica comunque le regole).
 //
 //   const { confirmCost, costDialog } = useCostConfirm()

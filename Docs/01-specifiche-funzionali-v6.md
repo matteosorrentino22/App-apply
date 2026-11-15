@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs e Sprint 75 dettaglio job del redesign UI)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor del redesign UI)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -558,7 +558,7 @@ Dallo Sprint 44 l'**arricchimento del profilo è stato eliminato** e sostituito 
 - Il credito è un **saldo unico in euro** sull'account. Copre tutte le azioni della tabella, sia sul Free sia sul Pro, tranne l'import, che resta precluso al Free.
 - Un'azione **fallita** non consuma nulla: l'unità di massimale o l'importo scalato vengono restituiti.
 - **Contatori e prezzi visibili** (Sprint 70): in Impostazioni il riquadro **"I tuoi limiti di oggi"** mostra per ogni azione a massimale usate oggi / massimale del piano e prezzo oltre il massimale ("Solo piano Pro" per l'import sul Free, "Non disponibile" per raccolta manuale e import CV), più il prezzo a messaggio delle due chat e l'ora in cui i contatori ripartono. Sotto i pulsanti di import da link, "Aggiungi manualmente" (anche nel popup) e "Raccogli ora" un'indicazione dice cosa succede alla prossima richiesta: "Incluso nel piano: ne restano N su M oggi", "Massimale di oggi raggiunto: questa azione costa X € (saldo Y €)" oppure, se il saldo non basta, che l'azione è bloccata.
-- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e le generazioni di CV, cover letter e messaggi del dettaglio chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"); nei pannelli di generazione del dettaglio compare anche l'indicazione del costo della prossima richiesta. I prezzi sono valori di default configurati dall'amministratore, non "da definire". La conferma è una **finestra dell'app** ("Costo dell'azione", Procedi / Annulla, mockup `confirm-cost`, SPEC-DELTA A11): nella lista dallo Sprint 74 (import, job manuale), nel dettaglio dallo Sprint 75 (CV, cover letter, messaggi); prima era la finestra di sistema del browser, che resta negli editor fino allo Sprint 76. Con il massimale raggiunto e il saldo insufficiente il pulsante del pannello è disattivato e il motivo è scritto sopra.
+- **Conferma prima dell'addebito** (Sprint 70): quando la richiesta andrebbe a credito, import da link, job manuale e le generazioni di CV, cover letter e messaggi del dettaglio chiedono conferma ("questa azione costa X € e verrà scalata dal tuo saldo (Y €). Procedere?"); nei pannelli di generazione del dettaglio compare anche l'indicazione del costo della prossima richiesta. I prezzi sono valori di default configurati dall'amministratore, non "da definire". La conferma è una **finestra dell'app** ("Costo dell'azione", Procedi / Annulla, mockup `confirm-cost`, SPEC-DELTA A11): nella lista dallo Sprint 74 (import, job manuale), nel dettaglio dallo Sprint 75 (CV, cover letter, messaggi); prima era la finestra di sistema del browser. Negli editor non c'è nessuna conferma: "Genera PDF finale" è gratuito e la chat mostra prezzo e saldo prima di ogni messaggio (§4.17). Con il massimale raggiunto e il saldo insufficiente il pulsante del pannello è disattivato e il motivo è scritto sopra.
 - Le **chat** degli editor sono utilizzabili **solo con credito disponibile**.
 - I massimali si **azzerano a mezzanotte (Europe/Rome)**, per tutti gli utenti.
 
@@ -646,27 +646,30 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - **Bozza superata** (Sprint 69): se dopo l'apertura della bozza è stato generato un CV più recente, l'editor chiede *"Vuoi ripartire dal nuovo documento (le modifiche precedenti e la chat si perdono) o continuare la bozza?"*. "Riparti dal nuovo CV" ricrea la bozza dal documento nuovo e svuota la chat; "Continua la bozza" la riapre com'è e la domanda non si ripete per quel CV. Il PDF prodotto da "Genera PDF finale" non conta come documento più recente.
 - I CV generati **prima dello Sprint 51** non sono modificabili: il pulsante "Modifica CV" non compare e il dettaglio spiega di rigenerare il CV (Sprint 69).
 
+**Aspetto** (Sprint 76, redesign UI, mockup `cv-editor`, `cv-preview`, `desk-editor`): testata con "‹ Torna al job", stato del salvataggio ("Salvataggio…", "✓ Salvato" o "Non salvato" se il salvataggio non riesce), titolo, job · azienda e indicatore delle pagine; segmento **Modifica / Anteprima**; le sezioni (Sommario, Qualifica professionale, Aree di competenza, Esperienze, Istruzione, Competenze, Certificazioni, Lingue) sono **a fisarmonica**: all'apertura è aperto solo il Sommario, le altre mostrano un riassunto ("3 aree", "2 aziende", "1 di 3"…); dentro Esperienze ogni azienda è a sua volta una fisarmonica. In basso la **barra azione** (al posto della barra di tab, a ogni larghezza) con **"Assistente"** (sotto i 1024 px) e **"Genera PDF finale"**. Se il PDF supera una pagina un avviso lo dice sotto il segmento.
+
 **Cosa si può modificare** (le regole complete sono nel doc 03):
 - **sommario** e **qualifica**, con grassetto (Sprint 69);
 - **Areas of Expertise**: modifica, aggiunta, rimozione, riordino;
 - **esperienze**:
-  - compaiono **tutte** quelle del profilo, comprese quelle escluse dal limite di 5, con la spunta "Mostra nel CV";
+  - compaiono **tutte** quelle del profilo, comprese quelle escluse dal limite di 5, con l'interruttore "Mostra nel CV" (una spunta fino allo Sprint 75);
   - il **ruolo** è modificabile (con grassetto);
   - azienda, località e date sono in sola lettura;
   - l'ordine delle esperienze non cambia;
 - **bullet**:
-  - compare il pool completo prodotto dall'AI, ciascuno con la spunta mostra/nascondi (all'inizio vale la selezione automatica);
+  - compare il pool completo prodotto dall'AI, ciascuno con la spunta "Visibile" (all'inizio vale la selezione automatica);
   - testo modificabile, con **grassetto** (pulsante B o Ctrl/Cmd+B);
-  - aggiunta, rimozione, riordino;
+  - aggiunta (fino a 30 per esperienza, il limite del server: al limite "Aggiungi punto" si disattiva con il motivo, Sprint 76), rimozione, riordino;
   - pulsante ✦ per usare il bullet come contesto della chat (§4.17);
 - **istruzione**: tutti i campi, con aggiunta e rimozione; le note con grassetto;
 - **lingue**: lingua e livello dalla lista fissa, con aggiunta e rimozione.
+- Dallo Sprint 76 i pulsanti "Aggiungi" mostrano i limiti del server già esistenti (20 aree, 20 voci di istruzione, 30 lingue) e i campi semplici dell'istruzione hanno la lunghezza massima del server (300 caratteri, 100 per il periodo).
 
   Le modifiche a istruzione e lingue valgono **solo per quel CV** e non toccano il profilo.
 - **competenze e certificazioni**: si scelgono con le checkbox **solo tra quelle del profilo**.
 
 **Anteprima e salvataggio.**
-- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠".
+- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠". Dallo Sprint 76 si vede nella scheda **Anteprima** del segmento (prima accanto all'editor su desktop e sotto su mobile), in proporzione A4, con la didascalia "Anteprima del PDF reale, aggiornata a ogni modifica."
 - Nell'editor **non c'è un taglio automatico**: se il CV supera una pagina lo si segnala e decide l'utente.
 - **Salvataggio automatico** circa 1 secondo dopo l'ultima modifica, con lo stato "Salvataggio… / Salvato".
 
@@ -679,11 +682,11 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 
 ### 4.17 Chat AI dell'editor CV (Sprint 59–62)
 
-**Apertura.** Il pulsante flottante **"Chiedi all'AI"** apre un pannello laterale ("Assistente bozza"). Mentre è aperto l'editor resta utilizzabile; il pannello si chiude con la X.
+**Apertura.** Dallo Sprint 76 (mockup `cv-assistant`, `desk-editor`): da 1024 px la chat ("Assistente bozza") è una **colonna fissa a destra** dell'editor (400 px), sempre visibile, e l'editor resta utilizzabile accanto (anche per puntare i bullet); sotto i 1024 px il pulsante **"Assistente"** della barra in basso la apre in un **pannello dal basso**, che si chiude con la ✕ o con Esc e resta sopra la tastiera del telefono. Conversazione, decisioni e testo non ancora inviato restano chiudendo e riaprendo il pannello. Fino allo Sprint 75 era un pannello laterale aperto dal pulsante flottante "Chiedi all'AI".
 
 **Proposta → conferma.**
-- L'utente scrive una richiesta (Invio invia, Shift+Invio va a capo).
-- L'assistente risponde con un testo e con **0 o più proposte di modifica puntuali**. Ogni proposta è una scheda con "prima" (barrato) e "dopo", e i pulsanti **Accetta / Rifiuta**.
+- L'utente scrive una richiesta (Invio invia, Shift+Invio va a capo; al massimo 2.000 caratteri, il limite del server, con contatore vicino al limite) e la invia con il pulsante ↑.
+- L'assistente risponde con un testo e con **0 o più proposte di modifica puntuali**. Ogni proposta è una scheda con "prima" (barrato) e "dopo", e i pulsanti **Rifiuta / Accetta**; una volta decisa la scheda si riduce al titolo con "Applicata" o "Rifiutata" (Sprint 76).
 - **Nulla viene applicato senza conferma.** "Accetta" applica la modifica alla bozza come farebbe l'utente a mano, quindi partono salvataggio automatico e anteprima.
 - Le decisioni restano registrate: riaprendo la chat, anche dopo un ricaricamento, le proposte già decise appaiono come "Applicata" o "Rifiutata" (Sprint 62).
 - Una semplice domanda riceve una risposta senza proposte.
@@ -697,17 +700,17 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 
 **Cosa non può proporre:** riordini, eliminazione di bullet, modifiche a titolo, istituto o date dell'istruzione, aggiunta o rimozione di lingue o voci di istruzione.
 
-**Contesto.** Con il pulsante ✦ sotto ogni bullet (cumulabile, anche su esperienze diverse) l'utente indica i bullet a cui si riferisce. Sopra il campo di testo compaiono come chip "Contesto:" e aiutano l'assistente a capire richieste generiche (Sprint 61). Dallo Sprint 69 bullet puntati e proposte si riferiscono al bullet stesso, non alla sua posizione: riordinare o eliminare bullet, o accettare più proposte dello stesso turno, non sposta mai una modifica su un altro bullet. Se l'elemento di una proposta non esiste più, la proposta non viene applicata e il pannello lo dice. L'assistente conosce anche le proposte fatte prima e la scelta dell'utente (accettata, rifiutata, in sospeso). Prima di inviare un messaggio l'app salva l'eventuale modifica in attesa, così l'assistente vede la bozza come è a schermo.
+**Contesto.** Con il pulsante ✦ sotto ogni bullet (cumulabile, anche su esperienze diverse) l'utente indica i bullet a cui si riferisce. Sopra il campo di testo compaiono come chip "Contesto:" (dallo Sprint 76 con la ✕ per toglierli) e aiutano l'assistente a capire richieste generiche (Sprint 61). Dallo Sprint 69 bullet puntati e proposte si riferiscono al bullet stesso, non alla sua posizione: riordinare o eliminare bullet, o accettare più proposte dello stesso turno, non sposta mai una modifica su un altro bullet. Se l'elemento di una proposta non esiste più, la proposta non viene applicata e il pannello lo dice. L'assistente conosce anche le proposte fatte prima e la scelta dell'utente (accettata, rifiutata, in sospeso). Prima di inviare un messaggio l'app salva l'eventuale modifica in attesa, così l'assistente vede la bozza come è a schermo.
 
 **Grounding.**
 - Il testo narrativo può essere ampliato oltre il profilo **solo su richiesta esplicita** dell'utente, e l'assistente deve dirlo nella risposta.
 - Competenze e certificazioni restano **sempre** quelle del profilo, **senza eccezioni**: le proposte non conformi vengono scartate.
 
-**Costo.** **Ogni messaggio costa 0,20 € di credito**, senza massimale gratuito. Prezzo e saldo sono mostrati sopra il campo di testo prima dell'invio ("Ogni messaggio costa 0,20 € di credito · saldo: X €", Sprint 69). Con credito insufficiente compare "Saldo credito insufficiente per inviare un altro messaggio."; se l'assistente non risponde, il credito viene restituito.
+**Costo.** **Ogni messaggio costa 0,20 € di credito**, senza massimale gratuito. Prezzo e saldo sono mostrati sopra il campo di testo prima dell'invio ("Ogni messaggio costa 0,20 € di credito · saldo: X €", Sprint 69), con i valori dati dal server. Con credito insufficiente compare "Saldo credito insufficiente per inviare un altro messaggio."; dallo Sprint 76 lo si vede già prima di scrivere (saldo minore del prezzo): campo e invio sono disattivati e il motivo è scritto nella conversazione. Se l'assistente non risponde, il credito viene restituito. Nessuna finestra di conferma del costo (non c'era nemmeno prima).
 
-**Persistenza.** La conversazione è conservata nella bozza del CV (e si azzera se l'utente riparte da un CV più recente, §4.16). Se la registrazione di una scelta Accetta/Rifiuta non riesce, l'app ritenta e, se non ci riesce, lo segnala.
+**Persistenza.** La conversazione è conservata nella bozza del CV (e si azzera se l'utente riparte da un CV più recente, §4.16). Se la registrazione di una scelta Accetta/Rifiuta non riesce, l'app ritenta e, se non ci riesce, lo segnala; dallo Sprint 76 gli avvisi (scelta non salvata, elemento non più nella bozza, errore dell'assistente) compaiono nel flusso della conversazione, dopo il messaggio a cui si riferiscono (mockup `cv-assistant-warn`).
 
-**Avviso AI** (Sprint 67): sotto il campo di testo del pannello compare "Contenuto generato con l'AI: verificalo prima di usarlo.".
+**Avviso AI** (Sprint 67): sotto il prezzo, sopra il campo di testo, compare "Contenuto generato con l'AI: verificalo prima di usarlo.".
 
 ### 4.18 Cover letter (Sprint 42)
 
@@ -754,7 +757,8 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
   - modificare il testo;
   - spostare su e giù;
   - eliminare;
-  - "+ Aggiungi paragrafo".
+  - "Aggiungi paragrafo" (fino a 15, testo fino a 3.000 caratteri: i limiti del server, Sprint 76).
+- Dallo Sprint 76 (mockup `cover-editor`) stesso impianto dell'editor del CV: testata, segmento Modifica / Anteprima, un riquadro per paragrafo ("Paragrafo 1 · Apertura", "Paragrafo 2", …, l'ultimo "· Chiusura") con su, giù ed elimina, barra in basso con "Assistente" e "Genera PDF finale".
 - Restano fissi oggetto, saluto, chiusura, nome e contatti.
 - L'anteprima PDF è live, con il conteggio delle pagine.
 - Il salvataggio è automatico.
@@ -763,7 +767,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - **Bozza superata** e "Genera PDF finale" con l'ultima modifica non salvata: come nell'editor del CV (§4.16, Sprint 69).
 
 **Chat.**
-- Pannello laterale "Chiedi all'AI" ("Assistente cover letter", con messaggio iniziale e segnaposto propri della lettera, Sprint 69), con lo stesso schema proposta → conferma del CV, le decisioni conservate e il prezzo con il saldo mostrati prima dell'invio.
+- "Assistente cover letter" (con messaggio iniziale e segnaposto propri della lettera, Sprint 69): dallo Sprint 76 colonna fissa a destra da 1024 px e pannello dal basso sotto, come il CV (§4.17); stesso schema proposta → conferma del CV, le decisioni conservate e il prezzo con il saldo mostrati prima dell'invio.
 - Azioni possibili: **modificare**, **aggiungere** (in coda) o **rimuovere** un paragrafo. Le proposte si riferiscono al paragrafo, non alla sua posizione (Sprint 69): accettare più modifiche o rimozioni dello stesso turno colpisce sempre il paragrafo giusto.
 - Non esiste il puntamento di un singolo paragrafo come contesto.
 - **Grounding:** l'ampliamento oltre il profilo è ammesso solo su richiesta esplicita. Non si inventano mai aziende, ruoli o risultati, e la chat non scrive oggetto, saluto o chiusura.
@@ -1038,7 +1042,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 
 ### Editor e chat del CV
 - ☐ "Modifica CV" apre la bozza dell'ultimo CV, con tutte le esperienze e tutti i bullet del pool, ciascuno con mostra/nascondi.
-- ☐ Se esiste un CV più recente della bozza, l'editor chiede se ripartire dal nuovo documento o continuare la bozza; "Genera PDF finale" include l'ultima modifica a schermo (Sprint 69).
+- ☐ Se esiste un CV più recente della bozza, l'editor chiede in una finestra se ripartire dal nuovo documento o continuare la bozza; "Genera PDF finale" include l'ultima modifica a schermo (Sprint 69).
+- ☐ Gli editor hanno sezioni a fisarmonica (CV) o riquadri per paragrafo (cover letter), il segmento Modifica / Anteprima e la barra in basso al posto della barra di tab; la chat è una colonna a destra da 1024 px e un pannello dal basso sotto; con saldo minore del prezzo di un messaggio campo e invio sono disattivati con il motivo (Sprint 76).
 - ☐ Istruzione e lingue modificate nell'editor non cambiano il profilo. Competenze e certificazioni si scelgono solo tra quelle del profilo.
 - ☐ L'anteprima PDF si aggiorna a ogni modifica e indica il numero di pagine. Le modifiche si salvano da sole.
 - ☐ "Genera PDF finale" produce il PDF scaricabile senza consumare massimale o credito e senza cambiare lo stato del job.

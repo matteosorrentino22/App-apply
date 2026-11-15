@@ -6,8 +6,8 @@ import { formatEuro } from '../utils/money'
 // tutti i punti in cui un'azione consuma massimale o credito: `useUsage`
 // legge GET /api/accounts/usage/, `actionCostText` descrive cosa succede
 // alla prossima richiesta (componente `ActionCostHint`),
-// `confirmCreditCharge` chiede conferma quando la richiesta andrebbe a
-// credito. Chiavi delle azioni come nel backend: cv, cover_letter,
+// la conferma di un addebito a credito è `useCostConfirm`
+// (components/CostConfirmDialog.jsx, Sprint 74–75). Chiavi delle azioni come nel backend: cv, cover_letter,
 // referral_message, import, manual_job, collection, cv_import; prezzi delle
 // chat in `usage.chat_prices`.
 
@@ -54,18 +54,4 @@ export function actionCostText(t, lang, usage, actionKey) {
     default:
       return ''
   }
-}
-
-// true se si può procedere: nessun addebito a credito previsto, oppure
-// l'utente ha confermato il prezzo. Senza dati (usage non ancora caricato)
-// non blocca: il backend applica comunque le regole.
-export function confirmCreditCharge(t, lang, usage, actionKey) {
-  const action = usage?.actions?.[actionKey]
-  if (!action || action.next_charge !== 'credit') return true
-  return window.confirm(
-    fill(t('usage.confirmCredit'), {
-      price: formatEuro(action.price, lang),
-      balance: formatEuro(usage.extra_credit, lang),
-    }),
-  )
 }

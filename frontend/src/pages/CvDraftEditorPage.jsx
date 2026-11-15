@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Sparkles, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchCvDraft,
@@ -14,24 +13,34 @@ import {
 import { fetchProfile } from '../api/profile'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import RichBulletInput from '@/components/RichBulletInput'
 import CvDraftChatPanel from '@/components/CvDraftChatPanel'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import EditorShell from '@/components/editor/EditorShell'
+import EditorPreview from '@/components/editor/EditorPreview'
+import OutdatedDraftModal from '@/components/editor/OutdatedDraftModal'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  AreasSection,
+  ChecklistSection,
+  EducationsSection,
+  ExperiencesSection,
+  LanguagesSection,
+  QualificationSection,
+  SummarySection,
+} from '@/components/editor/CvSections'
+import { Banner } from '@/components/ui/banner'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { cvChatApi } from '@/lib/draftChatApi'
+import { useDraftChat } from '@/lib/useDraftChat'
 import { getLanguageLevelOptions, getLanguageNameOptions } from '../utils/languageOptions'
 import { newItemId } from '../utils/itemId'
-import { cn } from '@/lib/utils'
+
+// Editor della bozza del CV (Sprint 51–62, 69; ridisegnato nello Sprint 76:
+// Docs/design/SCREENS.md §3, mockup `cv-editor`, `cv-preview`,
+// `cv-assistant*`, `cv-outdated`, `desk-editor`). Stessa logica di prima:
+// bozza aperta o riseminata, autosave + anteprima con un solo debounce,
+// salvataggio prima della chat e della finalizzazione, azioni della chat
+// applicate con le stesse funzioni dell'editor. Cambia la presentazione:
+// sezioni a fisarmonica, Modifica / Anteprima, chat in colonna o pannello.
 
 function moveItem(list, index, delta) {
   const target = index + delta
@@ -39,42 +48,6 @@ function moveItem(list, index, delta) {
   const next = [...list]
   ;[next[index], next[target]] = [next[target], next[index]]
   return next
-}
-
-function ReorderButtons({ index, length, onMove, t }) {
-  return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        disabled={index === 0}
-        onClick={() => onMove(index, -1)}
-        aria-label={t('cvEditor.moveUp')}
-        className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-      >
-        <ChevronUp className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        disabled={index === length - 1}
-        onClick={() => onMove(index, 1)}
-        aria-label={t('cvEditor.moveDown')}
-        className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-      >
-        <ChevronDown className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
-function SectionCard({ title, children }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </h2>
-      {children}
-    </div>
-  )
 }
 
 export default function CvDraftEditorPage() {
@@ -95,6 +68,7 @@ export default function CvDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [mode, setMode] = useState('edit')
   // Sprint 69: c'è un CV più recente della bozza, l'utente sceglie se
   // riseminare o continuare prima di vedere l'editor.
   const [outdatedPrompt, setOutdatedPrompt] = useState(false)
@@ -117,6 +91,16 @@ export default function CvDraftEditorPage() {
         : [...current, { profileExperienceId, bulletId }],
     )
   }
+
+  // Chat (Sprint 76): stato nella pagina, il pannello cambia solo contenitore.
+  const chat = useDraftChat({
+    jobId: id,
+    api: cvChatApi,
+    t,
+    enabled: content != null,
+    onApplyAction: (action) => applyChatAction(action),
+    onBeforeSend: () => flushPendingSave(),
+  })
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
@@ -210,7 +194,7 @@ export default function CvDraftEditorPage() {
         .then(() => setSaveStatus('saved'))
         .catch(() => {
           unsavedRef.current = unsavedRef.current || content
-          setSaveStatus('idle')
+          setSaveStatus('error')
         })
       runPreview(content)
     }, 1200)
@@ -269,37 +253,34 @@ export default function CvDraftEditorPage() {
   }
 
   if (loading) {
-    return <p className="mt-16 text-center text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
+    return (
+      <div className="flex justify-center pt-16">
+        <Spinner size={28} />
+      </div>
+    )
   }
 
   if (outdatedPrompt) {
     return (
-      <Dialog open onOpenChange={(open) => !open && navigate(`/jobs/${id}`)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('cvEditor.outdatedTitle')}</DialogTitle>
-            <DialogDescription>{t('cvEditor.outdatedHint')}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="secondary" disabled={resolvingOutdated} onClick={() => resolveOutdated(false)}>
-              {t('cvEditor.outdatedContinue')}
-            </Button>
-            <Button type="button" disabled={resolvingOutdated} onClick={() => resolveOutdated(true)}>
-              {t('cvEditor.outdatedRestart')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OutdatedDraftModal
+        title={t('cvEditor.outdatedTitle')}
+        hint={t('cvEditor.outdatedHint')}
+        restartLabel={t('cvEditor.outdatedRestart')}
+        busy={resolvingOutdated}
+        onRestart={() => resolveOutdated(true)}
+        onContinue={() => resolveOutdated(false)}
+        onDismiss={() => navigate(`/jobs/${id}`)}
+      />
     )
   }
 
   if (error || !content) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
-        <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-sm text-destructive">
+      <div className="mx-auto flex max-w-2xl flex-col items-start gap-4 px-4 py-8">
+        <Banner variant="error" className="w-full">
           {error}
-        </p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate(`/jobs/${id}`)}>
+        </Banner>
+        <Button variant="secondary" onClick={() => navigate(`/jobs/${id}`)}>
           {t('cvEditor.backToJob')}
         </Button>
       </div>
@@ -469,312 +450,61 @@ export default function CvDraftEditorPage() {
     }
   }
 
-  const pageCountLabel =
-    pageCount == null
-      ? ''
-      : pageCount <= 1
-        ? t('cvEditor.pageCountOk')
-        : t('cvEditor.pageCountWarning').replace('{count}', pageCount)
+  const subtitle = [job?.title, job?.company].filter(Boolean).join(' · ')
+  const sectionHandlers = { updateExperience, updateBullet, removeBullet, addBullet, moveBullet, toggleFocusBullet }
+
+  const editor = (
+    <div className="flex flex-col gap-3">
+      <SummarySection value={content.summary} onChange={(text) => setField('summary', text)} />
+      <QualificationSection value={content.qualification} onChange={(text) => setField('qualification', text)} />
+      <AreasSection areas={content.areas_of_expertise} onUpdate={updateArea} onRemove={removeArea} onAdd={addArea} onMove={moveArea} />
+      <ExperiencesSection experiences={content.experiences} isFocused={isBulletFocused} handlers={sectionHandlers} />
+      <EducationsSection educations={content.educations} onUpdate={updateEducation} onRemove={removeEducation} onAdd={addEducation} />
+      <ChecklistSection title={t('cvEditor.skillsLabel')} items={profileSkills} selected={content.skills} onToggle={toggleSkill} />
+      <ChecklistSection
+        title={t('cvEditor.certificationsLabel')}
+        items={profileCertifications}
+        selected={content.certifications}
+        onToggle={toggleCertification}
+      />
+      <LanguagesSection
+        languages={content.languages}
+        nameOptions={languageNameOptions}
+        levelOptions={languageLevelOptions}
+        onUpdate={updateLanguage}
+        onRemove={removeLanguage}
+        onAdd={addLanguage}
+      />
+    </div>
+  )
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10">
-      <div className="flex items-center justify-between">
-        <Link to={`/jobs/${id}`} className="text-sm font-medium text-primary hover:underline">
-          {t('cvEditor.backToJob')}
-        </Link>
-        <span className="text-xs text-muted-foreground">
-          {saveStatus === 'saving' ? t('cvEditor.saving') : saveStatus === 'saved' ? t('cvEditor.saved') : ''}
-        </span>
-      </div>
-
-      <h1 className="text-2xl font-bold tracking-tight text-balance">
-        {t('cvEditor.navTitle')} — {job?.title}
-      </h1>
-
-      {!chatOpen && (
-        <button
-          type="button"
-          onClick={() => setChatOpen(true)}
-          className="fixed bottom-[calc(var(--app-bottom-bar)+1.5rem)] right-6 z-30 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:bg-primary/90"
-        >
-          <Sparkles className="h-4 w-4" />
-          {t('cvEditor.chatToggle')}
-        </button>
+    <EditorShell
+      jobId={id}
+      saveStatus={saveStatus}
+      title={t('cvEditor.navTitle')}
+      subtitle={subtitle}
+      pageCount={pageCount}
+      multiPageText={pageCount > 1 ? t('cvEditor.multiPageHint').replace('{count}', pageCount) : null}
+      mode={mode}
+      onModeChange={setMode}
+      editor={editor}
+      preview={<EditorPreview previewUrl={previewUrl} unavailable={previewUnavailable} title={t('cvEditor.previewFrameTitle')} />}
+      chatTitle={t('cvEditor.chatTitle')}
+      renderChat={(showHeader) => (
+        <CvDraftChatPanel
+          chat={chat}
+          content={content}
+          focusedBullets={focusedBullets}
+          onToggleFocus={toggleFocusBullet}
+          showHeader={showHeader}
+        />
       )}
-
-      <CvDraftChatPanel
-        open={chatOpen}
-        jobId={id}
-        content={content}
-        focusedBullets={focusedBullets}
-        onApplyAction={applyChatAction}
-        onBeforeSend={flushPendingSave}
-        onClose={() => setChatOpen(false)}
-      />
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-5">
-          <SectionCard title={t('cvEditor.summaryLabel')}>
-            <RichBulletInput value={content.summary} onChange={(text) => setField('summary', text)} />
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.qualificationLabel')}>
-            <RichBulletInput value={content.qualification} onChange={(text) => setField('qualification', text)} />
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.areasLabel')}>
-            <div className="flex flex-col gap-2">
-              {content.areas_of_expertise.map((area, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <ReorderButtons index={index} length={content.areas_of_expertise.length} onMove={moveArea} t={t} />
-                  <RichBulletInput value={area} onChange={(text) => updateArea(index, text)} />
-                  <button type="button" onClick={() => removeArea(index)} className="text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={addArea}>
-                {t('cvEditor.addArea')}
-              </Button>
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.experiencesLabel')}>
-            <div className="flex flex-col gap-5">
-              {content.experiences.map((exp, expIndex) => (
-                <div key={exp.profile_experience_id} className="rounded-lg border border-border p-4">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{exp.company}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {exp.location}
-                        {exp.location && exp.dates && ' | '}
-                        {exp.dates}
-                      </p>
-                    </div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={exp.shown}
-                        onCheckedChange={(checked) => updateExperience(expIndex, { shown: checked === true })}
-                      />
-                      {t('cvEditor.showInCv')}
-                    </label>
-                  </div>
-
-                  <div className="mb-3 flex flex-col gap-1.5">
-                    <Label>{t('cvEditor.roleLabel')}</Label>
-                    <RichBulletInput value={exp.role} onChange={(text) => updateExperience(expIndex, { role: text })} />
-                  </div>
-
-                  <Label className="mb-1.5 block">{t('cvEditor.bulletsLabel')}</Label>
-                  <div className="flex flex-col gap-2">
-                    {exp.bullets.map((bullet, bulletIndex) => (
-                      <div key={bullet.id || bulletIndex} className="flex items-start gap-2">
-                        <ReorderButtons
-                          index={bulletIndex}
-                          length={exp.bullets.length}
-                          onMove={(i, delta) => moveBullet(expIndex, i, delta)}
-                          t={t}
-                        />
-                        <div className="mt-2.5 flex flex-col items-center gap-1.5">
-                          <Checkbox
-                            checked={bullet.shown}
-                            onCheckedChange={(checked) =>
-                              updateBullet(expIndex, bulletIndex, { shown: checked === true })
-                            }
-                          />
-                          <button
-                            type="button"
-                            onClick={() => toggleFocusBullet(exp.profile_experience_id, bullet.id)}
-                            aria-label={t('cvEditor.chatFocusToggle')}
-                            title={t('cvEditor.chatFocusToggle')}
-                            className={cn(
-                              'rounded-full p-1',
-                              isBulletFocused(bullet.id)
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                            )}
-                          >
-                            <Sparkles className="h-3 w-3" />
-                          </button>
-                        </div>
-                        <RichBulletInput
-                          value={bullet.text}
-                          onChange={(text) => updateBullet(expIndex, bulletIndex, { text })}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeBullet(expIndex, bulletIndex)}
-                          className="mt-2.5 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="w-fit"
-                      onClick={() => addBullet(expIndex)}
-                    >
-                      {t('cvEditor.addBullet')}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.educationsLabel')}>
-            <div className="flex flex-col gap-4">
-              {content.educations.map((edu, index) => (
-                <div key={index} className="flex flex-col gap-2 rounded-lg border border-border p-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      value={edu.institution}
-                      placeholder={t('cvEditor.institutionLabel')}
-                      onChange={(event) => updateEducation(index, { institution: event.target.value })}
-                      className="min-w-40 flex-1"
-                    />
-                    <Input
-                      value={edu.title}
-                      placeholder={t('cvEditor.educationTitleLabel')}
-                      onChange={(event) => updateEducation(index, { title: event.target.value })}
-                      className="min-w-40 flex-1"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      value={edu.location}
-                      placeholder={t('cvEditor.educationLocationLabel')}
-                      onChange={(event) => updateEducation(index, { location: event.target.value })}
-                      className="min-w-32 flex-1"
-                    />
-                    <Input
-                      value={edu.dates}
-                      placeholder={t('cvEditor.educationDatesLabel')}
-                      onChange={(event) => updateEducation(index, { dates: event.target.value })}
-                      className="min-w-32 flex-1"
-                    />
-                  </div>
-                  <Label className="text-xs text-muted-foreground">{t('cvEditor.educationNotesLabel')}</Label>
-                  <RichBulletInput value={edu.notes} onChange={(text) => updateEducation(index, { notes: text })} />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-fit text-muted-foreground hover:text-destructive"
-                    onClick={() => removeEducation(index)}
-                  >
-                    <Trash2 className="mr-1.5 h-4 w-4" />
-                    {t('cvEditor.removeEducation')}
-                  </Button>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={addEducation}>
-                {t('cvEditor.addEducation')}
-              </Button>
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.skillsLabel')}>
-            <div className="flex flex-col gap-1.5">
-              {profileSkills.map((skill) => (
-                <label key={skill.id} className="flex items-center gap-2.5 text-sm">
-                  <Checkbox checked={content.skills.includes(skill.name)} onCheckedChange={() => toggleSkill(skill.name)} />
-                  {skill.name}
-                </label>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.certificationsLabel')}>
-            <div className="flex flex-col gap-1.5">
-              {profileCertifications.map((cert) => (
-                <label key={cert.id} className="flex items-center gap-2.5 text-sm">
-                  <Checkbox
-                    checked={content.certifications.includes(cert.name)}
-                    onCheckedChange={() => toggleCertification(cert.name)}
-                  />
-                  {cert.name}
-                </label>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title={t('cvEditor.languagesLabel')}>
-            <div className="flex flex-col gap-2">
-              {content.languages.map((item, index) => (
-                <div key={index} className="flex flex-wrap items-end gap-2">
-                  <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                    <Label>{t('cvEditor.languageLabel')}</Label>
-                    <Select value={item.language} onValueChange={(value) => updateLanguage(index, { language: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {languageNameOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex min-w-32 flex-1 flex-col gap-1.5">
-                    <Label>{t('cvEditor.levelLabel')}</Label>
-                    <Select value={item.level} onValueChange={(value) => updateLanguage(index, { level: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {languageLevelOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <button type="button" onClick={() => removeLanguage(index)} className="mb-1 text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={addLanguage}>
-                {t('cvEditor.addLanguage')}
-              </Button>
-            </div>
-          </SectionCard>
-        </div>
-
-        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
-          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                {t('cvEditor.previewLabel')}
-              </h2>
-              {pageCountLabel && (
-                <span className={pageCount > 1 ? 'text-sm font-medium text-destructive' : 'text-sm font-medium text-success'}>
-                  {pageCountLabel}
-                </span>
-              )}
-            </div>
-            {previewUnavailable ? (
-              <p className="text-sm text-muted-foreground">{t('cvEditor.previewUnavailable')}</p>
-            ) : previewUrl ? (
-              <iframe title="CV preview" src={previewUrl} className="h-[70vh] w-full rounded-md border border-border" />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
-            )}
-          </div>
-
-          <Button type="button" disabled={finalizing} onClick={handleFinalize} className="w-full">
-            {finalizing ? t('cvEditor.finalizing') : t('cvEditor.finalizeButton')}
-          </Button>
-        </div>
-      </div>
-    </div>
+      chatOpen={chatOpen}
+      onChatOpenChange={setChatOpen}
+      finalizeLabel={t('cvEditor.finalizeButton')}
+      finalizing={finalizing}
+      onFinalize={handleFinalize}
+    />
   )
 }

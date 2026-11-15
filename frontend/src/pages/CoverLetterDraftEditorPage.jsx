@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Sparkles, Trash2 } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useLanguage } from '../i18n/LanguageContext'
 import {
   fetchCoverLetterDraft,
@@ -13,18 +12,18 @@ import {
 } from '../api/jobs'
 import { ApiError } from '../api/client'
 import { useToast } from '@/components/ToastProvider'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import CoverLetterChatPanel from '@/components/CoverLetterChatPanel'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import EditorShell from '@/components/editor/EditorShell'
+import EditorPreview from '@/components/editor/EditorPreview'
+import OutdatedDraftModal from '@/components/editor/OutdatedDraftModal'
+import { AddButton, MoveButtons, RemoveButton } from '@/components/editor/CvSections'
+import { Banner } from '@/components/ui/banner'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
+import { coverLetterChatApi } from '@/lib/draftChatApi'
+import { useDraftChat } from '@/lib/useDraftChat'
+import { COVER_LETTER_LIMITS } from '../utils/draftLimits'
 import { newItemId } from '../utils/itemId'
 
 // Mirror semplificato di CvDraftEditorPage.jsx (Sprint 63): niente
@@ -33,7 +32,9 @@ import { newItemId } from '../utils/itemId'
 // (qui non esiste una selezione automatica da riflettere, a differenza
 // del CV). Sprint 69: paragrafi `{id, text}` con id stabile, usato anche
 // dalle azioni della chat; avviso "bozza superata" e salvataggio prima della
-// finalizzazione come nell'editor del CV.
+// finalizzazione come nell'editor del CV. Sprint 76: stesso impianto
+// dell'editor del CV (EditorShell, mockup `cover-editor`), un riquadro per
+// paragrafo con riordino, eliminazione e limiti del server.
 function moveItem(list, index, delta) {
   const target = index + delta
   if (target < 0 || target >= list.length) return list
@@ -58,8 +59,18 @@ export default function CoverLetterDraftEditorPage() {
   const [previewUnavailable, setPreviewUnavailable] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [mode, setMode] = useState('edit')
   const [outdatedPrompt, setOutdatedPrompt] = useState(false)
   const [resolvingOutdated, setResolvingOutdated] = useState(false)
+
+  const chat = useDraftChat({
+    jobId: id,
+    api: coverLetterChatApi,
+    t,
+    enabled: content != null,
+    onApplyAction: (action) => applyChatAction(action),
+    onBeforeSend: () => flushPendingSave(),
+  })
 
   const debounceRef = useRef(null)
   const firstLoadRef = useRef(true)
@@ -142,7 +153,7 @@ export default function CoverLetterDraftEditorPage() {
         .then(() => setSaveStatus('saved'))
         .catch(() => {
           unsavedRef.current = unsavedRef.current || content
-          setSaveStatus('idle')
+          setSaveStatus('error')
         })
       runPreview(content)
     }, 1200)
@@ -198,37 +209,34 @@ export default function CoverLetterDraftEditorPage() {
   }
 
   if (loading) {
-    return <p className="mt-16 text-center text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
+    return (
+      <div className="flex justify-center pt-16">
+        <Spinner size={28} />
+      </div>
+    )
   }
 
   if (outdatedPrompt) {
     return (
-      <Dialog open onOpenChange={(open) => !open && navigate(`/jobs/${id}`)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('coverLetterEditor.outdatedTitle')}</DialogTitle>
-            <DialogDescription>{t('coverLetterEditor.outdatedHint')}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="secondary" disabled={resolvingOutdated} onClick={() => resolveOutdated(false)}>
-              {t('cvEditor.outdatedContinue')}
-            </Button>
-            <Button type="button" disabled={resolvingOutdated} onClick={() => resolveOutdated(true)}>
-              {t('coverLetterEditor.outdatedRestart')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OutdatedDraftModal
+        title={t('coverLetterEditor.outdatedTitle')}
+        hint={t('coverLetterEditor.outdatedHint')}
+        restartLabel={t('coverLetterEditor.outdatedRestart')}
+        busy={resolvingOutdated}
+        onRestart={() => resolveOutdated(true)}
+        onContinue={() => resolveOutdated(false)}
+        onDismiss={() => navigate(`/jobs/${id}`)}
+      />
     )
   }
 
   if (error || !content) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10">
-        <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-sm text-destructive">
+      <div className="mx-auto flex max-w-2xl flex-col items-start gap-4 px-4 py-8">
+        <Banner variant="error" className="w-full">
           {error}
-        </p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate(`/jobs/${id}`)}>
+        </Banner>
+        <Button variant="secondary" onClick={() => navigate(`/jobs/${id}`)}>
           {t('cvEditor.backToJob')}
         </Button>
       </div>
@@ -272,120 +280,73 @@ export default function CoverLetterDraftEditorPage() {
     }
   }
 
-  const pageCountLabel =
-    pageCount == null
-      ? ''
-      : pageCount <= 1
-        ? t('cvEditor.pageCountOk')
-        : t('cvEditor.pageCountWarning').replace('{count}', pageCount)
+  const count = content.paragraphs.length
+  function paragraphTitle(index) {
+    const base = t('coverLetterEditor.paragraphN').replace('{n}', index + 1)
+    if (count < 2) return base
+    if (index === 0) return `${base} · ${t('coverLetterEditor.paragraphOpening')}`
+    if (index === count - 1) return `${base} · ${t('coverLetterEditor.paragraphClosing')}`
+    return base
+  }
+
+  const editor = (
+    <section aria-labelledby="paragraphs-title" className="flex flex-col gap-3">
+      <h2 id="paragraphs-title" className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">
+        {t('coverLetterEditor.paragraphsLabel')}
+      </h2>
+      {content.paragraphs.map((paragraph, index) => {
+        const fieldId = `paragraph-${paragraph.id || index}`
+        return (
+          <div key={paragraph.id || index} data-testid="cover-letter-paragraph" className="flex flex-col gap-3 rounded-card border border-border bg-card p-4 shadow-card">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor={fieldId} className="min-w-0 text-sm font-bold text-label">
+                {paragraphTitle(index)}
+              </label>
+              <div className="-mr-2 flex items-center">
+                <MoveButtons index={index} length={count} onMove={moveParagraph} />
+                <RemoveButton label={t('coverLetterEditor.removeParagraph')} onClick={() => removeParagraph(paragraph.id)} />
+              </div>
+            </div>
+            <Textarea
+              id={fieldId}
+              value={paragraph.text}
+              maxLength={COVER_LETTER_LIMITS.paragraphText}
+              onChange={(event) => updateParagraph(paragraph.id, event.target.value)}
+              className="min-h-32"
+            />
+          </div>
+        )
+      })}
+      <AddButton
+        label={t('coverLetterEditor.addParagraph')}
+        onClick={() => addParagraph()}
+        atLimit={count >= COVER_LETTER_LIMITS.paragraphs}
+        limitText={t('coverLetterEditor.limitParagraphs').replace('{max}', COVER_LETTER_LIMITS.paragraphs)}
+      />
+    </section>
+  )
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-10">
-      <div className="flex items-center justify-between">
-        <Link to={`/jobs/${id}`} className="text-sm font-medium text-primary hover:underline">
-          {t('cvEditor.backToJob')}
-        </Link>
-        <span className="text-xs text-muted-foreground">
-          {saveStatus === 'saving' ? t('cvEditor.saving') : saveStatus === 'saved' ? t('cvEditor.saved') : ''}
-        </span>
-      </div>
-
-      <h1 className="text-2xl font-bold tracking-tight text-balance">
-        {t('coverLetterEditor.navTitle')} — {job?.title}
-      </h1>
-
-      {!chatOpen && (
-        <button
-          type="button"
-          onClick={() => setChatOpen(true)}
-          className="fixed bottom-[calc(var(--app-bottom-bar)+1.5rem)] right-6 z-30 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:bg-primary/90"
-        >
-          <Sparkles className="h-4 w-4" />
-          {t('cvEditor.chatToggle')}
-        </button>
-      )}
-
-      <CoverLetterChatPanel
-        open={chatOpen}
-        jobId={id}
-        content={content}
-        onApplyAction={applyChatAction}
-        onBeforeSend={flushPendingSave}
-        onClose={() => setChatOpen(false)}
-      />
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-4">
-          <Label className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {t('coverLetterEditor.paragraphsLabel')}
-          </Label>
-          {content.paragraphs.map((paragraph, index) => (
-            <div key={paragraph.id || index} className="flex items-start gap-2 rounded-lg border border-border p-3">
-              <div className="flex flex-col">
-                <button
-                  type="button"
-                  disabled={index === 0}
-                  onClick={() => moveParagraph(index, -1)}
-                  aria-label={t('cvEditor.moveUp')}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  disabled={index === content.paragraphs.length - 1}
-                  onClick={() => moveParagraph(index, 1)}
-                  aria-label={t('cvEditor.moveDown')}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
-              <Textarea
-                value={paragraph.text}
-                onChange={(event) => updateParagraph(paragraph.id, event.target.value)}
-                className="min-h-24 flex-1"
-              />
-              <button
-                type="button"
-                onClick={() => removeParagraph(paragraph.id)}
-                className="mt-2.5 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={() => addParagraph()}>
-            {t('coverLetterEditor.addParagraph')}
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
-          <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                {t('cvEditor.previewLabel')}
-              </h2>
-              {pageCountLabel && (
-                <span className={pageCount > 1 ? 'text-sm font-medium text-destructive' : 'text-sm font-medium text-success'}>
-                  {pageCountLabel}
-                </span>
-              )}
-            </div>
-            {previewUnavailable ? (
-              <p className="text-sm text-muted-foreground">{t('cvEditor.previewUnavailable')}</p>
-            ) : previewUrl ? (
-              <iframe title="Cover letter preview" src={previewUrl} className="h-[70vh] w-full rounded-md border border-border" />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('cvEditor.loading')}</p>
-            )}
-          </div>
-
-          <Button type="button" disabled={finalizing} onClick={handleFinalize} className="w-full">
-            {finalizing ? t('cvEditor.finalizing') : t('coverLetterEditor.finalizeButton')}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <EditorShell
+      jobId={id}
+      saveStatus={saveStatus}
+      title={t('coverLetterEditor.navTitle')}
+      subtitle={[job?.title, job?.company].filter(Boolean).join(' · ')}
+      pageCount={pageCount}
+      multiPageText={pageCount > 1 ? t('coverLetterEditor.multiPageHint').replace('{count}', pageCount) : null}
+      mode={mode}
+      onModeChange={setMode}
+      editor={editor}
+      preview={
+        <EditorPreview previewUrl={previewUrl} unavailable={previewUnavailable} title={t('coverLetterEditor.previewFrameTitle')} />
+      }
+      chatTitle={t('coverLetterEditor.chatTitle')}
+      renderChat={(showHeader) => <CoverLetterChatPanel chat={chat} content={content} showHeader={showHeader} />}
+      chatOpen={chatOpen}
+      onChatOpenChange={setChatOpen}
+      finalizeLabel={t('coverLetterEditor.finalizeButton')}
+      finalizing={finalizing}
+      onFinalize={handleFinalize}
+    />
   )
 }

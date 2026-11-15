@@ -108,16 +108,23 @@ export default function RichBulletInput({ value, onChange, className }) {
   }
 
   return (
-    <div className={cn('flex-1 overflow-hidden rounded-md border border-input bg-background', className)}>
+    // Sprint 76: solo aspetto (token del redesign, testo a 16 px che evita lo
+    // zoom automatico dell'iPhone, pulsante del grassetto da 32 px).
+    <div
+      className={cn(
+        'flex-1 overflow-hidden rounded-field border border-input bg-card transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20',
+        className,
+      )}
+    >
       <button
         type="button"
         onMouseDown={(event) => event.preventDefault()}
         onClick={toggleBold}
-        className="m-1 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="m-1 inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-chip-foreground hover:bg-tint"
         aria-label="Bold"
         title="Bold (Ctrl/Cmd+B)"
       >
-        <Bold className="h-3.5 w-3.5" />
+        <Bold className="h-4 w-4" />
       </button>
       <div
         ref={ref}
@@ -132,7 +139,7 @@ export default function RichBulletInput({ value, onChange, className }) {
         onInput={syncToState}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        className="min-h-12 w-full whitespace-pre-wrap px-3 py-2 text-sm outline-none"
+        className="min-h-12 w-full whitespace-pre-wrap px-3.5 pb-3 pt-1 text-base leading-[1.45] text-foreground outline-none"
       />
     </div>
   )
