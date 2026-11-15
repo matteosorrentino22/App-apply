@@ -80,3 +80,17 @@
 		file_server
 	}
 }
+
+# Istanza di anteprima (dati finti, nessuna chiave reale): stack separato
+# "appapply-preview" raggiunto sulla rete di questo Caddy con l'alias
+# appapply-preview-gateway (DEPLOY.md, "Istanza di anteprima"). Password del
+# sito e login sono nell'anteprima; con l'anteprima spenta risponde 502.
+anteprima.{$DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	reverse_proxy appapply-preview-gateway:80
+}

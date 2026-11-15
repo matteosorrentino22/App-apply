@@ -347,3 +347,22 @@ Caddy limita inoltre il corpo delle richieste su `/api/*` a 10 MB.
 - Produzione reale (da luglio 2026): certificato Let's Encrypt emesso da Caddy, stack completo in esecuzione da `docker-compose.prod.yml`.
 - Non ancora verificati in produzione: backup su storage esterno e test di ripristino end-to-end (bucket non configurato, §6).
 - Sprint 67 (in container, prima del deploy): backup locale con rotazione e ripristino da file locale coperti dai test con `pg_dump`/`pg_restore` simulati; non ancora verificati in produzione l'invio reale via Gmail, i profili Bedrock `eu.` e un ripristino reale da backup locale.
+
+## 10. Istanza di anteprima (dati finti, dal telefono)
+
+Uno stack Compose **separato** dalla produzione (`appapply-preview`) per provare un branch dal telefono con dati finti: web (1 processo), Postgres e Redis propri, Caddy interno; niente worker né beat (nessuna raccolta, notifica o backup), nessuna chiave reale (AI, Apify, email, push non funzionano), registrazione chiusa (codice d'invito casuale non comunicato). I file modello sono in `docker/preview/`; l'istanza vera vive in una cartella **fuori da git** sul VPS (es. `/root/app-apply-preview`, permessi 700) e prende il codice dalla copia di lavoro separata (`/root/App-apply-dev`), mai dalla cartella di produzione.
+
+- **Accesso:** `https://anteprima.<dominio>`. Il Caddy di produzione ha il blocco `anteprima.{$DOMAIN}` (`docker/caddy/Caddyfile.prod`) che inoltra a `appapply-preview-gateway:80`, alias del Caddy dell'anteprima sulla rete della produzione (`app-apply_default`): nessuna porta pubblicata, nessun container di produzione modificato. Con l'anteprima spenta il sottodominio risponde 502. Il DNS deve risolvere il sottodominio sul VPS (un record jolly del dominio basta).
+- **Due livelli di accesso:** password del sito (basic auth su pagine e file, non su `/api/*`, dove la PWA usa già l'header `Authorization` per il token) e login dell'app con l'utente di prova. Credenziali generate a caso da `preview.sh init` solo nella cartella dell'istanza (`CREDENZIALI.txt`, `.env.preview`, `auth.caddy`, permessi 600); si leggono sul VPS con `cat <cartella>/CREDENZIALI.txt`, mai copiate nel repository o in chat.
+- **Risorse:** limiti per container (web 512 MB / 0,5 CPU, db 256 MB / 0,5, redis 64 MB, caddy 64 MB) e peso CPU basso (`cpu_shares` 256 contro 1024 della produzione). Le build girano con `nice`/`ionice`; il frontend si compila in un container limitato (0,5 CPU, 900 MB) dentro l'immagine con le dipendenze npm già installate (`appapply-e2e-frontend-build`, da ricostruire se cambiano le dipendenze). `preview.sh` misura il tempo di risposta della produzione ogni 15 s durante le build.
+
+| Operazione | Comando (nella cartella dell'istanza) |
+|---|---|
+| Prima installazione | copiare i file di `docker/preview/` nella cartella; `./preview.sh init` (segreti e credenziali), `./preview.sh build`, `./preview.sh up`, `./preview.sh seed` |
+| Aggiornare a un altro branch | nella copia di lavoro `git checkout <branch>`; poi `./preview.sh update` (ricostruisce web e frontend, riavvia; dati conservati) |
+| Ripartire dai dati di prova | `./preview.sh seed` (ricrea l'utente di prova e i suoi dati) |
+| Stato e consumo | `./preview.sh status` |
+| Spegnere (dati conservati) | `./preview.sh down` |
+| Cancellare tutto | `./preview.sh destroy` (container, volumi, immagine del backend); poi togliere il blocco `anteprima.{$DOMAIN}` dal Caddyfile e ricaricare Caddy come sotto; infine cancellare la cartella dell'istanza |
+
+**Modifica del Caddyfile di produzione** (aggiunta o rimozione del blocco): il file è montato come singolo file, quindi va riscritto **nello stesso inode** (`cat nuovo > docker/caddy/Caddyfile.prod`, non un editor che crea un file nuovo), poi `docker exec <caddy> caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` e `docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile` (ricarica senza interruzioni); verificare che il sito risponda 200 prima e dopo e tenere una copia del file precedente per il ripristino.

@@ -1,0 +1,48 @@
+# Caddy interno dell'anteprima: solo HTTP, dietro il Caddy di produzione che
+# termina il TLS. trusted_proxies: inoltra a Django l'X-Forwarded-Proto
+# "https" ricevuto dal Caddy di produzione (altrimenti redirect in loop).
+{
+	admin off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode gzip
+	header {
+		X-Robots-Tag "noindex, nofollow"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# Primo livello: password del sito (basic auth) su pagine e file statici.
+	# Non su /api/*: la PWA usa già l'header Authorization per il token
+	# dell'app, che è il secondo livello (login con l'utente di prova).
+	@protected not path /api/*
+	basic_auth @protected {
+		import /etc/caddy/auth.caddy
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy preview-web:8000
+	}
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+	handle /media/* {
+		respond 404
+	}
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}

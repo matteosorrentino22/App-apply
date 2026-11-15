@@ -1,0 +1,84 @@
+# Istanza di anteprima (dati finti, nessuna chiave reale), progetto Compose
+# "appapply-preview", separato dalla produzione: volumi, rete e database
+# propri. Raggiungibile solo tramite il Caddy di produzione, che inoltra il
+# sottodominio di anteprima a "appapply-preview-gateway" (alias di
+# preview-caddy sulla rete di produzione). Nessuna porta pubblicata.
+# Gestione: ./preview.sh (init, build, up, seed, update, status, down, destroy).
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "5m", max-file: "2" }
+
+services:
+  preview-db:
+    image: postgres:16-alpine
+    logging: *logging
+    env_file: .env.preview
+    volumes: [preview_postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 256m
+    cpus: 0.5
+    cpu_shares: 256
+    restart: unless-stopped
+
+  preview-redis:
+    image: redis:7-alpine
+    logging: *logging
+    command: redis-server --maxmemory 32mb --save "" --appendonly no
+    mem_limit: 64m
+    cpus: 0.25
+    cpu_shares: 256
+    restart: unless-stopped
+
+  # Solo web: niente worker né beat (nessuna raccolta notturna, notifica o
+  # backup nell'anteprima). Immagine costruita da ./preview.sh build.
+  preview-web:
+    image: appapply-preview-web
+    logging: *logging
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 2 --timeout 1800"
+    env_file: .env.preview
+    volumes:
+      - preview_static:/app/staticfiles
+      - preview_media:/app/mediafiles
+      - ./seed_preview.py:/app/seed_preview.py:ro
+    depends_on:
+      preview-db: { condition: service_healthy }
+      preview-redis: { condition: service_started }
+    mem_limit: 512m
+    cpus: 0.5
+    cpu_shares: 256
+    restart: unless-stopped
+
+  preview-caddy:
+    image: caddy:2-alpine
+    logging: *logging
+    volumes:
+      - ./Caddyfile.preview:/etc/caddy/Caddyfile:ro
+      - ./auth.caddy:/etc/caddy/auth.caddy:ro
+      - preview_static:/srv/static:ro
+      - preview_frontend:/srv/frontend:ro
+    networks:
+      default: {}
+      production:
+        aliases: [appapply-preview-gateway]
+    depends_on: [preview-web]
+    mem_limit: 64m
+    cpus: 0.25
+    cpu_shares: 256
+    restart: unless-stopped
+
+networks:
+  # Rete della produzione, solo per farsi raggiungere dal suo Caddy.
+  production:
+    external: true
+    name: app-apply_default
+
+volumes:
+  preview_postgres:
+  preview_static:
+  preview_media:
+  preview_frontend:
+    name: appapply-preview_frontend
