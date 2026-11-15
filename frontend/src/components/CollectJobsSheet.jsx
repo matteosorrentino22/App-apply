@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Clock, Lock, RefreshCw } from 'lucide-react'
+import { BellOff, Clock, Lock, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -86,6 +86,21 @@ function AutomaticCollection({ user, onChange, saving }) {
             </SelectContent>
           </Select>
         </div>
+      ) : null}
+      {isPro && enabled && user.notifications_enabled === false ? (
+        // Sprint 80 (stato "notifiche disattivate", DESIGN.md §7): la raccolta
+        // automatica avviene comunque, manca solo l'avviso di fine raccolta.
+        <Banner
+          variant="note"
+          icon={BellOff}
+          action={
+            <Button asChild variant="secondary" className="w-full">
+              <Link to="/settings">{t('home.autoCollectNotificationsOn')}</Link>
+            </Button>
+          }
+        >
+          {t('home.autoCollectNotificationsOff')}
+        </Banner>
       ) : null}
       {!isPro ? (
         <Banner

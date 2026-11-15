@@ -76,7 +76,7 @@ export default function LoginPage() {
       footer={
         <>
           {t('login.noAccount')}{' '}
-          <Link to="/register" className="font-bold text-primary hover:underline">
+          <Link to="/register" className="inline-flex min-h-11 items-center font-bold text-primary hover:underline">
             {t('login.registerLink')}
           </Link>
         </>
@@ -116,7 +116,7 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
         </Field>
-        <Link to="/forgot-password" className="-mt-1 self-end text-[15px] font-bold text-primary hover:underline">
+        <Link to="/forgot-password" className="-my-2 inline-flex min-h-11 items-center self-end text-[15px] font-bold text-primary hover:underline">
           {t('login.forgotPassword')}
         </Link>
         {error ? <Banner variant="error">{error}</Banner> : null}

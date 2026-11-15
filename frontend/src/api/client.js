@@ -1,4 +1,5 @@
 import { currentLanguage } from '../i18n/language'
+import { translations } from '../i18n/translations'
 
 const TOKEN_STORAGE_KEY = 'app_apply_token'
 
@@ -30,6 +31,9 @@ export const AUTH_EXPIRED_EVENT = 'app-apply:auth-expired'
 // (Sprint 67: nuova versione di informativa/termini non ancora accettata):
 // AuthContext ricarica l'utente e la PWA mostra la schermata di accettazione.
 export const LEGAL_REQUIRED_EVENT = 'app-apply:legal-required'
+// Sprint 80: richiesta non partita per rete o server irraggiungibile;
+// `NetworkErrorNotice` (App.jsx) lo segnala con un avviso.
+export const NETWORK_ERROR_EVENT = 'app-apply:network-error'
 
 // Wrapper minimo su fetch: aggiunge il token se presente e la lingua
 // dell'interfaccia (`Accept-Language`, Sprint 71: messaggi del backend in
@@ -46,11 +50,22 @@ export async function apiFetch(path, { method = 'GET', body, isMultipart = false
     headers['Content-Type'] = 'application/json'
   }
 
-  const response = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : isMultipart ? body : JSON.stringify(body),
-  })
+  // Sprint 80: senza rete (o server irraggiungibile) `fetch` lancia un
+  // TypeError; diventa un ApiError con status 0 e un testo it/en, così le
+  // pagine che mostrano `detail` dicono "nessuna connessione" invece del
+  // messaggio generico.
+  let response
+  try {
+    response = await fetch(path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : isMultipart ? body : JSON.stringify(body),
+    })
+  } catch {
+    window.dispatchEvent(new Event(NETWORK_ERROR_EVENT))
+    const lang = currentLanguage()
+    throw new ApiError(0, { code: 'network_error', detail: (translations[lang] || translations.it).common.networkError })
+  }
 
   const text = await response.text()
   let data = null

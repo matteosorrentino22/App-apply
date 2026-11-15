@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali del redesign UI, Sprint 77 raccolta automatica Pro)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura del redesign UI, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -584,6 +584,7 @@ Sono **notifiche push del browser o della PWA**. Si attivano da **Impostazioni**
 **Notifica di fine raccolta** (Sprint 77, al posto della notifica mattutina delle 10:00, rimossa per tutti).
 - Solo **Pro con la raccolta automatica**: parte alla fine della raccolta automatica **solo se** ha trovato **job nuovi**. Nessuna notifica dopo una raccolta manuale (l'utente è nell'app), un import o un job creato a mano.
 - Testo: "Nuovi job pronti" / "Ci sono nuove offerte da valutare nella tua lista" (in inglese: "New jobs ready" / "There are new job offers to review in your list").
+- Con le notifiche disattivate e la raccolta automatica attiva, il pannello "Raccogli nuovi job" lo segnala (Sprint 80): la raccolta avviene comunque, ma l'avviso di fine raccolta non arriva; il link porta a Impostazioni.
 
 **Notifica di inattività.**
 - Parte se **per 7 giorni** l'utente non segna alcuna "candidatura fatta". Il timer parte dalla registrazione e si azzera a ogni candidatura.
@@ -948,6 +949,8 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
   - Se la raccolta automatica fallisce, all'utente semplicemente non arrivano job nuovi (il giorno torna disponibile per una raccolta manuale).
   - Lo scoring fallito lascia il job senza punteggio, senza messaggi.
   - La diagnosi resta lato server.
+  - **Senza connessione** (Sprint 80): se una richiesta non raggiunge il server (rete assente o server irraggiungibile) compare l'avviso "Connessione non riuscita: controlla la rete e riprova." (dove la pagina mostra il messaggio del server, è quello il testo). Se succede all'apertura dell'app con una sessione salvata, al posto della pagina c'è "Nessuna connessione" con **"Riprova"**: l'utente non viene mandato al login e la sessione resta valida. Le pagine legali senza risposta dal server mostrano "Impossibile caricare la pagina" con "Riprova".
+  - **Indirizzo inesistente** (Sprint 80): pagina "Pagina non trovata" con il pulsante "Vai ai job" (o "Vai all'accesso" senza login); prima la pagina restava vuota.
 - **Lingua dell'interfaccia:**
   - italiano o inglese (default dalla lingua del dispositivo), modificabile e salvata sull'account;
   - dallo Sprint 71 anche **tutti i testi del server** seguono la lingua dell'interfaccia: messaggi d'errore e di validazione (login, registrazione, massimali e credito, limiti di piano, limiti di lunghezza, troppe richieste, accettazione dei testi legali, editor e chat, import), testi delle notifiche push, email di servizio (già dallo Sprint 67) e prefisso automatico del limite per lingua nella motivazione del punteggio (nella lingua del momento della valutazione, §4.4). Con l'interfaccia in italiano i testi sono gli stessi di prima;
@@ -985,6 +988,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ "Esporta i miei dati" scarica uno ZIP con tutti i dati dell'account (JSON) e i suoi file, senza password né dati di altri utenti; dopo 3 export nello stesso giorno è rifiutato (Sprint 67).
 - ☐ "Elimina account" richiede password e conferma esplicita; dopo l'eliminazione non resta alcun dato né file dell'utente, la sessione non funziona più e arriva l'email di conferma (Sprint 67).
 - ☐ Pagine di accesso (Sprint 79): nessun pulsante Google; "Password dimenticata?" nel login; errori della registrazione sotto il campo; schermate di esito per verifica, link scaduto o non valido, recupero e reset; la schermata di accettazione abilita "Continua" solo con le tre caselle; le pagine legali hanno le sezioni a fisarmonica con la prima aperta; nessuna pagina è più larga dello schermo a 360 e 390 px.
+- ☐ Rifinitura (Sprint 80): in inglese nessun testo italiano rimasto né tagliato; a 360 e 390 px nessuna pagina più larga dello schermo; i controlli toccabili hanno un'area di almeno 44 px; un indirizzo inesistente mostra "Pagina non trovata"; con il server irraggiungibile all'apertura compare "Nessuna connessione" con "Riprova" (non il login); un Pro con l'automatica attiva e le notifiche spente vede l'avviso nel pannello di raccolta.
 - ☐ In onboarding (Sprint 79) l'indicatore mostra il passo corrente; un import del CV fallito mostra l'errore e permette di riprovare con un altro file o con lo stesso.
 - ☐ In onboarding l'utente inserisce nome e cognome, obiettivo (inerte), lingua dei documenti, opzione foto; compila il profilo; crea e attiva la prima ricerca.
 - ☐ Il profilo ha sommario, esperienze, istruzione, competenze, certificazioni e lingue, più telefono, email del CV, città/paese, LinkedIn e foto. Non c'è una sezione "risultati chiave".

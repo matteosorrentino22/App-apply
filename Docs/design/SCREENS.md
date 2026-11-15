@@ -1,5 +1,7 @@
 # SCREENS — mockup → route → codice → cosa cambia
 
+> **Stato (Sprint 80): tutte le schermate sono implementate** (sprint 72–79). Le tabelle §1–7 sono la mappa di partenza (file React dello **Sprint 71**); file attuali, differenze rimaste dai mockup e stati aggiunti sono in §8.
+>
 > Mappa schermata per schermata. Il nome nella prima colonna è il file in `mockups/html/<nome>.html` (immagine in `mockups/png/<nome>.png`). I file React sono quelli presenti in `frontend/src/` all'**Sprint 71**. "Nuovo" = da creare. Le voci **[decisione]** rimandano a `SPEC-DELTA.md`.
 
 ## 1. Jobs (route `/list`, oggi `JobListPage.jsx` + `HomePage.jsx`)
@@ -71,6 +73,24 @@
 
 ## 7. Logo
 `logo1…5`, `logo-confronto`: proposte; **scelta la 1**. Asset in `../logo/`.
+
+## 8. Stato di implementazione e differenze rimaste (as-is Sprint 80)
+| Area | Sprint | File attuali | Differenze rimaste dai mockup (e perché) |
+|---|---|---|---|
+| Fondamenta | 72 | `index.css`, `components/ui/*`, `public/` (icone) | Tema scuro solo adattato (B8); scala storica dei raggi tenuta accanto a quella per ruolo |
+| Navigazione | 73 | `AppShell.jsx`, `LogoutButton.jsx` | Finestra "Esci" senza mockup (modello di `delete-search`); barra di navigazione anche nell'onboarding |
+| Jobs | 74, 77 | `JobListPage.jsx`, `JobCard.jsx`, `StatsSummary.jsx`, `JobFiltersSheet.jsx`, `CollectJobsSheet.jsx`, `ManualJobSheet.jsx` | Statistiche: "di cui manuali" oggi/settimana/totale; inserimento manuale anche per i Free (regola reale); `collect-pro` mostra due limiti, vale la **quota unica** di una raccolta al giorno; segnaposto della ricerca accorciato (Sprint 80: "Titolo, azienda o luogo") |
+| Dettaglio | 75 | `JobDetailPage.jsx`, `components/job-detail/*` | Chip di stato senza ▾ (indicativo, B7); "Colma i gap" si apre a ogni "Genera CV"; contatori impilati a 360–390 px; messaggi generati elencati sotto la riga "Messaggio"; nessun testo "nessun link di candidatura" |
+| Editor | 76 | `CvDraftEditorPage.jsx`, `CoverLetterDraftEditorPage.jsx`, `components/editor/*`, `DraftChatPanel.jsx`, `lib/useDraftChat.js` | Nelle proposte da decidere resta il "prima" barrato; "bozza superata" sopra una pagina vuota; nessuna conferma di costo (non c'era) |
+| Profilo, impostazioni | 78 | `ProfilePage.jsx`, `pages/settings/*`, `components/settings/*`, `UsageLimitsCard.jsx` | Nome e cognome in "Dati di contatto"; notifiche su due livelli (preferenza e dispositivo); elenco completo dei fusi; `settings-limiti` con "Raccolta giornaliera 0/1"; nessun acquisto di piano |
+| Accesso, onboarding, legale | 79 | `components/auth/AuthPage.jsx`, pagine di accesso, `onboarding/OnboardingPage.jsx`, `LegalPage.jsx`, `LegalAcceptancePage.jsx`, `legal/shared.jsx` | Pulsante Google solo se configurato (oggi mai); form del profilo sempre visibile nel passo 2; prima sezione legale aperta; termini alla versione 1.0 (testo non cambiato) |
+| Desktop | 73–76 | come sopra | Nessun layout tablet (768–1023 px usa quello mobile) |
+
+**Stati senza mockup aggiunti nello Sprint 80** (soluzioni minime, nessuna API nuova):
+- **Errore di rete all'avvio** (`ProtectedRoute`): con una sessione salvata ma il server irraggiungibile, "Nessuna connessione" con "Riprova" invece del rimando al login; in tutte le pagine un errore di rete ha il testo "Connessione non riuscita: controlla la rete e riprova." al posto del messaggio generico (`api/client.js`, `ApiError` con status 0).
+- **Pagine legali senza risposta da `/api/legal/`**: "Impossibile caricare la pagina" con "Riprova" (prima restavano in caricamento).
+- **Pagina non trovata** (`NotFoundPage.jsx`, route `*`): prima un indirizzo sconosciuto mostrava una pagina vuota.
+- **Notifiche disattivate** (B10): nel pannello di raccolta, per un Pro con l'automatica attiva e le notifiche spente, un avviso con il link a Impostazioni.
 
 ## Punti da verificare in revisione
 1. I nomi dei file React sono quelli dell'Sprint 71: se nel frattempo ne cambiano, aggiornare la mappa.

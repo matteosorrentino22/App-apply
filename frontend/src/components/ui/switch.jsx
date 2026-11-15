@@ -14,7 +14,7 @@ function Switch({ checked, onCheckedChange, label, id, disabled, className }) {
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        'relative inline-flex h-8 w-[52px] shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-45',
+        "relative inline-flex h-8 w-[52px] shrink-0 items-center rounded-full transition-colors outline-none after:absolute after:content-[''] after:-inset-y-1.5 after:inset-x-0 focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-45",
         checked ? 'bg-primary' : 'bg-input',
         className,
       )}

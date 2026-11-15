@@ -375,7 +375,7 @@ export default function JobListPage() {
             value={queryInput}
             onChange={(event) => handleSearchChange(event.target.value)}
             placeholder={t('jobs.searchPlaceholder')}
-            aria-label={t('jobs.searchPlaceholder')}
+            aria-label={t('jobs.searchLabel')}
             className="h-11 pl-11"
           />
         </div>

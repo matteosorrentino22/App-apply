@@ -19,7 +19,7 @@ import { CV_LIMITS, plainText } from '../../utils/draftLimits'
 // disattivano al limite del server (utils/draftLimits.js), con il motivo.
 
 const iconButton =
-  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-field text-chip-foreground outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-30'
+  'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-field text-chip-foreground outline-none hover:bg-tint focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-30'
 
 export function IconButton({ label, className, children, ...props }) {
   return (

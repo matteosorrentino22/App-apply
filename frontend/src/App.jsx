@@ -21,8 +21,10 @@ import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ConfirmEmailChangePage from './pages/ConfirmEmailChangePage'
+import NotFoundPage from './pages/NotFoundPage'
 import AppShell from './components/AppShell'
 import SystemBanner from './components/SystemBanner'
+import NetworkErrorNotice from './components/NetworkErrorNotice'
 
 // Una volta caricato l'account, la sua preferenza salvata (interface_language)
 // prevale sul rilevamento da dispositivo usato come default iniziale.
@@ -46,6 +48,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <AccountLanguageSync />
+          <NetworkErrorNotice />
           <BrowserRouter>
             <AppShell banner={<SystemBanner />}>
               <Routes>
@@ -141,6 +144,7 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </AppShell>
           </BrowserRouter>

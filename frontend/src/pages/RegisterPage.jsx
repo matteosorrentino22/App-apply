@@ -95,7 +95,7 @@ export default function RegisterPage() {
       footer={
         <>
           {t('register.hasAccount')}{' '}
-          <Link to="/login" className="font-bold text-primary hover:underline">
+          <Link to="/login" className="inline-flex min-h-11 items-center font-bold text-primary hover:underline">
             {t('register.loginLink')}
           </Link>
         </>

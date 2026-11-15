@@ -97,7 +97,7 @@ export default function JobFiltersSheet({
               <button
                 type="button"
                 onClick={() => onChange({ from: '', to: '' })}
-                className="self-start text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-primary underline-offset-2 hover:underline"
               >
                 {t('jobs.dateRangeAll')}
               </button>

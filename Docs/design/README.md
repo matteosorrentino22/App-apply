@@ -1,7 +1,7 @@
 # Redesign UI di App-apply — documentazione di design
 
-> **Stato:** in implementazione a sprint (`IMPLEMENTATION-PLAN.md`): **Sprint 72 (fondamenta), 73 (AppShell e navigazione), 74 (lista Jobs), 75 (dettaglio job), 76 (editor), 77 (raccolta automatica Pro) e 78 (profilo e impostazioni) fatti** — token, componenti `ui/`, logo e icone PWA; navigazione a 3 voci, Home eliminata, "Esci" in Impostazioni. Le specifiche in `Docs/01…03` descrivono l'app **as-is** e restano il riferimento finché uno sprint non le aggiorna (regola in `CLAUDE.md`).
-> **Data:** 2026-11-14 · **As-is di partenza:** Sprint 71 (branch `design/redesign-ui`, mai su `main`).
+> **Stato (2026-11-15, Sprint 80): implementato** negli sprint 72–80 (`IMPLEMENTATION-PLAN.md`), su branch derivati uno dall'altro (`sprint-72-fondamenta` … `sprint-80-rifinitura`), **non ancora su `main`** né in produzione. Le specifiche in `Docs/01…03` descrivono già l'app con il redesign (as-is del branch `sprint-80-rifinitura`); il rilascio è descritto in `RELEASE.md`.
+> **Data della proposta:** 2026-11-14 · **As-is di partenza:** Sprint 71 (branch `design/redesign-ui`).
 
 ## Obiettivo
 Rendere l'app più semplice e pulita: ogni schermata mostra in primo piano solo ciò che serve a decidere, il resto è a un tocco (accordion, pannelli, menu). Ispirazioni: Revolut (numeri grandi, gerarchia chiara), Booking (filtri e liste dense ma leggibili). **Mobile e desktop sono ugualmente importanti**: il telefono (anche PWA sulla Home di iPhone) è l'uso principale; il desktop usa la stessa colonna singola con più respiro e, nell'editor CV, la chat AI accanto al documento. Tavolozza sabbia/bruno con sfondo più chiaro.
@@ -11,7 +11,8 @@ Rendere l'app più semplice e pulita: ogni schermata mostra in primo piano solo 
 2. `DESIGN.md` — principi, layout mobile/desktop, token (e traduzione in Tailwind/shadcn), politica font, logo, regole it/en, componenti da creare, convenzioni. Asset del logo in `logo/`.
 3. `SCREENS.md` — schermata per schermata: cosa mostra, a quale route/file React corrisponde oggi, cosa cambia.
 4. `SPEC-DELTA.md` — **cambi funzionali** (non solo grafici) da recepire nelle specifiche 01/02 prima o durante l'implementazione.
-5. `IMPLEMENTATION-PLAN.md` — piano a sprint per Claude Code, con ordine, perimetro e criteri di chiusura.
+5. `IMPLEMENTATION-PLAN.md` — piano a sprint per Claude Code, con ordine, perimetro e criteri di chiusura (tutti ✅).
+6. `RELEASE.md` — rilascio su `main` e in produzione dei branch 72→80: backup, variabili, migrazioni, deploy, controlli, ripristino, anteprima (Sprint 80).
 
 ## Regole per chi implementa
 - I mockup sono il **riferimento visivo e di comportamento**, non pixel-perfect: i valori esatti (colori, raggi, spaziature) sono in `DESIGN.md`.
@@ -24,7 +25,8 @@ Rendere l'app più semplice e pulita: ogni schermata mostra in primo piano solo 
 ## Come sono stati prodotti i mockup
 Generati da uno script (HTML statico, nessuna dipendenza) a partire dai token di `DESIGN.md`; le immagini in `mockups/png/` sono rese a 2× con Chrome headless. Sono sorgenti di riferimento, non codice da riusare. Le stesse tavole sono su un canvas di design condiviso con il committente (non nel repository).
 
-## Punti da verificare in revisione
-- Nessuno dei file in questa cartella è stato ancora validato dal committente nella sua forma finale su repo: sono la bozza per la revisione.
-- Il redesign **cambia comportamenti funzionali** (raccolta automatica Pro che sostituisce quella notturna, Home eliminata): vedi `SPEC-DELTA.md`, voci **da decidere**.
-- Layout tablet, dark mode e versione inglese non sono disegnati (`DESIGN.md §7`).
+## Stato al rilascio (Sprint 80)
+- I mockup sono stati seguiti come riferimento di comportamento; le differenze rimaste sono elencate per area in `SCREENS.md §8` (con il motivo) e nelle schede `sprints/sprint-72.md` … `sprint-80.md`.
+- Decisioni ancora **aperte** (`SPEC-DELTA.md §B`): **B8** tema scuro ridisegnato e layout tablet (oggi: valori scuri esistenti adattati ai token nuovi, nessun layout tablet), **B11** forma del messaggio di troppi tentativi (oggi testo nel punto in cui avviene l'errore). **B10** ha una proposta minima implementata nello Sprint 80, da confermare.
+- Stati non disegnati aggiunti nello Sprint 80 con soluzioni minime: errore di rete all'avvio e nelle pagine legali, pagina non trovata, notifiche disattivate con la raccolta automatica attiva (`SCREENS.md §8`).
+- Non verificabili senza un iPhone vero: area sicura (notch, indicatore Home), `100dvh`, tastiera sopra la chat degli editor, notifiche push dalla Home.

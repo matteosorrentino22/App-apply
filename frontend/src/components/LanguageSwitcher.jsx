@@ -20,7 +20,7 @@ export default function LanguageSwitcher({ compact = false }) {
     <Select value={lang} onValueChange={handleChange}>
       <SelectTrigger
         aria-label="Lingua / Language"
-        className={compact ? 'h-10 w-[76px] rounded-[10px] px-3 text-sm font-semibold' : 'w-20'}
+        className={compact ? 'h-11 w-[76px] rounded-[10px] px-3 text-sm font-semibold' : 'w-20'}
       >
         <SelectValue />
       </SelectTrigger>

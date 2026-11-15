@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
   }
 
   const back = (
-    <Link to="/login" className="font-bold text-primary hover:underline">
+    <Link to="/login" className="inline-flex min-h-11 items-center font-bold text-primary hover:underline">
       {t('forgotPassword.backToLogin')}
     </Link>
   )

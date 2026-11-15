@@ -146,7 +146,7 @@ test('la ricerca testuale ignora gli altri filtri e resta nella sezione corrente
   await toggleScore(page, '5')
   await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
 
-  await page.getByPlaceholder('Cerca titolo, azienda, località').fill('backend')
+  await page.getByLabel('Cerca per titolo, azienda o località').fill('backend')
   await page.waitForTimeout(400)
 
   // La ricerca ignora il filtro punteggio attivo: il job torna visibile.

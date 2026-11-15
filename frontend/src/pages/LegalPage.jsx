@@ -1,10 +1,13 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Info } from 'lucide-react'
+import { ChevronLeft, Info, WifiOff } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
-import { useLegalInfo } from '../legal/useLegalInfo'
+import { fetchLegalInfo } from '../api/legal'
 import PrivacyContent from '../legal/PrivacyContent'
 import TermsContent from '../legal/TermsContent'
 import { Banner } from '@/components/ui/banner'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Spinner } from '@/components/ui/spinner'
 
 // Pagine pubbliche /privacy e /terms (Sprint 67): testo nella PWA, versioni,
@@ -14,7 +17,20 @@ import { Spinner } from '@/components/ui/spinner'
 export default function LegalPage({ document }) {
   const { t, lang } = useLanguage()
   const navigate = useNavigate()
-  const info = useLegalInfo()
+  // Sprint 80: prima, se /api/legal/ non rispondeva, la pagina restava in
+  // caricamento per sempre; ora errore con "Riprova".
+  const [info, setInfo] = useState(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let active = true
+    fetchLegalInfo()
+      .then((data) => active && setInfo(data))
+      .catch(() => active && setFailed(true))
+    return () => {
+      active = false
+    }
+  }, [attempt])
   const Content = document === 'terms' ? TermsContent : PrivacyContent
 
   return (
@@ -27,7 +43,24 @@ export default function LegalPage({ document }) {
         <ChevronLeft className="h-5 w-5" aria-hidden="true" />
         {t('legal.back')}
       </button>
-      {!info ? (
+      {failed && !info ? (
+        <EmptyState
+          icon={WifiOff}
+          title={t('legal.loadError')}
+          action={
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={() => {
+                setFailed(false)
+                setAttempt((n) => n + 1)
+              }}
+            >
+              {t('common.retry')}
+            </Button>
+          }
+        />
+      ) : !info ? (
         <div className="flex justify-center py-10">
           <Spinner size={28} />
         </div>

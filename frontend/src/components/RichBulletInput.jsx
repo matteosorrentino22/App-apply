@@ -120,7 +120,7 @@ export default function RichBulletInput({ value, onChange, className }) {
         type="button"
         onMouseDown={(event) => event.preventDefault()}
         onClick={toggleBold}
-        className="m-1 inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-chip-foreground hover:bg-tint"
+        className="relative m-1 inline-flex h-8 w-8 items-center after:absolute after:content-[''] after:-inset-1.5 justify-center rounded-[8px] text-chip-foreground hover:bg-tint"
         aria-label="Bold"
         title="Bold (Ctrl/Cmd+B)"
       >

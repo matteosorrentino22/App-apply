@@ -352,3 +352,44 @@ test('accettazione di informativa e termini: Continua solo con le tre spunte', a
   await expect(page.getByRole('button', { name: 'Elimina account' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Esci' })).toBeVisible()
 })
+
+// --- Sprint 80: stati senza mockup (pagina non trovata, errore di rete).
+
+test('indirizzo sconosciuto: pagina non trovata con il rimando all’accesso', async ({ page }) => {
+  await page.goto('/pagina-che-non-esiste')
+  await expect(page.getByRole('heading', { name: 'Pagina non trovata' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Vai all’accesso' })).toHaveAttribute('href', '/login')
+})
+
+test('pagine legali senza risposta dal server: errore e "Riprova"', async ({ page }) => {
+  let fail = true
+  await page.route('**/api/legal/', (route) => (fail ? route.abort() : route.continue()))
+  await page.goto('/privacy')
+  await expect(page.getByText('Impossibile caricare la pagina')).toBeVisible()
+  fail = false
+  await page.getByRole('button', { name: 'Riprova' }).click()
+  await expect(page.getByRole('main').locator('details')).toHaveCount(12)
+})
+
+test('server irraggiungibile all’avvio con una sessione salvata: "Nessuna connessione", non il login', async ({ page }) => {
+  await registerNewUser(page)
+  let fail = true
+  await page.route('**/api/accounts/me/', (route) => (fail ? route.abort() : route.continue()))
+  await page.goto('/list')
+  await expect(page.getByRole('heading', { name: 'Nessuna connessione' })).toBeVisible()
+  await expect(page).toHaveURL(/\/list$/)
+  fail = false
+  await page.getByRole('button', { name: 'Riprova' }).click()
+  await expect(page.getByRole('heading', { name: 'Jobs', level: 1 })).toBeVisible()
+})
+
+test('errore di rete in un modulo: messaggio di connessione invece di quello generico', async ({ page }) => {
+  await page.route('**/api/accounts/login/', (route) => route.abort())
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('qualcuno@example.com')
+  await page.getByLabel('Password').fill('SuperSecret123!')
+  await page.getByRole('button', { name: 'Accedi', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Connessione non riuscita' })).toBeVisible()
+  await expect(page).toHaveURL(/\/login$/)
+})

@@ -5,10 +5,8 @@ import { cn } from '@/lib/utils'
 
 // Base comune di Modal (finestra centrale) e Sheet (pannello dal basso):
 // Radix Dialog gestisce focus, Esc, scroll bloccato e role="dialog".
-const Dialog = DialogPrimitive.Root
-const DialogTrigger = DialogPrimitive.Trigger
-const DialogClose = DialogPrimitive.Close
-
+// Sprint 80: tolti Dialog/DialogContent/... (shadcn), non più usati dopo
+// il passaggio di tutte le finestre a Modal e Sheet (Sprint 74–79).
 function DialogOverlay({ className, ...props }) {
   return (
     <DialogPrimitive.Overlay
@@ -34,64 +32,4 @@ function DialogCloseButton({ className }) {
   )
 }
 
-// Finestra centrale (DESIGN.md §2, §3.3: raggio 20, padding 20, margini 20
-// ai lati su mobile). Usata dalle pagine esistenti; il nuovo `Modal` ne
-// riprende l'aspetto con le azioni impilate dei mockup.
-function DialogContent({ className, children, showClose = true, ...props }) {
-  return (
-    <DialogPrimitive.Portal>
-      <DialogOverlay />
-      <DialogPrimitive.Content
-        className={cn(
-          'app-modal fixed left-1/2 top-1/2 z-50 w-[calc(100%-40px)] max-w-lg -translate-x-1/2 -translate-y-1/2',
-          'rounded-modal bg-card p-5 text-card-foreground shadow-modal outline-none',
-          'max-h-[90dvh] overflow-y-auto',
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        {showClose && <DialogCloseButton className="absolute right-2.5 top-2.5" />}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  )
-}
-
-function DialogHeader({ className, ...props }) {
-  return <div className={cn('mb-4 flex flex-col gap-1.5 pr-8', className)} {...props} />
-}
-
-function DialogTitle({ className, ...props }) {
-  return (
-    <DialogPrimitive.Title
-      className={cn('text-xl font-bold tracking-[-0.01em] text-foreground', className)}
-      {...props}
-    />
-  )
-}
-
-function DialogDescription({ className, ...props }) {
-  return (
-    <DialogPrimitive.Description
-      className={cn('text-sm leading-normal text-muted-foreground', className)}
-      {...props}
-    />
-  )
-}
-
-function DialogFooter({ className, ...props }) {
-  return <div className={cn('mt-5 flex flex-wrap justify-end gap-3', className)} {...props} />
-}
-
-export {
-  Dialog,
-  DialogTrigger,
-  DialogClose,
-  DialogOverlay,
-  DialogCloseButton,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-}
+export { DialogOverlay, DialogCloseButton }

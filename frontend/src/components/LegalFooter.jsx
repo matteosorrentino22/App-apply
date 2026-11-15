@@ -5,12 +5,12 @@ import { useLanguage } from '../i18n/LanguageContext'
 export default function LegalFooter() {
   const { t } = useLanguage()
   return (
-    <footer className="mx-auto flex max-w-2xl justify-center gap-4 px-4 pb-6 pt-2 text-xs text-muted-foreground">
-      <Link to="/privacy" className="hover:text-foreground hover:underline">
+    <footer className="mx-auto flex max-w-2xl items-center justify-center gap-3 px-4 pb-3 text-xs text-muted-foreground">
+      <Link to="/privacy" className="inline-flex min-h-11 items-center px-1 hover:text-foreground hover:underline">
         {t('legal.privacy')}
       </Link>
       <span aria-hidden="true">·</span>
-      <Link to="/terms" className="hover:text-foreground hover:underline">
+      <Link to="/terms" className="inline-flex min-h-11 items-center px-1 hover:text-foreground hover:underline">
         {t('legal.terms')}
       </Link>
     </footer>

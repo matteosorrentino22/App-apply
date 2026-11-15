@@ -54,7 +54,7 @@ export function ToastProvider({ children }) {
                   toast.action.onClick()
                   dismiss(toast.id)
                 }}
-                className="min-h-10 shrink-0 text-[15px] font-bold text-[#f3e8d6] hover:bg-white/10"
+                className="min-h-11 shrink-0 text-[15px] font-bold text-[#f3e8d6] hover:bg-white/10"
               >
                 {toast.action.label}
               </Button>

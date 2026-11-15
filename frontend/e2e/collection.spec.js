@@ -100,3 +100,17 @@ print("OK", done.strftime("%H:%M"))
   await expect(sheet.getByRole('button', { name: 'Raccogli ora' })).toBeDisabled()
   await expect(sheet.getByTestId('collect-done')).toHaveText(/^Raccolta di oggi già eseguita alle \d{2}:\d{2}\.$/)
 })
+
+// Sprint 80 (SPEC-DELTA B10, proposta minima): Pro con l'automatica attiva e
+// le notifiche spente → avviso nel pannello con il link a Impostazioni.
+test('Pro con notifiche disattivate: avviso nel pannello di raccolta', async ({ page, request, baseURL }) => {
+  const email = await loginNewUser(page, request, baseURL, { plan: 'pro' })
+  let sheet = await openSheet(page)
+  await sheet.getByRole('switch', { name: 'Raccolta automatica' }).click()
+  await expect(sheet.getByText('Le notifiche sono disattivate')).toHaveCount(0)
+  python(['shell'], `from django.contrib.auth import get_user_model\nget_user_model().objects.filter(email="${email}").update(notifications_enabled=False)\n`)
+  await page.reload()
+  sheet = await openSheet(page)
+  await expect(sheet.getByText('Le notifiche sono disattivate')).toBeVisible()
+  await expect(sheet.getByRole('link', { name: 'Attiva le notifiche in Impostazioni' })).toHaveAttribute('href', '/settings')
+})

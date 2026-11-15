@@ -7,15 +7,21 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Sprint 80: il primo /me non è riuscito per rete o server (non 401/403).
+  // Il token resta: ProtectedRoute mostra "Connessione non riuscita" con
+  // "Riprova" invece di mandare al login chi ha una sessione valida.
+  const [connectionError, setConnectionError] = useState(false)
 
   const refreshUser = useCallback(async () => {
     try {
       const me = await authApi.fetchMe()
       setUser(me)
+      setConnectionError(false)
       return me
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         setUser(null)
+        setConnectionError(false)
         return null
       }
       throw error
@@ -23,7 +29,9 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    refreshUser().finally(() => setLoading(false))
+    refreshUser()
+      .catch(() => setConnectionError(true))
+      .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -53,14 +61,25 @@ export function AuthProvider({ children }) {
     return data
   }, [refreshUser])
 
+  const retryConnection = useCallback(async () => {
+    setLoading(true)
+    try {
+      await refreshUser()
+    } catch {
+      setConnectionError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [refreshUser])
+
   const logout = useCallback(async () => {
     await authApi.logout()
     setUser(null)
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, refreshUser, setUser }),
-    [user, loading, login, register, logout, refreshUser],
+    () => ({ user, loading, connectionError, retryConnection, login, register, logout, refreshUser, setUser }),
+    [user, loading, connectionError, retryConnection, login, register, logout, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

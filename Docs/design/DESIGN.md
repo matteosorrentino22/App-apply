@@ -1,6 +1,6 @@
 # DESIGN — principi, token e componenti
 
-> Riferimento per il redesign. I valori sono quelli usati nei mockup (`mockups/html/*.html`). **Stato: proposta**, da recepire in `frontend/src/index.css` e nei componenti (`IMPLEMENTATION-PLAN.md`). Aggiornato al 2026-11-14 sull'as-is dello **Sprint 71**.
+> Riferimento per il redesign. I valori sono quelli usati nei mockup (`mockups/html/*.html`). **Stato: implementato** negli sprint 72–80 (`frontend/src/index.css`, `frontend/src/components/ui/`); questo documento resta il riferimento dei valori. Proposta del 2026-11-14 sull'as-is dello Sprint 71, stato aggiornato allo **Sprint 80** (§6 e §7).
 
 ## 1. Principi
 1. **Una decisione per schermata.** In primo piano solo ciò che serve a decidere; il resto dietro un tocco (accordion, pannello dal basso, menu).
@@ -141,7 +141,9 @@ Si resta su `lucide-react` (già in uso). Usate nei mockup: `Search, SlidersHori
 - **Errori e vuoti:** testi esistenti in `translations.js`, mostrati nel punto in cui nasce l'errore (es. credito insufficiente dentro la chat).
 
 ## 6. Componenti
-Esistono già in `frontend/src/components/ui/`: `button, card, badge, checkbox, dialog, input, label, radio-group, select, textarea`. Da aggiungere o rifare:
+> **As-is (Sprint 80).** Tutti i componenti della tabella esistono: in `components/ui/` `accordion` (`AccordionSection`, con `keepMounted`), `action-bar`, `badge`, `banner`, `button`, `card` (solo `Card`), `checkbox`, `counter-toggle`, `dialog` (solo overlay e pulsante ✕ condivisi da `Modal` e `Sheet`), `document-row`, `empty-state`, `expandable-text`, `field`, `input`, `label`, `menu`, `modal`, `pill` (`FilterPill`), `radio-group`, `score-chip`, `segmented`, `select`, `sheet`, `spinner`, `split-button`, `switch`, `textarea`; fuori da `ui/` `AppShell` (con la barra di tab), `StatsSummary`, `JobCard`, `RecruiterIcon`, `CostConfirmDialog`, `components/auth/AuthPage`, `components/settings/SettingsList`. Lo `Stepper` dell'onboarding è un `<ol>` nella pagina; le pagine legali usano `<details>`. **Nessuna dipendenza nuova** (B9): interruttore `button role="switch"`, fisarmonica e menu fatti in casa. Nello Sprint 80 tolti i pezzi non più usati (`DialogContent`/`Header`/`Title`/`Description`/`Footer`, `CardHeader`/`Title`/`Description`/`Content`/`Footer`, `MultiSelectFilter`). Bersagli di tocco: dove l'aspetto resta più piccolo (pillole 36 px, interruttore 32 px, grassetto 32 px, icona recruiter 22 px) l'area di tocco è portata a 44 px con un `::after` trasparente.
+
+Esistevano in `frontend/src/components/ui/` (Sprint 71): `button, card, badge, checkbox, dialog, input, label, radio-group, select, textarea`. Da aggiungere o rifare:
 
 | Componente | Descrizione | Note |
 |---|---|---|
@@ -172,6 +174,8 @@ Esistono già in `frontend/src/components/ui/`: `button, card, badge, checkbox, 
 **Dipendenze candidate (richiedono approvazione, `CLAUDE.md`):** `@radix-ui/react-switch`, `@radix-ui/react-accordion` (o `<details>` nativo), `@radix-ui/react-dropdown-menu` (o menu fatto in casa). Tutto il resto si costruisce con ciò che c'è (Radix Dialog/Select/Checkbox/Radio, Tailwind, `class-variance-authority`, `lucide-react`).
 
 ## 7. Cosa non è disegnato
+> **As-is (Sprint 80):** tablet non fatto (layout mobile centrato fino a 1023 px); tema scuro **non ridisegnato** (B8) — controllato nello Sprint 80: nessun testo illeggibile (coppie testo/sfondo dei token ≥ 4,5:1, minimo 4,77), ma l'interruttore spento ha il pallino quasi dello stesso colore del binario e i pulsanti disattivati sono poco distinguibili; inglese verificato schermata per schermata (Sprint 80); errore di rete, pagina 404 e "notifiche disattivate" aggiunti con soluzioni minime (Sprint 80, `SCREENS.md §8`); scheletri di caricamento non applicati (si usa `Spinner`).
+
 - **Tablet 768–1023 px** (si assume il layout mobile centrato).
 - **Dark mode**: i token scuri esistenti in `index.css` vanno rivisti sui nuovi token (`--card` bianco → superficie scura, nuovi `--tint/--note/--chip`).
 - Versione **inglese** dei testi (si verifica a codice con le regole di §3.6), animazioni e transizioni, scheletro di caricamento delle liste (esiste un `skel` nei mockup di accesso, non applicato alle liste).
@@ -179,6 +183,8 @@ Esistono già in `frontend/src/components/ui/`: `button, card, badge, checkbox, 
 - **Template PDF del CV** (fuori ambito, vedi §3.7).
 
 ## Punti da verificare in revisione
+> Esito al 2026-11-15 (Sprint 80): 1 deciso (A9, Sprint 73); 2 **aperto** (B8); 3 deciso: nessuna dipendenza (B9); 4 confermata la logica a fasce (Sprint 72); 5 chip indicativo senza chevron (B7, Sprint 75); 6 stack di sistema; 7 valori reali dall'API (Sprint 74–78); 8 logo invariato (prima versione).
+
 1. Navigazione desktop: barra in alto con 3 voci e **logout spostato in Impostazioni** (oggi è nella barra): confermare lo spostamento.
 2. Dark mode: stesso ciclo o sprint dedicato?
 3. Dipendenze Radix da aggiungere (switch, accordion, dropdown-menu) o alternative native (`<details>`, `button role="switch"`, menu fatto in casa)? Proposta predefinita: **nessuna dipendenza nuova**.

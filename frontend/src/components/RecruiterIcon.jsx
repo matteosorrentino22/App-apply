@@ -11,7 +11,7 @@ export default function RecruiterIcon({ job, className }) {
   if (!job.recruiter_name) return null
   const label = `${t('jobs.recruiterIconLabel')} ${job.recruiter_name}`
   const classes = cn(
-    'relative z-10 ml-1.5 inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-primary-soft align-middle text-primary',
+    "relative z-10 ml-1.5 inline-flex h-[22px] w-[22px] after:absolute after:content-[''] after:-inset-[11px] shrink-0 items-center justify-center rounded-full bg-primary-soft align-middle text-primary",
     className,
   )
   const icon = <UserRound className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
