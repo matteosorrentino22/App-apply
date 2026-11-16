@@ -9,6 +9,7 @@
 |---|---|---|---|
 | `jobs-lista` | Titolo, pulsante Raccogli, ricerca testo, riepilogo (nuovi oggi / settimana), pillole Raccolti · Importati · Preferiti · Archiviati, filtri attivi, card | `JobListPage.jsx`, `JobCard.jsx` | Card ridotta (badge, titolo, azienda·località + icona recruiter, **2 gap**, data, ♥), tutta cliccabile; niente bottoni Dettagli/Archivia/Genera CV; swipe = archivia |
 | `jobs-stats` | Riepilogo espanso | `HomePage.jsx` (statistiche) | Le statistiche di Home entrano in Jobs come `StatsSummary` espandibile; stessa API |
+| `jobs-filtri-contratto`, `jobs-filtri-contratto-attivi` (Sprint 82, **da implementare**) | Pannello Filtri con i due nuovi gruppi, senza e con selezione | `JobFiltersSheet.jsx`, `utils/jobFilters.js` | Nuovi gruppi **Contratto** (pillole a selezione multipla: Full-time, Part-time, Temporaneo) e **Stipendio** (segmenti Tutti / Con stipendio / Senza stipendio, come Recruiter) |
 | `jobs-filtri` | Pannello filtri (stato, punteggio, ricerca, ordinamento, ecc.) + salva filtro | `JobListPage.jsx`, `MultiSelectFilter.jsx` | `Sheet` dal basso; filtri **in URL** (Sprint 68) restano; badge con numero filtri attivi |
 | `save-filter` | Salva filtri attuali | `JobListPage.jsx` | `Modal` con nome; filtri salvati come pillole |
 | `toast-archived` | Job archiviato · Annulla | `ToastProvider.jsx`, `SwipeToArchive.jsx` | Toast con azione |
@@ -22,6 +23,7 @@
 ## 2. Dettaglio job (route `/jobs/:id`, `JobDetailPage.jsx`)
 | Mockup | Cosa mostra | Cosa cambia |
 |---|---|---|
+| `detail-stipendio-contratto`, `detail-solo-contratto` (Sprint 82, **da implementare**) | Riga di chip sotto "azienda · località": stipendio (evidenziato, icona banconote) e tipo di contratto (neutro, icona valigetta), stesse dimensioni dei chip dei candidati; con un solo dato, solo quello; senza dati la riga non c'è | Cosa cambia: la card di lista **non** cambia |
 | `detail-nuovo` | Stato, titolo, punteggio, azienda·località, recruiter, "Perché questo punteggio" (troncato, Leggi tutto), contatori "7 corrispondenze" / "1 gap" espandibili, descrizione annuncio a fisarmonica, barra con **Genera CV ▾** | Un solo punto di generazione; il chip stato è solo indicativo |
 | `detail-menu` | Menu del ▾: Genera cover letter, Genera messaggio | `SplitButton` + `Menu` |
 | `detail-gap` | "Colma i gap" prima di generare il CV (facoltativo) | `Sheet`; il testo libero ha `max_length` lato server (CLAUDE.md) |
@@ -39,6 +41,7 @@
 | `cv-outdated` | `CvDraftEditorPage.jsx` | `Modal` "bozza superata" (Sprint 69–70) |
 | `cover-editor` | `CoverLetterDraftEditorPage.jsx`, `CoverLetterChatPanel.jsx` | Stesso schema del CV, un solo campo di testo |
 | `profile-exp` (anche nel profilo) | `ExperienceGroupEditor.jsx`, `RichBulletInput.jsx` | Limiti punti elenco (15 × 400) e avvisi in linea |
+| `profile-act-chip`, `profile-act-modifica`, `profile-act-errore`, `profile-act-vuoto`, `profile-act-limite`, `desk-profile-act` (Sprint 82, **da implementare**) | `ExperienceGroupEditor.jsx`, `ChipInput.jsx` | Le **attività** di un ruolo come chip a angoli ridotti (raggio 10 px): tocco sul testo = modifica nel riquadro con contatore e Annulla / Fatto; ✕ da 44 px per eliminare; testo lungo troncato a 3 righe. Le tecnologie restano come sono (pillole attuali) |
 
 ## 4. Profilo, impostazioni, ricerche (routes `/profile`, `/settings`)
 | Mockup | Codice | Cosa cambia |

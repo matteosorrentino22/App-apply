@@ -1,6 +1,6 @@
-# Sprint 82 — Anteprima PDF degli editor su mobile
+# Sprint 82 — Anteprima PDF degli editor, attività come chip, stipendio e contratto
 
-> **Periodo:** 2026-11-16 · **Branch:** `sprint-82-anteprima-pdf` (da `main` al commit 811e1e2, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** correzione implementata, build e lint OK, **da confermare a mano su iPhone e Android** nell'anteprima; merge e deploy non fatti.
+> **Periodo:** 2026-11-16 · **Branch:** `sprint-82-anteprima-pdf` (da `main` al commit 811e1e2, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** (1) anteprima PDF: correzione implementata, build e lint OK, **da confermare a mano su iPhone e Android**; (2) attività come chip e (3) stipendio e contratto: **progettati e approvati (mockup), da implementare**; merge e deploy non fatti.
 
 ## Input
 Segnalazione del committente dopo il rilascio del redesign: nell'editor del CV e della cover letter la scheda "Anteprima" resta **bianca** su iPhone (Safari) e Android (Chrome); su Chrome desktop funziona; con il vecchio design (Sprint 69) funzionava anche da mobile. Indicazione: ripristinare un'altezza esplicita e tenere la proporzione A4 solo da desktop; se non basta, montare l'iframe anche fuori dalla scheda attiva. L'iframe resta; nessuna dipendenza, nessun cambio di API, CSP o PDF.
@@ -28,3 +28,56 @@ iPhone (Safari e app dalla Home) e Android (Chrome): job con CV → "Modifica CV
 
 ## Cosa manca / note
 - Se l'anteprima resta bianca su uno dei due telefoni: seconda opzione (iframe montato sempre) o, su Android, un link "Apri il PDF" al blob URL come ripiego (aggiunta di interfaccia da decidere col committente).
+
+---
+
+# Parte 2 — Attività del Profilo come chip (richiesta ID 20)
+
+> **Stato: da implementare.** Mockup approvati dal committente (2026-11-17): `profile-act-chip`, `profile-act-modifica`, `profile-act-errore`, `profile-act-vuoto`, `profile-act-limite`, `desk-profile-act` in `Docs/design/mockups/`.
+
+## Cosa deve fare (funzionale)
+- Le **attività** di ogni ruolo sono mostrate come **chip a angoli ridotti** (non più a pillola completa).
+- **Tocco sul testo = modifica** dell'attività in un riquadro con contatore "n / 400" e pulsanti Annulla / Fatto. Il ✕ (area da 44 px) elimina.
+- Il testo lungo è **troncato a 3 righe** nel chip; per leggerlo tutto si apre la modifica.
+- Limiti invariati: 15 attività per ruolo, 400 caratteri. Oltre 400: messaggio "Un'attività supera i 400 caratteri: accorciala per poterla confermare." e "Fatto" disattivato. A 15: "Hai raggiunto il massimo di 15 attività" e "Elimina un'attività per poterne aggiungere un'altra." Nessuna attività: "Nessuna attività inserita."
+- Suggerimento sotto il campo: "Tocca un'attività per modificarla. Al massimo 15 attività per ruolo, ciascuna fino a 400 caratteri."
+- Le **tecnologie restano come sono** (decisione del committente).
+- Vale ovunque il componente è usato (anche onboarding).
+
+## Indicazioni per chi implementa (non vincolanti)
+- `ChipInput.jsx` (oggi chip `rounded-full`, fino a 400 caratteri, solo ✕) è condiviso con le tecnologie: valutare una variante per le attività invece di cambiare il comportamento delle tecnologie. Nessuna dipendenza nuova.
+- Colori e raggi: `DESIGN.md` §3 (chip `#f3e8d6`, raggio dei chip delle attività 10 px, bersagli ≥ 44 px).
+- Nessuna modifica a API, modello dati o limiti del server.
+
+---
+
+# Parte 3 — Stipendio e contratto (richiesta ID 7, ID 15 limitato)
+
+> **Stato: da implementare.** Mockup approvati (2026-11-17): `detail-stipendio-contratto`, `detail-solo-contratto`, `jobs-filtri-contratto`, `jobs-filtri-contratto-attivi`. Decisioni in `SPEC-DELTA.md` A16 e B12.
+
+## Cosa deve fare (funzionale)
+- **Dettaglio job:** sotto "azienda · località" una riga di chip con **stipendio** (evidenziato, icona banconote) e **tipo di contratto** (neutro, icona valigetta), della stessa dimensione dei chip dei candidati. Si mostra solo il dato presente; senza dati la riga non compare. Lo stipendio è mostrato **come arriva dalla fonte** (nessun periodo, nessuna conversione di valuta).
+- **Filtri della lista:** due nuovi gruppi nel pannello Filtri: **Contratto** (pillole a selezione multipla: Full-time, Part-time, Temporaneo, solo i valori previsti) e **Stipendio** (segmenti **Tutti / Con stipendio / Senza stipendio**, come Recruiter). Si combinano in AND con gli altri filtri, con OR dentro il multiplo; "Azzera filtri" e il conteggio dei filtri attivi li includono.
+- **La card di lista non cambia.**
+- I job raccolti **prima** di questo sprint non hanno il contratto (e lo stipendio non è mai stato salvato): restano fuori dai filtri attivi, come "candidati" per i job senza il dato.
+- **Esclusi** per decisione del committente: data di inizio (la fonte non la fornisce), filtro per importo (valuta e periodo ignoti), modalità remote/hybrid/on-site (rimandata, `SPEC-DELTA.md` B12; tracking ID 15 e ID 27).
+
+## Dati disponibili dalla fonte (misurati su una raccolta di prova, 122 annunci)
+- `salaryInfo`: lista di stringhe (es. "$91000.00"), presente nel 35 % dei casi, in dollari, periodo non indicato.
+- `contractType`: sempre presente (Full-time, Part-time, Temporary).
+- Nessun campo per la data di inizio; `workType` vuoto; modalità remote solo nel testo della descrizione.
+
+## Indicazioni per chi implementa (non vincolanti)
+- **Bug esistente:** `_normalize_item` (`apps/jobs/sources/apify_linkedin.py`) legge `item.get("salary")` ma il campo della fonte è `salaryInfo`: `Job.salary` oggi resta sempre vuoto anche se `JobDetailPage.jsx` lo stampa già. Mappare `salaryInfo` (lista) in una stringa leggibile, ad es. intervallo con due valori; rispettare il `max_length` 255 (un job oltre il limite è scartato, §5 della spec tecnica).
+- **Nuovo campo** per il tipo di contratto sul modello `Job` (con migrazione), valori normalizzati, esposto nel `JobSerializer`; parametri di filtro in `GET /api/jobs/` (es. `contract` CSV e `salary` yes|no|all) e nei valori ammessi di `utils/jobFilters.js`; `JobFiltersSheet.jsx`; query string come gli altri filtri. Da decidere se i filtri salvati (§4.21) includono i due nuovi gruppi (vedi punti da verificare).
+- Nessuna chiamata aggiuntiva alla fonte: i dati sono già nella risposta della raccolta. Nessuna dipendenza nuova.
+- Aggiornare in questo sprint: spec 01 (§4.5, §4.6, §4.21) e 02 (modello dati, API §12, test §13), test backend delle fonti e della lista, `job-list.spec.js`.
+
+## Punti da verificare in revisione
+1. **Sprint unico:** su richiesta del committente le parti 2 e 3 sono nello stesso sprint 82 e sullo stesso branch della correzione dell'anteprima: valutare se separare i commit al momento dell'implementazione.
+2. **Filtri salvati:** i nuovi gruppi Contratto e Stipendio vanno salvati nei filtri preferiti? Non deciso.
+3. **Stipendio senza periodo:** un importo come "$91.000" può essere annuo o orario; il committente ha scelto di mostrarlo così com'è. Rivedere se gli utenti lo trovano fuorviante.
+4. **Valute:** la fonte restituisce dollari anche per annunci europei (campione piccolo): da verificare su più annunci prima di mostrare il simbolo.
+5. **Dati storici:** i job già raccolti non hanno il contratto; nessun recupero previsto.
+6. **Test su telefono:** la parte 1 (anteprima) resta da provare a mano su iPhone e Android prima del merge.
+7. Specifiche 01/02: le parti 2 e 3 non sono ancora descritte come as-is; vanno aggiornate nello stesso commit dell'implementazione.
