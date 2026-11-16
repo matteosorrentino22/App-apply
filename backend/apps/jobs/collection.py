@@ -132,6 +132,7 @@ def collect_jobs_for_user(user):
                 apply_url=offer["apply_url"],
                 published_at=offer.get("published_at"),
                 salary=offer.get("salary", ""),
+                contract_type=offer.get("contract_type", ""),
                 matched_search=offer.get("matched_search", ""),
                 matched_saved_search_id=(
                     saved_search_id if saved_search_id in valid_search_ids else None

@@ -66,6 +66,20 @@ class Job(models.Model):
     published_at = models.DateTimeField(null=True, blank=True)
     salary = models.CharField(max_length=255, blank=True, default="")
 
+    # Tipo di contratto (Sprint 82, SPEC-DELTA A16): solo dalla raccolta via
+    # Apify (`contractType`, valori di LinkedIn normalizzati); vuoto per i job
+    # importati da link, inseriti a mano o raccolti prima dello Sprint 82.
+    class ContractType(models.TextChoices):
+        FULL_TIME = "full_time", "Full-time"
+        PART_TIME = "part_time", "Part-time"
+        TEMPORARY = "temporary", "Temporaneo"
+        CONTRACT = "contract", "A contratto"
+        INTERNSHIP = "internship", "Stage"
+        VOLUNTEER = "volunteer", "Volontariato"
+        OTHER = "other", "Altro"
+
+    contract_type = models.CharField(max_length=20, choices=ContractType.choices, blank=True, default="")
+
     # Numero di candidati riportato da LinkedIn (solo raccolta via Apify,
     # sprint corrente): quando l'annuncio è troppo recente/troppo popolare
     # per un numero esatto, LinkedIn mostra una fascia testuale ("Be among
@@ -256,6 +270,10 @@ class JobFilterPreset(models.Model):
     # "", "yes" o "no" — stesso valore testuale già usato dal parametro
     # query `recruiter` in JobListView, nessuna traduzione in/out serve.
     has_recruiter = models.CharField(max_length=3, blank=True, default="")
+    # Sprint 82: contratto (lista di codici `Job.ContractType`) e stipendio
+    # ("", "yes" o "no", come `has_recruiter`).
+    contract_types = models.JSONField(default=list, blank=True)
+    has_salary = models.CharField(max_length=3, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

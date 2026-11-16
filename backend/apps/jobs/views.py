@@ -82,6 +82,7 @@ from .import_service import (
 from .manual_job_service import ManualJobFailed, ManualJobRejected, create_manual_job
 from .list_service import (
     APPLICANTS_RANGES,
+    FILTERABLE_CONTRACT_TYPES,
     FILTERABLE_STATUSES,
     SECTION_FILTERS,
     archive_job,
@@ -733,6 +734,28 @@ class JobListView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        contract_types = None
+        raw_contract = request.query_params.get("contract")
+        if raw_contract:
+            contract_types = [value for value in raw_contract.split(",") if value]
+            if not set(contract_types) <= set(FILTERABLE_CONTRACT_TYPES):
+                return Response(
+                    {"detail": _("Il filtro contratto ammette solo: %(values)s.") % {"values": ", ".join(FILTERABLE_CONTRACT_TYPES)}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        has_salary = None
+        raw_salary = request.query_params.get("salary")
+        if raw_salary == "yes":
+            has_salary = True
+        elif raw_salary == "no":
+            has_salary = False
+        elif raw_salary and raw_salary != "all":
+            return Response(
+                {"detail": _('Il filtro stipendio deve essere "yes", "no" o "all".')},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         jobs = list_jobs(
             request.user,
             section,
@@ -745,6 +768,8 @@ class JobListView(APIView):
             location=location,
             applicants_ranges=applicants_ranges,
             has_recruiter=has_recruiter,
+            contract_types=contract_types,
+            has_salary=has_salary,
         )
         return Response(JobSerializer(jobs, many=True).data)
 

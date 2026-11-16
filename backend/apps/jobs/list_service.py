@@ -33,6 +33,10 @@ FILTERABLE_STATUSES = (
 # le tre centrali esistono solo come numero esatto.
 APPLICANTS_RANGES = ("under_25", "25_50", "51_100", "101_200", "over_200")
 
+# Sprint 82: tutti i codici normalizzati sono accettati dall'API; il
+# pannello Filtri ne propone tre (Full-time, Part-time, Temporaneo).
+FILTERABLE_CONTRACT_TYPES = tuple(Job.ContractType.values)
+
 
 def _local_today_start(user):
     tz = zoneinfo.ZoneInfo(user.timezone)
@@ -145,6 +149,24 @@ def _apply_applicants_filter(queryset, applicants_ranges):
     return queryset.filter(combined)
 
 
+def _apply_contract_filter(queryset, contract_types):
+    """Sprint 82: OR tra i tipi scelti; i job senza contratto (raccolti
+    prima dello Sprint 82, importati, manuali) restano fuori con il filtro
+    attivo, come per i candidati."""
+    if not contract_types:
+        return queryset
+    return queryset.filter(contract_type__in=contract_types)
+
+
+def _apply_salary_filter(queryset, has_salary):
+    """Sprint 82: con / senza stipendio indicato; `None` = tutti."""
+    if has_salary is None:
+        return queryset
+    if has_salary:
+        return queryset.exclude(salary="")
+    return queryset.filter(salary="")
+
+
 def _apply_recruiter_filter(queryset, has_recruiter):
     """Filtro binario su presenza del nome recruiter. `has_recruiter=None`
     (default) = nessun filtro; `True`/`False` isola rispettivamente i job
@@ -168,6 +190,8 @@ def list_jobs(
     location="",
     applicants_ranges=None,
     has_recruiter=None,
+    contract_types=None,
+    has_salary=None,
 ):
     """Restituisce i Job di `user` per la sezione richiesta, ordinati per
     punteggio decrescente (01-specifiche-funzionali-v4.md §4.5).
@@ -175,7 +199,7 @@ def list_jobs(
     Se `query` è presente, la ricerca testuale (titolo/azienda/località)
     resta confinata alla sezione corrente e **ignora** ogni altro filtro
     (intervallo di date, score, stato, ricerca di provenienza, location,
-    candidati, recruiter) — così come richiesto esplicitamente dalle
+    candidati, recruiter, contratto, stipendio) — così come richiesto esplicitamente dalle
     specifiche. Gli altri filtri si combinano invece tutti in AND tra loro."""
     queryset = Job.objects.filter(user=user).filter(SECTION_FILTERS[section]).prefetch_related("cv_documents")
 
@@ -191,6 +215,8 @@ def list_jobs(
         queryset = _apply_location_filter(queryset, location)
         queryset = _apply_applicants_filter(queryset, applicants_ranges)
         queryset = _apply_recruiter_filter(queryset, has_recruiter)
+        queryset = _apply_contract_filter(queryset, contract_types)
+        queryset = _apply_salary_filter(queryset, has_salary)
 
     return queryset.order_by(F("score").desc(nulls_last=True), "-date_collected")
 

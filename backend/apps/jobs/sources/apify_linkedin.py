@@ -39,6 +39,18 @@ MAX_ATTEMPTS = 2
 # usato su ogni chiamata per limitare la spesa (sprint-39).
 MAX_ITEMS_PER_CALL = 150
 
+# Sprint 82: stipendio da `salaryInfo` ("$91000.00", "€45,000", "$16.75").
+SALARY_VALUE_PATTERN = re.compile(r"^([^\d]*)(\d[\d,]*(?:\.\d+)?)(.*)$")
+CONTRACT_TYPE_MAP = {
+    "full-time": "full_time",
+    "part-time": "part_time",
+    "temporary": "temporary",
+    "contract": "contract",
+    "internship": "internship",
+    "volunteer": "volunteer",
+    "other": "other",
+}
+
 # Per le ricerche di tipo Company, `keyword` resta un termine neutro fisso
 # invece dei nomi azienda: verificato con chiamate reali (2026-08-15) che
 # metterci anche i nomi azienda fa scattare la ricerca semantica di LinkedIn,
@@ -279,13 +291,53 @@ class ApifyLinkedInSource:
             "published_at": self._parse_published_at(
                 item.get("publishedAt") or item.get("postedAt")
             ),
-            "salary": item.get("salary") or "",
+            # Sprint 82: la fonte usa `salaryInfo` (lista di stringhe), non
+            # `salary`: prima lo stipendio restava sempre vuoto.
+            "salary": self._format_salary(item.get("salaryInfo")) or (item.get("salary") or ""),
+            "contract_type": self._normalize_contract_type(item.get("contractType")),
             "matched_search": item.get("searchString") or "",
             "applicants_count": applicants_count,
             "applicants_bucket": applicants_bucket,
             "recruiter_name": item.get("posterFullName") or "",
             "recruiter_profile_url": item.get("posterProfileUrl") or "",
         }
+
+    def _format_salary(self, raw_value):
+        """`salaryInfo` di Apify è una lista di 1 o 2 stringhe (es.
+        ["$91000.00", "$136500.00"]): diventa "$91.000 – $136.500" (simbolo
+        della fonte, decimali ".00" tolti, migliaia con il punto, decimali
+        veri con la virgola). Nessun periodo né conversione di valuta (la
+        fonte non li indica, SPEC-DELTA A16). Stringhe non riconosciute
+        restano come sono; il risultato sta nei 255 caratteri di `salary`."""
+        if isinstance(raw_value, str):
+            raw_value = [raw_value]
+        if not isinstance(raw_value, list):
+            return ""
+        parts = []
+        for value in raw_value[:2]:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            match = SALARY_VALUE_PATTERN.match(value.strip())
+            if not match:
+                parts.append(value.strip())
+                continue
+            prefix, number, suffix = match.groups()
+            amount = float(number.replace(",", ""))
+            if amount.is_integer():
+                text = f"{int(amount):,}".replace(",", ".")
+            else:
+                whole, decimals = f"{amount:,.2f}".split(".")
+                text = f"{whole.replace(',', '.')},{decimals}"
+            parts.append(f"{prefix}{text}{suffix}".strip())
+        return " – ".join(parts)[:255]
+
+    def _normalize_contract_type(self, raw_value):
+        """`contractType` di Apify (valori di LinkedIn: "Full-time",
+        "Part-time", "Temporary", "Contract", "Internship", "Volunteer",
+        "Other") → codice di `Job.ContractType`; vuoto se assente o ignoto."""
+        if not isinstance(raw_value, str):
+            return ""
+        return CONTRACT_TYPE_MAP.get(raw_value.strip().casefold(), "")
 
     def _parse_applicants_count(self, raw_value):
         """`applicationsCount` da Apify è una stringa: un intero puro quando

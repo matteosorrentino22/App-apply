@@ -322,3 +322,53 @@ test.describe('barre in basso su mobile', () => {
     expect(searchBar.y + searchBar.height).toBeLessThanOrEqual(searchTab.y + 1)
   })
 })
+
+// Sprint 82 (SPEC-DELTA A15): attività del Profilo come chip modificabili.
+test('profilo: attività come chip, modifica con contatore, limiti di 400 caratteri e 15 attività', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+  await page.goto('/profile')
+  await page.getByRole('button', { name: /^Esperienze/ }).click()
+  await page.getByRole('button', { name: 'Aggiungi azienda' }).click()
+  await expect(page.getByText('Nessuna attività inserita.')).toBeVisible()
+
+  const input = page.getByLabel('Attività / competenze in questo ruolo')
+  await input.fill('Reporting mensile')
+  await input.press('Enter')
+  const chips = page.getByTestId('activity-chip')
+  await expect(chips).toHaveCount(1)
+  await expect(page.getByText('Tocca un’attività per modificarla.', { exact: false })).toBeVisible()
+
+  // Tocco sul testo → modifica con contatore; oltre 400 caratteri "Fatto" è disattivato.
+  await page.getByRole('button', { name: 'Modifica l’attività: Reporting mensile' }).click()
+  const editor = page.getByLabel('Testo dell’attività')
+  await expect(page.getByText('17 / 400')).toBeVisible()
+  await editor.fill('x'.repeat(401))
+  await expect(page.getByText('401 / 400')).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: 'supera i 400 caratteri' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Fatto' })).toBeDisabled()
+  await editor.fill('Reporting mensile alla direzione')
+  await page.getByRole('button', { name: 'Fatto' }).click()
+  await expect(chips).toHaveText(['Reporting mensile alla direzione'])
+
+  // Annulla non cambia nulla.
+  await page.getByRole('button', { name: /^Modifica l’attività/ }).click()
+  await page.getByLabel('Testo dell’attività').fill('Da scartare')
+  await page.getByRole('button', { name: 'Annulla' }).click()
+  await expect(chips).toHaveText(['Reporting mensile alla direzione'])
+
+  // ✕ elimina.
+  await page.getByRole('button', { name: 'Rimuovi Reporting mensile alla direzione' }).click()
+  await expect(chips).toHaveCount(0)
+
+  // A 15 attività il campo si blocca con il messaggio.
+  for (let i = 1; i <= 15; i++) {
+    await input.fill(`Attività numero ${i}`)
+    await input.press('Enter')
+  }
+  await expect(chips).toHaveCount(15)
+  await expect(input).toBeDisabled()
+  await expect(input).toHaveAttribute('placeholder', 'Hai raggiunto il massimo di 15 attività')
+  await expect(page.getByText('Elimina un’attività per poterne aggiungere un’altra.')).toBeVisible()
+  await expect(page.getByText('15 / 15')).toBeVisible()
+})

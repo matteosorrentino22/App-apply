@@ -623,3 +623,72 @@ test.describe('navigazione su mobile', () => {
     await expect(page.getByRole('navigation', { name: 'Navigazione principale' })).toBeVisible()
   })
 })
+
+// --- Sprint 82 (SPEC-DELTA A16): contratto e stipendio. Nel seed: Project
+// Manager full-time con stipendio, Backend Developer part-time, Head of
+// Operations full-time senza stipendio, Data Analyst temporaneo con
+// stipendio; Consulente HR (importato) senza dati.
+
+test('filtri Contratto (multi) e Stipendio, anche combinati e nei filtri salvati', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Part-time', exact: true }).click())
+  await expect(cardFor(page, 'Backend Developer')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+  await expect(page).toHaveURL(/contract=part_time/)
+
+  // OR dentro il gruppo: Part-time + Full-time.
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Full-time', exact: true }).click())
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Head of Operations')).toBeVisible()
+  await expect(cardFor(page, 'Data Analyst')).not.toBeVisible()
+
+  // AND con Stipendio: resta solo il Project Manager.
+  await inFilters(page, (sheet) => sheet.getByText('Con stipendio', { exact: true }).click())
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Head of Operations')).not.toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: /^Filtri \(2\)/ })).toBeVisible()
+
+  // Il filtro salvato conserva Contratto e Stipendio.
+  await page.getByRole('button', { name: /^Filtri/ }).click()
+  await page.getByRole('dialog', { name: 'Filtri' }).getByRole('button', { name: 'Salva filtri attuali' }).click()
+  const saveDialog = page.getByRole('dialog', { name: 'Salva filtri attuali' })
+  await saveDialog.getByLabel('Nome').fill('Pagati full o part')
+  await saveDialog.getByRole('button', { name: 'Salva', exact: true }).click()
+  await expect(saveDialog).not.toBeVisible()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Azzera filtri' }).click())
+  await expect(cardFor(page, 'Data Analyst')).toBeVisible()
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Pagati full o part', exact: true }).click())
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Data Analyst')).not.toBeVisible()
+  await expect(page).toHaveURL(/salary=yes/)
+
+  // Senza stipendio: i job senza il dato.
+  await inFilters(page, async (sheet) => {
+    await sheet.getByRole('button', { name: 'Azzera filtri' }).click()
+    await sheet.getByText('Senza stipendio', { exact: true }).click()
+  })
+  await expect(cardFor(page, 'Head of Operations')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+})
+
+test('dettaglio: stipendio e contratto solo quando presenti', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await openCard(page, 'Project Manager')
+  const row = page.getByTestId('job-pay-contract')
+  await expect(row.getByText('€45.000 – €55.000')).toBeVisible()
+  await expect(row.getByText('Full-time')).toBeVisible()
+
+  await page.goBack()
+  await openCard(page, 'Head of Operations')
+  await expect(page.getByTestId('job-pay-contract').getByText('Full-time')).toBeVisible()
+  await expect(page.getByTestId('job-pay-contract')).not.toContainText('€')
+
+  // Job importato senza stipendio né contratto: nessuna riga.
+  await page.goto('/list?section=imported')
+  await openCard(page, 'Consulente HR')
+  await expect(page.getByRole('heading', { name: 'Consulente HR', level: 1 })).toBeVisible()
+  await expect(page.getByTestId('job-pay-contract')).toHaveCount(0)
+})

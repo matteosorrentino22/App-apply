@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: App-apply\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-15 14:01+0100\n"
+"POT-Creation-Date: 2026-11-17 00:22+0100\n"
 "PO-Revision-Date: 2026-11-14 17:00+0100\n"
 "Last-Translator: App-apply\n"
 "Language-Team: English\n"
@@ -603,6 +603,15 @@ msgstr "The applicants filter only allows: %(values)s."
 #: apps/jobs/views.py
 msgid "Il filtro recruiter deve essere \"yes\", \"no\" o \"all\"."
 msgstr "The recruiter filter must be \"yes\", \"no\" or \"all\"."
+
+#: apps/jobs/views.py
+#, python-format
+msgid "Il filtro contratto ammette solo: %(values)s."
+msgstr "The contract filter only allows: %(values)s."
+
+#: apps/jobs/views.py
+msgid "Il filtro stipendio deve essere \"yes\", \"no\" o \"all\"."
+msgstr "The salary filter must be \"yes\", \"no\" or \"all\"."
 
 #: apps/jobs/views.py
 #, python-format

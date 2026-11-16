@@ -7,7 +7,7 @@ from apps.common.files import signed_document_url
 from apps.cv.cover_letter_draft import is_cover_letter_draft_outdated
 from apps.cv.draft import is_cv_draft_outdated
 
-from .list_service import APPLICANTS_RANGES, FILTERABLE_STATUSES
+from .list_service import APPLICANTS_RANGES, FILTERABLE_CONTRACT_TYPES, FILTERABLE_STATUSES
 from .models import Job, JobFilterPreset
 
 # Caratteri non ammessi nei nomi file sui filesystem/browser più comuni:
@@ -140,6 +140,7 @@ class JobSerializer(serializers.ModelSerializer):
             "apply_url",
             "published_at",
             "salary",
+            "contract_type",
             "matched_search",
             "applicants_count",
             "applicants_bucket",
@@ -260,6 +261,8 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
             "location",
             "applicants_ranges",
             "has_recruiter",
+            "contract_types",
+            "has_salary",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
@@ -293,6 +296,16 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
         return value
 
     def validate_has_recruiter(self, value):
+        if value not in ("", "yes", "no"):
+            raise serializers.ValidationError(_('Deve essere "", "yes" o "no".'))
+        return value
+
+    def validate_contract_types(self, value):
+        if not isinstance(value, list) or not set(value) <= set(FILTERABLE_CONTRACT_TYPES):
+            raise serializers.ValidationError(_("Valori ammessi: %(values)s.") % {"values": ", ".join(FILTERABLE_CONTRACT_TYPES)})
+        return value
+
+    def validate_has_salary(self, value):
         if value not in ("", "yes", "no"):
             raise serializers.ValidationError(_('Deve essere "", "yes" o "no".'))
         return value

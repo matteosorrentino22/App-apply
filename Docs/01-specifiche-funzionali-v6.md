@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone del redesign UI, Sprint 77 raccolta automatica Pro)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone e Sprint 82 attività come chip, stipendio e contratto del redesign UI, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -240,6 +240,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - Le **esperienze possono essere zero** (es. neolaureato).
 - Oltre 5 esperienze compare un avviso: il CV ne mostrerà al massimo 5.
 - **Limiti dei testi** (Sprint 70): al massimo **15 bullet per esperienza**, ciascuno di **400 caratteri** (il campo non accetta testo più lungo; i bullet pre-compilati dal CV oltre il limite sono evidenziati); al massimo 30 esperienze, 15 voci di istruzione, 100 competenze, 50 certificazioni e 36 lingue. I limiti non sono retroattivi: un'esperienza salvata prima, con più bullet o bullet più lunghi, si può ancora salvare senza toccarli, ma non può crescere oltre e i bullet nuovi devono rispettare il limite.
+- **Attività come chip** (Sprint 82, SPEC-DELTA A15): in Profilo e onboarding ogni attività di un ruolo è un chip ad angoli ridotti con il testo troncato a 3 righe; toccandolo si apre la modifica (contatore "n / 400", Annulla / Fatto; oltre 400 caratteri "Fatto" è disattivato con il messaggio); ✕ elimina. Accanto all'etichetta il contatore "n / 15"; a 15 attività il campo per aggiungerne è bloccato ("Hai raggiunto il massimo di 15 attività"); senza attività "Nessuna attività inserita.". Le tecnologie restano voci semplici con ✕.
 
 **Cosa recupera il pre-compilamento da CV.**
 - **Recupera:** sommario, telefono ed email (solo se scritti nel CV), aziende, ruoli, luoghi e bullet, istituti, titoli e note, competenze, certificazioni e lingue con livello. Le scale libere e quelle CEFR sono ricondotte ai 4 livelli; nel dubbio la voce viene omessa.
@@ -276,12 +277,13 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 - Gli scarti sono **silenziosi** per l'utente; dallo Sprint 68 il diario tecnico della raccolta conta le offerte scartate per campi mancanti, campi troppo lunghi e duplicati.
 - La **data di pubblicazione non è obbligatoria**.
 - **Dati facoltativi** mostrati se presenti:
-  - retribuzione;
+  - **stipendio** (dallo Sprint 82 letto davvero dalla fonte: prima restava sempre vuoto), mostrato come arriva, senza periodo né conversione di valuta, nel formato "$91.000 – $136.500";
+  - **tipo di contratto** (Sprint 82): Full-time, Part-time, Temporaneo, A contratto, Stage, Volontariato, Altro;
   - **numero di candidati**: valore esatto, oppure le fasce "tra i primi 25" o "oltre 200" quando LinkedIn dà solo quelle;
   - **recruiter** che ha pubblicato l'annuncio, con nome ed eventuale link al profilo;
   - **ricerca di provenienza**.
 
-  Candidati e recruiter esistono **solo** per i job raccolti, non per quelli importati o creati a mano.
+  Candidati, recruiter, stipendio e contratto esistono **solo** per i job raccolti, non per quelli importati o creati a mano; i job raccolti prima dello Sprint 82 non hanno contratto né stipendio.
 - **Deduplica per utente.** Un'offerta LinkedIn già presente tra i job dell'utente non viene ricreata, anche se nel frattempo è stata archiviata o importata. Se più ricerche restituiscono la stessa offerta nella stessa raccolta, compare una volta sola e porta la provenienza di una sola delle ricerche. Dallo Sprint 68 il job conserva anche un riferimento stabile alla ricerca di provenienza: modificarne keywords o località non lo scollega dal filtro "Ricerca" (§4.5).
 
 ### 4.4 Ciclo quotidiano
@@ -346,6 +348,8 @@ Nella sezione **Importati** c'è un riquadro "Importa un job" con:
 - **Stato:** scelta multipla tra **nuovo**, **CV generato**, **candidatura fatta**. Lo stato transitorio non è selezionabile.
 - **Candidati:** scelta multipla tra le fasce **<25**, **25–50**, **51–100**, **101–200**, **>200**. I job senza questo dato (importati, manuali) non rientrano in nessuna fascia.
 - **Recruiter:** tutti / con recruiter / senza recruiter (controllo a segmenti).
+- **Contratto** (Sprint 82): scelta multipla tra **Full-time**, **Part-time**, **Temporaneo** (gli altri tipi si vedono nel dettaglio ma non si filtrano). I job senza il dato restano fuori con il filtro attivo.
+- **Stipendio** (Sprint 82): tutti / con stipendio / senza stipendio (controllo a segmenti). Non c'è un filtro per importo (valuta e periodo non noti).
 
 In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la ✕ per eliminarli, e il pulsante "Salva filtri attuali", che apre una finestra con il nome (§4.21). Ogni ricerca di provenienza è una pillola "parole chiave · città".
 
@@ -370,7 +374,8 @@ In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la
 - **Intestazione:**
   - **chip dello stato**, solo indicativo (non selezionabile): "Nuovo", "✓ CV generato", "✓ Candidatura fatta" o, durante la generazione del CV, "CV in generazione" con indicatore (§4.6);
   - titolo e **punteggio** a fasce di colore (§4.4);
-  - azienda · località · retribuzione (se presente) con l'**icona del recruiter** (link al profilo se disponibile);
+  - azienda · località con l'**icona del recruiter** (link al profilo se disponibile);
+  - dallo Sprint 82, sotto, una riga con lo **stipendio** (evidenziato) e il **tipo di contratto**: solo i dati presenti, senza dati la riga non c'è;
   - pulsante **"Annuncio ↗"** ("Vai all'annuncio"), solo se il job ha un link di candidatura;
   - etichette dei **candidati**, della **ricerca di provenienza** ("Trovato con: …") e la data di raccolta.
 - **Documenti** (se esiste almeno un documento, se una generazione è in corso o se la candidatura è fatta): una riga per **CV**, **Cover letter** e **Messaggio**, con stato ("Pronto · N pagine", "Non ancora generato", "CV in generazione") e azioni: matita **Modifica** (solo documenti modificabili, §4.16, §4.19), **Scarica** (link firmato, §4.18), menu ⋯ con **Rigenera**; senza documento, **"Genera"**. Sotto la riga del documento gli avvisi "occupa N pagine invece di 1" e "generato prima dell'editor, rigeneralo per modificarlo" (Sprint 69). Sotto "Messaggio" i messaggi già generati (§4.20), con il testo lungo troncato e "Leggi tutto".
@@ -828,7 +833,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - I preferiti non hanno limiti.
 
 **Filtri preferiti** (Sprint 64).
-- **Salvataggio:** **"Salva filtri attuali"** chiede un **nome** e salva **punteggio, stato, ricerca di provenienza, location, candidati e recruiter**. **Non salva mai le date** né la sezione. Salvato dalla sezione **Importati**, non contiene il filtro "Ricerca" (lì nascosto, Sprint 68).
+- **Salvataggio:** **"Salva filtri attuali"** chiede un **nome** e salva **punteggio, stato, ricerca di provenienza, location, candidati, recruiter e, dallo Sprint 82, contratto e stipendio** (i filtri salvati prima ne sono senza). **Non salva mai le date** né la sezione. Salvato dalla sezione **Importati**, non contiene il filtro "Ricerca" (lì nascosto, Sprint 68).
 - **Uso:**
   - ogni filtro salvato è una **pillola**;
   - un clic **copia** i valori nei filtri correnti, che restano modificabili senza toccare il filtro salvato;
@@ -1030,6 +1035,7 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Esistono quattro sezioni: Raccolti, Importati, Preferiti, Archiviati.
 - ☐ All'apertura la lista mostra la sezione Raccolti con i job di oggi, ordinati per punteggio decrescente (i job senza punteggio in fondo).
 - ☐ L'intervallo di date filtra per data di raccolta, estremi inclusi; "Tutte le date" mostra tutto lo storico.
+- ☐ Sprint 82: nel dettaglio stipendio e contratto compaiono solo se presenti; i filtri Contratto (multi, OR) e Stipendio si combinano in AND con gli altri, entrano nel conteggio, in "Azzera filtri" e nei filtri salvati; la scheda della lista non cambia. In Profilo le attività sono chip modificabili con i limiti di 15 e 400 caratteri.
 - ☐ I filtri location, ricerca (multi), punteggio (1–10, multi), stato (multi), candidati (fasce, multi) e recruiter, nel pannello "Filtri", si combinano in AND, con OR dentro ciascun filtro multiplo, e si applicano subito; il pulsante Filtri mostra quanti gruppi sono attivi e "Cancella" / "Azzera filtri" li riportano ai valori di default (Sprint 74).
 - ☐ Il filtro Ricerca non compare nella sezione Importati.
 - ☐ La ricerca testuale trova job per titolo, azienda o località nella sola sezione corrente e, quando è attiva, ignora tutti gli altri filtri.

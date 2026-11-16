@@ -4,6 +4,8 @@ import {
   Archive,
   ArchiveRestore,
   ArrowUpRight,
+  Banknote,
+  BriefcaseBusiness,
   Check,
   ChevronLeft,
   FileText,
@@ -472,7 +474,6 @@ export default function JobDetailPage() {
           <p className="min-w-0 text-base text-muted-foreground">
             {job.company}
             {job.location ? <> · {job.location}</> : null}
-            {job.salary ? <> · {job.salary}</> : null}
             <RecruiterIcon job={job} />
           </p>
           {job.apply_url ? (
@@ -488,6 +489,27 @@ export default function JobDetailPage() {
             </a>
           ) : null}
         </div>
+        {/* Sprint 82 (mockup `detail-stipendio-contratto`, `detail-solo-contratto`):
+            stipendio così come arriva dalla fonte (nessun periodo né conversione)
+            e tipo di contratto; solo i dati presenti, senza dati nessuna riga. */}
+        {job.salary || job.contract_type ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="job-pay-contract">
+            {job.salary ? (
+              <Badge variant="primary" className="gap-1.5 whitespace-normal break-words px-3 py-1 text-sm font-bold">
+                <Banknote className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="sr-only">{t('jobs.salaryLabel')}: </span>
+                {job.salary}
+              </Badge>
+            ) : null}
+            {job.contract_type ? (
+              <Badge variant="neutral" className="gap-1.5 px-3 py-1 text-sm">
+                <BriefcaseBusiness className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="sr-only">{t('jobs.contractLabel')}: </span>
+                {t(`jobs.contract_${job.contract_type}`)}
+              </Badge>
+            ) : null}
+          </div>
+        ) : null}
         {applicantsText || job.matched_search || job.is_archived || job.date_collected ? (
           <div className="flex flex-wrap items-center gap-2">
             {applicantsText ? <Badge variant={isLowApplicants(job) ? 'success' : 'neutral'}>{applicantsText}</Badge> : null}

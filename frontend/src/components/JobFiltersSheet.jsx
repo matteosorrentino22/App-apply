@@ -7,7 +7,7 @@ import { FilterPill } from '@/components/ui/pill'
 import { SegmentedControl } from '@/components/ui/segmented'
 import { Sheet, SheetBody, SheetClose, SheetContent, SheetFooter, SheetHeader } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { APPLICANTS_RANGES, SCORES, STATUSES } from '../utils/jobFilters'
+import { APPLICANTS_RANGES, CONTRACT_TYPES, SCORES, STATUSES } from '../utils/jobFilters'
 
 // Pannello dei filtri della lista (Sprint 74, mockup `jobs-filtri`; da
 // 1024 px finestra centrale). Stessi filtri e stessa logica di prima: i
@@ -49,7 +49,7 @@ export default function JobFiltersSheet({
   onReset,
 }) {
   const { t } = useLanguage()
-  const { dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter } = filters
+  const { dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter, contractTypes, salaryFilter } = filters
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -188,6 +188,33 @@ export default function JobFiltersSheet({
                 { value: 'all', label: t('jobs.recruiterFilter_all') },
                 { value: 'yes', label: t('jobs.recruiterFilter_yes') },
                 { value: 'no', label: t('jobs.recruiterFilter_no') },
+              ]}
+            />
+          </Group>
+
+          {/* Sprint 82 (mockup `jobs-filtri-contratto`): Contratto a scelta
+              multipla (OR) e Stipendio come Recruiter; i job senza il dato
+              restano fuori con il filtro attivo. */}
+          <Group title={t('jobs.contractFilterLabel')}>
+            <div className="flex flex-wrap gap-2">
+              {CONTRACT_TYPES.map((value) => (
+                <FilterPill key={value} pressed={contractTypes.includes(value)} onClick={() => onChange({ contract: toggle(value) })}>
+                  {t(`jobs.contract_${value}`)}
+                </FilterPill>
+              ))}
+            </div>
+          </Group>
+
+          <Group title={t('jobs.salaryFilterLabel')}>
+            <SegmentedControl
+              name="salary-filter"
+              label={t('jobs.salaryFilterLabel')}
+              value={salaryFilter}
+              onChange={(value) => onChange({ salary: value === 'all' ? '' : value })}
+              options={[
+                { value: 'all', label: t('jobs.salaryFilter_all') },
+                { value: 'yes', label: t('jobs.salaryFilter_yes') },
+                { value: 'no', label: t('jobs.salaryFilter_no') },
               ]}
             />
           </Group>

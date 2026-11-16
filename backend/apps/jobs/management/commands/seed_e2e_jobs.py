@@ -39,6 +39,9 @@ SEED_JOBS = [
         status=Job.Status.NEW,
         origin=Job.Origin.COLLECTED,
         applicants_bucket="under_25",
+        # Sprint 82: stipendio e contratto per i filtri e il dettaglio.
+        salary="€45.000 – €55.000",
+        contract_type="full_time",
     ),
     dict(
         external_id="e2e-2",
@@ -56,6 +59,7 @@ SEED_JOBS = [
         applicants_count=45,
         recruiter_name="Jane Doe",
         recruiter_profile_url="https://linkedin.com/in/jane-doe",
+        contract_type="part_time",
     ),
     dict(
         external_id="e2e-3",
@@ -70,6 +74,7 @@ SEED_JOBS = [
         score_reasoning="Match quasi perfetto.",
         status=Job.Status.CV_GENERATED,
         origin=Job.Origin.COLLECTED,
+        contract_type="full_time",
     ),
     dict(
         external_id="e2e-4",
@@ -84,6 +89,8 @@ SEED_JOBS = [
         score_reasoning="Buona base SQL, manca Power BI.",
         status=Job.Status.APPLICATION_DONE,
         origin=Job.Origin.COLLECTED,
+        salary="$16,75",
+        contract_type="temporary",
     ),
     dict(
         external_id="e2e-5",

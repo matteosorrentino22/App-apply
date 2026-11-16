@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card } from '@/components/ui/card'
 import { DateRangeFields } from '@/components/ui/date-range'
+import ActivityChipsInput from '@/components/ActivityChipsInput'
 import ChipInput from '@/components/ChipInput'
 import CityOnlyAutocomplete from '@/components/CityOnlyAutocomplete'
 
@@ -157,19 +158,30 @@ export default function ExperienceGroupEditor({
                   </label>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`activities-${r._key}`}>{t('onboarding.activities')}</Label>
-                  <ChipInput
+                  {/* Sprint 82: attività come chip modificabili (A15), con il
+                      contatore "n / 15"; le tecnologie restano su ChipInput. */}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Label htmlFor={`activities-${r._key}`}>{t('onboarding.activities')}</Label>
+                    <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground" aria-hidden="true">
+                      {r.bullets.length} / {MAX_BULLETS}
+                    </span>
+                  </div>
+                  <ActivityChipsInput
                     id={`activities-${r._key}`}
                     value={r.bullets}
                     onChange={(bullets) => updateRole(c._key, r._key, { bullets })}
                     placeholder={t('onboarding.activitiesPlaceholder')}
                     maxLength={MAX_BULLET_LENGTH}
+                    maxItems={MAX_BULLETS}
                     flagTooLong={typeof r._key !== 'number'}
+                    describedBy={`activities-hint-${r._key}`}
                   />
-                  <p className="text-xs leading-snug text-muted-foreground">
-                    {t('profileExtras.bulletsHint')
-                      .replace('{max}', MAX_BULLETS)
-                      .replace('{length}', MAX_BULLET_LENGTH)}
+                  <p id={`activities-hint-${r._key}`} className="text-xs leading-snug text-muted-foreground">
+                    {r.bullets.length >= MAX_BULLETS
+                      ? t('profileExtras.activitiesMaxHint')
+                      : `${r.bullets.length > 0 ? `${t('profileExtras.activitiesTapHint')} ` : ''}${t('profileExtras.bulletsHint')
+                          .replace('{max}', MAX_BULLETS)
+                          .replace('{length}', MAX_BULLET_LENGTH)}`}
                   </p>
                 </div>
                 <div className="flex flex-col gap-1.5">

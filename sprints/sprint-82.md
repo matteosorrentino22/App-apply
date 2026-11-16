@@ -1,6 +1,6 @@
 # Sprint 82 — Anteprima PDF degli editor, attività come chip, stipendio e contratto
 
-> **Periodo:** 2026-11-16 · **Branch:** `sprint-82-anteprima-pdf` (da `main` al commit 811e1e2, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** (1) anteprima PDF: correzione implementata, build e lint OK, **da confermare a mano su iPhone e Android**; (2) attività come chip e (3) stipendio e contratto: **progettati e approvati (mockup), da implementare**; merge e deploy non fatti.
+> **Periodo:** 2026-11-16 · **Branch:** `sprint-82-anteprima-pdf` (da `main` al commit 811e1e2, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** (1) anteprima PDF: correzione implementata, build e lint OK, **da confermare a mano su iPhone e Android**; (2) attività come chip e (3) stipendio e contratto: **implementati e verificati** (backend 507/507, e2e 85/85); merge e deploy non fatti.
 
 ## Input
 Segnalazione del committente dopo il rilascio del redesign: nell'editor del CV e della cover letter la scheda "Anteprima" resta **bianca** su iPhone (Safari) e Android (Chrome); su Chrome desktop funziona; con il vecchio design (Sprint 69) funzionava anche da mobile. Indicazione: ripristinare un'altezza esplicita e tenere la proporzione A4 solo da desktop; se non basta, montare l'iframe anche fuori dalla scheda attiva. L'iframe resta; nessuna dipendenza, nessun cambio di API, CSP o PDF.
@@ -33,7 +33,7 @@ iPhone (Safari e app dalla Home) e Android (Chrome): job con CV → "Modifica CV
 
 # Parte 2 — Attività del Profilo come chip (richiesta ID 20)
 
-> **Stato: da implementare.** Mockup approvati dal committente (2026-11-17): `profile-act-chip`, `profile-act-modifica`, `profile-act-errore`, `profile-act-vuoto`, `profile-act-limite`, `desk-profile-act` in `Docs/design/mockups/`.
+> **Stato: implementato** (vedi "Implementazione delle parti 2 e 3" in fondo). Mockup approvati dal committente (2026-11-17): `profile-act-chip`, `profile-act-modifica`, `profile-act-errore`, `profile-act-vuoto`, `profile-act-limite`, `desk-profile-act` in `Docs/design/mockups/`.
 
 ## Cosa deve fare (funzionale)
 - Le **attività** di ogni ruolo sono mostrate come **chip a angoli ridotti** (non più a pillola completa).
@@ -53,7 +53,7 @@ iPhone (Safari e app dalla Home) e Android (Chrome): job con CV → "Modifica CV
 
 # Parte 3 — Stipendio e contratto (richiesta ID 7, ID 15 limitato)
 
-> **Stato: da implementare.** Mockup approvati (2026-11-17): `detail-stipendio-contratto`, `detail-solo-contratto`, `jobs-filtri-contratto`, `jobs-filtri-contratto-attivi`. Decisioni in `SPEC-DELTA.md` A16 e B12.
+> **Stato: implementato** (vedi in fondo). Mockup approvati (2026-11-17): `detail-stipendio-contratto`, `detail-solo-contratto`, `jobs-filtri-contratto`, `jobs-filtri-contratto-attivi`. Decisioni in `SPEC-DELTA.md` A16 e B12.
 
 ## Cosa deve fare (funzionale)
 - **Dettaglio job:** sotto "azienda · località" una riga di chip con **stipendio** (evidenziato, icona banconote) e **tipo di contratto** (neutro, icona valigetta), della stessa dimensione dei chip dei candidati. Si mostra solo il dato presente; senza dati la riga non compare. Lo stipendio è mostrato **come arriva dalla fonte** (nessun periodo, nessuna conversione di valuta).
@@ -81,3 +81,33 @@ iPhone (Safari e app dalla Home) e Android (Chrome): job con CV → "Modifica CV
 5. **Dati storici:** i job già raccolti non hanno il contratto; nessun recupero previsto.
 6. **Test su telefono:** la parte 1 (anteprima) resta da provare a mano su iPhone e Android prima del merge.
 7. Specifiche 01/02: le parti 2 e 3 non sono ancora descritte come as-is; vanno aggiornate nello stesso commit dell'implementazione.
+
+---
+
+# Implementazione delle parti 2 e 3
+
+## Decisioni prese col committente (prima di implementare)
+- **Filtri salvati:** includono i nuovi gruppi Contratto e Stipendio (due campi sul preset, migrazione); i preset salvati prima restano senza (= tutti).
+- **Tipi di contratto:** si salvano tutti i valori della fonte normalizzati (`full_time`, `part_time`, `temporary`, `contract`, `internship`, `volunteer`, `other`) e il dettaglio li mostra tradotti; il filtro propone solo Full-time, Part-time, Temporaneo, come da mockup.
+- **Formato dello stipendio:** come il mockup, uguale in it e en: simbolo della fonte, decimali `.00` tolti, migliaia con il punto, decimali veri con la virgola, due valori uniti da " – " (es. `["$91000.00", "$136500.00"]` → "$91.000 – $136.500"). Nessun periodo, nessuna conversione.
+- **Fonte:** contratto e stipendio solo dalla raccolta Apify; i job importati da link o inseriti a mano restano senza (parser della pagina guest invariato).
+
+## Parte 2 — Attività come chip
+- Nuovo `components/ActivityChipsInput.jsx` (stessa interfaccia di `ChipInput`: lista di stringhe, `maxLength`, `flagTooLong`, più `maxItems`), usato da `ExperienceGroupEditor` per le attività; le **tecnologie restano su `ChipInput`**, invariato.
+- Chip ad angoli ridotti (raggio 10 px, sfondo `primary-soft`), testo troncato a 3 righe (`line-clamp-3`); tocco sul testo = modifica in un riquadro con contatore "n / 400", Annulla / Fatto (Invio conferma, Esc annulla); oltre 400 caratteri bordo e contatore rossi, messaggio e "Fatto" disattivato; ✕ in un'area di 44 px; contatore "n / 15" accanto all'etichetta; a 15 attività il campo è disattivato con il messaggio e il suggerimento "Elimina un'attività…"; senza attività "Nessuna attività inserita.". Vale anche nell'onboarding.
+- Testi (it/en): `profileExtras.activitiesTapHint`, `activitiesEmpty`, `activitiesMaxReached`, `activitiesMaxHint`, `activityEdit`, `activityEditLabel`, `activityDone`, `activityTooLong`; nuovo segnaposto `onboarding.activitiesPlaceholder` ("Scrivi un'attività e premi Invio"). L'etichetta del campo resta "Attività / competenze in questo ruolo" (il mockup dice "Attività": tenuta per non cambiare il testo condiviso con l'onboarding e gli e2e).
+- Nessuna modifica a API, modello o limiti del server.
+
+## Parte 3 — Stipendio e contratto
+- **Bug corretto:** `_normalize_item` leggeva `salary`, campo che la fonte non usa: ora legge `salaryInfo` (`_format_salary`, massimo 255 caratteri) con ripiego su `salary`.
+- **Modello:** `Job.contract_type` (choices `Job.ContractType`), `JobFilterPreset.contract_types` e `has_salary`; migrazione `jobs/0023_contract_type_and_filters` (solo campi nuovi con default vuoto: nessun dato esistente cambia).
+- **Raccolta:** `contract_type` da `contractType` (`_normalize_contract_type`, valore ignoto = vuoto), salvato in `collection.py`.
+- **API:** `JobSerializer.contract_type`; `GET /api/jobs/?contract=<CSV>&salary=yes|no|all` (400 con valori non ammessi, due messaggi nuovi in `gettext` tradotti nel `.po`, `.mo` ricompilato); preset con `contract_types` e `has_salary`.
+- **Frontend:** `JobDetailPage` riga di chip sotto "azienda · località" (stipendio evidenziato con icona banconote, contratto neutro con icona valigetta, solo se presenti; la retribuzione non è più nella riga di testo); `JobFiltersSheet` gruppi Contratto (pillole multiple) e Stipendio (segmenti); `JobListPage` parametri `contract` e `salary` nella query string, conteggio dei filtri attivi, "Azzera filtri", salvataggio e applicazione dei preset; `utils/jobFilters.js` `CONTRACT_TYPES`, `SALARY_VALUES`. **Card di lista invariata.**
+- Dati di prova e2e (`seed_e2e_jobs`): stipendio e contratto su quattro job.
+
+## Verifica (parti 2 e 3)
+- `npm run build` OK; `npx oxlint src e2e` 0 errori, 9 warning (gli stessi); tutte le chiavi usate esistono in it ed en (631).
+- Backend: `manage.py test` in un container usa e getta (`-e DJANGO_DEBUG=true -e REGISTRATION_INVITE_CODE=`): **507 test OK** (19 nuovi in `apps/jobs/test_sprint82.py`); `makemigrations --check` nessuna differenza.
+- **E2e completa** sullo stack usa e getta (un worker, runner limitato a 1,4 GB, anteprima spenta durante la prova): **85/85** in 17 minuti (82 di prima + filtri Contratto e Stipendio con preset, dettaglio con / senza dati, attività come chip). Lo spec di impaginazione (Chromium 360/390/1280, iPhone 13 e iPhone SE in WebKit) passa anche con i chip nel Profilo e nell'onboarding.
+- Le immagini dello stack di prova (`appapply-e2e-*`) sono state ricostruite (`docker compose -p appapply-e2e … build web frontend-build`).

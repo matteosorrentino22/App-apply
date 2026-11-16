@@ -29,7 +29,7 @@ import { Modal, ModalActions, ModalContent, ModalDescription, ModalTitle } from 
 import JobCard from '@/components/JobCard'
 import CollectJobsSheet, { CollectButton } from '@/components/CollectJobsSheet'
 import JobFiltersSheet from '@/components/JobFiltersSheet'
-import { APPLICANTS_RANGES, SCORES, STATUSES } from '../utils/jobFilters'
+import { APPLICANTS_RANGES, CONTRACT_TYPES, SALARY_VALUES, SCORES, STATUSES } from '../utils/jobFilters'
 import ManualJobSheet from '@/components/ManualJobSheet'
 import StatsSummary from '@/components/StatsSummary'
 import { useCostConfirm } from '@/components/CostConfirmDialog'
@@ -45,7 +45,7 @@ const RECRUITER_VALUES = ['yes', 'no']
 const KEEP_EMPTY_PARAMS = ['from', 'to']
 // Filtri azzerati da "Cancella" / "Azzera filtri": tornano ai valori di
 // default (date di oggi, nessun altro filtro). Sezione e ricerca testuale restano.
-const FILTER_PARAMS = ['from', 'to', 'location', 'score', 'status', 'search', 'applicants', 'recruiter']
+const FILTER_PARAMS = ['from', 'to', 'location', 'score', 'status', 'search', 'applicants', 'recruiter', 'contract', 'salary']
 const EMPTY_ICONS = { main: Briefcase, imported: LinkIcon, favorites: Heart, archived: Archive }
 
 function parseList(value, allowed) {
@@ -80,6 +80,10 @@ export default function JobListPage() {
   const location = searchParams.get('location') || ''
   const recruiterParam = searchParams.get('recruiter')
   const recruiterFilter = RECRUITER_VALUES.includes(recruiterParam) ? recruiterParam : 'all'
+  // Sprint 82: contratto (multi) e stipendio (tutti / con / senza).
+  const salaryParam = searchParams.get('salary')
+  const salaryFilter = SALARY_VALUES.includes(salaryParam) ? salaryParam : 'all'
+  const contractParam = searchParams.get('contract') || ''
   const scoreParam = searchParams.get('score') || ''
   const statusParam = searchParams.get('status') || ''
   const searchParam = searchParams.get('search') || ''
@@ -91,6 +95,7 @@ export default function JobListPage() {
   const statuses = useMemo(() => parseList(statusParam, STATUSES), [statusParam])
   const searchFilters = useMemo(() => parseList(searchParam), [searchParam])
   const applicantsRanges = useMemo(() => parseList(applicantsParam, APPLICANTS_RANGES), [applicantsParam])
+  const contractTypes = useMemo(() => parseList(contractParam, CONTRACT_TYPES), [contractParam])
 
   const [savedSearches, setSavedSearches] = useState([])
   const [queryInput, setQueryInput] = useState(query)
@@ -138,6 +143,8 @@ export default function JobListPage() {
     scores.length > 0,
     applicantsRanges.length > 0,
     recruiterFilter !== 'all',
+    contractTypes.length > 0,
+    salaryFilter !== 'all',
   ].filter(Boolean).length
 
   function resetFilters() {
@@ -193,6 +200,8 @@ export default function JobListPage() {
         location,
         applicantsRanges,
         hasRecruiter: recruiterFilter === 'all' ? undefined : recruiterFilter,
+        contractTypes,
+        hasSalary: salaryFilter === 'all' ? undefined : salaryFilter,
       })
       setJobs(data)
     } catch {
@@ -200,7 +209,7 @@ export default function JobListPage() {
     } finally {
       setLoading(false)
     }
-  }, [section, dateFrom, dateTo, scores, statuses, searchFilters, query, location, applicantsRanges, recruiterFilter, t])
+  }, [section, dateFrom, dateTo, scores, statuses, searchFilters, query, location, applicantsRanges, recruiterFilter, contractTypes, salaryFilter, t])
 
   useEffect(() => {
     load()
@@ -246,6 +255,8 @@ export default function JobListPage() {
         location,
         applicants_ranges: applicantsRanges,
         has_recruiter: recruiterFilter === 'all' ? '' : recruiterFilter,
+        contract_types: contractTypes,
+        has_salary: salaryFilter === 'all' ? '' : salaryFilter,
       })
       setFilterPresets((current) => [...current, created])
       setShowSavePresetDialog(false)
@@ -269,6 +280,8 @@ export default function JobListPage() {
       location: preset.location || '',
       applicants: preset.applicants_ranges || [],
       recruiter: preset.has_recruiter || '',
+      contract: preset.contract_types || [],
+      salary: preset.has_salary || '',
     })
     setLocationInput(preset.location || '')
   }
@@ -496,7 +509,7 @@ export default function JobListPage() {
         open={filtersOpen}
         onOpenChange={setFiltersOpen}
         section={section}
-        filters={{ dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter }}
+        filters={{ dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter, contractTypes, salaryFilter }}
         onChange={updateParams}
         locationInput={locationInput}
         onLocationChange={handleLocationChange}
