@@ -681,7 +681,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - **competenze e certificazioni**: si scelgono con le checkbox **solo tra quelle del profilo**.
 
 **Anteprima e salvataggio.**
-- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠". Dallo Sprint 76 si vede nella scheda **Anteprima** del segmento (prima accanto all'editor su desktop e sotto su mobile), in proporzione A4, con la didascalia "Anteprima del PDF reale, aggiornata a ogni modifica."
+- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠". Dallo Sprint 76 si vede nella scheda **Anteprima** del segmento (prima accanto all'editor su desktop e sotto su mobile), con la didascalia "Anteprima del PDF reale, aggiornata a ogni modifica." Da desktop è in proporzione A4; dallo Sprint 82 su telefono ha un'altezza fissa (70 % dello schermo, almeno 420 px), perché con la sola proporzione A4 l'anteprima restava bianca su iPhone e Android.
 - Nell'editor **non c'è un taglio automatico**: se il CV supera una pagina lo si segnala e decide l'utente.
 - **Salvataggio automatico** circa 1 secondo dopo l'ultima modifica, con lo stato "Salvataggio… / Salvato".
 
