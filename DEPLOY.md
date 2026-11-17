@@ -359,6 +359,8 @@ Caddy limita inoltre il corpo delle richieste su `/api/*` a 10 MB.
 - Produzione reale (da luglio 2026): certificato Let's Encrypt emesso da Caddy, stack completo in esecuzione da `docker-compose.prod.yml`.
 - Non ancora verificati in produzione: backup su storage esterno e test di ripristino end-to-end (bucket non configurato, §6).
 - Sprint 67 (in container, prima del deploy): backup locale con rotazione e ripristino da file locale coperti dai test con `pg_dump`/`pg_restore` simulati; non ancora verificati in produzione l'invio reale via Gmail, i profili Bedrock `eu.` e un ripristino reale da backup locale.
+- 2026-11-15, rilascio del redesign (sprint 72–81, `Docs/design/RELEASE.md`): backup del database e dei file, fast-forward di `main` (tag `pre-redesign` sul commit precedente), build a bassa priorità, `up -d` da `docker-compose.prod.yml`, migrazioni dello Sprint 77 applicate, Caddy ricreato. Verificati: HTTPS e sito 200, pagine legali con il titolare, accesso di un utente esistente con la riaccettazione dell'informativa 1.1, log senza errori, Beat con le raccolte automatiche ogni 15 minuti e senza ciclo delle 02:00 né notifica delle 10:00, nessuna raccolta automatica preimpostata. Interruzioni: API circa 45 s durante l'avvio di `web`, sito circa 3 s alla ricreazione di Caddy.
+- 2026-11-17, rilascio dello Sprint 82: stessa procedura (backup, fast-forward, build, `up -d`); migrazione `jobs/0023` (solo campi nuovi con default vuoto).
 
 ## 10. Istanza di anteprima (dati finti, dal telefono)
 

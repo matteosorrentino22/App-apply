@@ -26,6 +26,9 @@ Numero: `git log` e `ls sprints/` arrivano a 81.
 ## Da provare a mano (anteprima, dal telefono)
 iPhone (Safari e app dalla Home) e Android (Chrome): job con CV → "Modifica CV" → scheda "Anteprima"; stesso per "Modifica Cover Letter". Atteso: PDF visibile (almeno la prima pagina) in un riquadro alto circa 2/3 dello schermo; tornando a "Modifica", cambiando un campo e riaprendo "Anteprima" il PDF si aggiorna.
 
+## Esito della prova a mano (parte 1)
+- 2026-11-17, committente: su iPhone l'anteprima **resta bianca** anche con l'altezza esplicita; forse dipende dal browser. Il committente decide di rilasciare comunque lo sprint (la correzione non peggiora il desktop) e di riferire dopo la prova sull'app vera. Passo successivo se resta bianca: seconda opzione (iframe montato sempre) o un ripiego "Apri il PDF" (da decidere).
+
 ## Cosa manca / note
 - Se l'anteprima resta bianca su uno dei due telefoni: seconda opzione (iframe montato sempre) o, su Android, un link "Apri il PDF" al blob URL come ripiego (aggiunta di interfaccia da decidere col committente).
 
