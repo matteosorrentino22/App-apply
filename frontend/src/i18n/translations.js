@@ -466,6 +466,8 @@ export const translations = {
       pageCountOk: '1 pagina ✓',
       pageCountWarning: '{count} pagine ⚠',
       previewUnavailable: 'Anteprima non disponibile al momento.',
+      // Sprint 83: browser senza visualizzatore PDF (Chrome per Android).
+      previewNoViewer: 'L’anteprima del PDF non è disponibile in questo browser. Il PDF finale si scarica con «Genera PDF finale».',
       finalizeButton: 'Genera PDF finale',
       finalizing: 'Generazione…',
       finalizeSuccess: 'CV finale generato.',
@@ -1293,6 +1295,7 @@ export const translations = {
       pageCountOk: '1 page ✓',
       pageCountWarning: '{count} pages ⚠',
       previewUnavailable: 'Preview not available right now.',
+      previewNoViewer: 'The PDF preview isn’t available in this browser. Download the final PDF with “Generate final PDF”.',
       finalizeButton: 'Generate final PDF',
       finalizing: 'Generating…',
       finalizeSuccess: 'Final CV generated.',

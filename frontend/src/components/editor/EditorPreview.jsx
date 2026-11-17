@@ -14,6 +14,18 @@ import { Banner } from '@/components/ui/banner'
 export default function EditorPreview({ previewUrl, unavailable, title }) {
   const { t } = useLanguage()
   if (unavailable) return <Banner variant="note" icon={Info}>{t('cvEditor.previewUnavailable')}</Banner>
+  // Sprint 83: Chrome per Android non ha un visualizzatore PDF incorporato
+  // (`navigator.pdfViewerEnabled === false`): l'iframe resterebbe bianco e un
+  // link scaricherebbe il file. Al suo posto un avviso; l'indicatore delle
+  // pagine in testata resta. Su iPhone l'iframe funziona dallo Sprint 83
+  // (header frame-ancestors 'self', Caddyfile.prod).
+  if (typeof navigator !== 'undefined' && navigator.pdfViewerEnabled === false) {
+    return (
+      <Banner variant="note" icon={Info} data-testid="preview-no-viewer">
+        {t('cvEditor.previewNoViewer')}
+      </Banner>
+    )
+  }
   return (
     <div className="flex w-full flex-col gap-3">
       {previewUrl ? (

@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone e Sprint 82 attività come chip, stipendio e contratto del redesign UI, Sprint 77 raccolta automatica Pro)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone e Sprint 82 attività come chip, stipendio e contratto e Sprint 83 anteprima PDF su iPhone e Android del redesign UI, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -686,7 +686,7 @@ Le statistiche si caricano all'apertura della lista e si ricaricano dopo una rac
 - **competenze e certificazioni**: si scelgono con le checkbox **solo tra quelle del profilo**.
 
 **Anteprima e salvataggio.**
-- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠". Dallo Sprint 76 si vede nella scheda **Anteprima** del segmento (prima accanto all'editor su desktop e sotto su mobile), con la didascalia "Anteprima del PDF reale, aggiornata a ogni modifica." Da desktop è in proporzione A4; dallo Sprint 82 su telefono ha un'altezza fissa (70 % dello schermo, almeno 420 px), perché con la sola proporzione A4 l'anteprima restava bianca su iPhone e Android.
+- L'**anteprima** è il PDF reale, aggiornato a ogni modifica, con l'indicatore "1 pagina ✓" oppure "N pagine ⚠". Dallo Sprint 76 si vede nella scheda **Anteprima** del segmento (prima accanto all'editor su desktop e sotto su mobile), con la didascalia "Anteprima del PDF reale, aggiornata a ogni modifica." Da desktop è in proporzione A4; dallo Sprint 82 su telefono ha un'altezza fissa (70 % dello schermo, almeno 420 px). Dallo Sprint 83 l'anteprima si vede anche su iPhone (era bloccata da un header di sicurezza); nei browser senza visualizzatore PDF incorporato, come Chrome per Android, al posto dell'anteprima c'è l'avviso "L'anteprima del PDF non è disponibile in questo browser. Il PDF finale si scarica con «Genera PDF finale»."
 - Nell'editor **non c'è un taglio automatico**: se il CV supera una pagina lo si segnala e decide l'utente.
 - **Salvataggio automatico** circa 1 secondo dopo l'ultima modifica, con lo stato "Salvataggio… / Salvato".
 

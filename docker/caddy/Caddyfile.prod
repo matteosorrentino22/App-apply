@@ -36,14 +36,17 @@
 	# negli stili perché Radix inserisce elementi <style> a runtime; blob: in
 	# frame-src/object-src per l'anteprima PDF degli editor (iframe su un URL
 	# blob: — i documenti blob ereditano questa policy); data:/blob: nelle
-	# immagini. Dettagli in DEPLOY.md §8.
+	# immagini. Sprint 83: frame-ancestors 'self' e X-Frame-Options SAMEORIGIN
+	# (prima 'none' / DENY): il PDF in blob eredita frame-ancestors e con
+	# 'none' Safari su iPhone non lo mostrava nell'iframe dell'anteprima.
+	# Resta vietato incorniciare l'app da altri siti. Dettagli in DEPLOY.md §8.
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
+		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; object-src blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src blob:; object-src blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 

@@ -133,7 +133,11 @@ test.describe('editor su mobile', () => {
 
     // Anteprima: stesso meccanismo (PDF del server in un iframe) o avviso.
     await page.getByText('Anteprima', { exact: true }).click()
-    await expect(page.getByTitle('Anteprima del CV').or(page.getByText('Anteprima non disponibile al momento.'))).toBeVisible({
+    // Sprint 83: il Chromium headless dei test non ha un visualizzatore PDF
+    // (pdfViewerEnabled false): qui compare l'avviso al posto dell'iframe.
+    await expect(
+      page.getByTitle('Anteprima del CV').or(page.getByText('Anteprima non disponibile al momento.')).or(page.getByTestId('preview-no-viewer')),
+    ).toBeVisible({
       timeout: 20000,
     })
     await page.getByText('Modifica', { exact: true }).click()
@@ -212,4 +216,33 @@ test('desktop: cover letter con la chat in colonna accanto all’editor', async 
   await page.getByRole('button', { name: 'Rimuovi paragrafo' }).last().click()
   await expect(page.getByTestId('cover-letter-paragraph')).toHaveCount(4)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280)
+})
+
+// Sprint 83: browser senza visualizzatore PDF incorporato (Chrome per
+// Android, navigator.pdfViewerEnabled === false): avviso al posto dell'iframe.
+test.describe('anteprima senza visualizzatore PDF', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('mostra l’avviso invece dell’iframe', async ({ page, request, baseURL }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'pdfViewerEnabled', { get: () => false, configurable: true })
+    })
+    const jobId = await setupEditorUser(page, request, baseURL)
+    await openCvEditor(page, jobId)
+    await page.getByText('Anteprima', { exact: true }).click()
+    await expect(page.getByTestId('preview-no-viewer')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('preview-no-viewer')).toContainText('non è disponibile in questo browser')
+    await expect(page.getByTitle('Anteprima del CV')).toHaveCount(0)
+  })
+
+  test('con il visualizzatore PDF resta l’iframe', async ({ page, request, baseURL }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'pdfViewerEnabled', { get: () => true, configurable: true })
+    })
+    const jobId = await setupEditorUser(page, request, baseURL)
+    await openCvEditor(page, jobId)
+    await page.getByText('Anteprima', { exact: true }).click()
+    await expect(page.getByTitle('Anteprima del CV').or(page.getByText('Anteprima non disponibile al momento.'))).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('preview-no-viewer')).toHaveCount(0)
+  })
 })
