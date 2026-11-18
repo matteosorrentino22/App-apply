@@ -96,6 +96,8 @@ Domande della scheda, con la risposta data prima di scrivere il codice (2026-11-
 - `ui/action-bar.jsx`: l'altezza della barra si misura con `offsetHeight` (unità CSS) invece che con il rettangolo sullo schermo, già ingrandito dallo zoom.
 - **Correzione trovata dai test:** la lista non scarta più le risposte arrivate fuori ordine (con filtri cambiati in fretta una risposta lenta poteva sovrascrivere quella più recente: il test dei filtri salvati falliva a volte).
 
+**Memoria di gunicorn** (richiesta del committente con l'OK al rilascio, 2026-11-18): in `docker-compose.prod.yml` il `web` gira con `--max-requests 300 --max-requests-jitter 60`. Ogni worker riparte dopo 300–360 richieste: con pochi utenti è qualche volta al giorno, abbastanza per contenere la crescita (fino a 430 MB per worker dopo un giorno) senza ripartenze frequenti. Con i worker sync la ripartenza avviene solo dopo la fine della richiesta in corso, quindi una generazione o una raccolta manuale fino a 30 minuti non viene interrotta; il jitter evita che i 4 worker ripartano insieme. Nessuna libreria nuova.
+
 ## Verifica
 - Backend: suite completa **528 test OK** (con `DJANGO_DEBUG=true`, `REGISTRATION_INVITE_CODE=` vuoto), di cui 21 nuovi in `apps/searches/test_sprint84.py`; `makemigrations --check` senza differenze; catalogo inglese senza voci vuote o `fuzzy`.
 - Migrazione `searches/0004` provata su una copia usa e getta del backup di produzione (vedi sopra), poi cancellata.

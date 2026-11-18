@@ -47,7 +47,12 @@ services:
     # richieste che possono restare in corso a lungo, più worker liberi
     # riducono il rischio che due utenti in contemporanea saturino il pool
     # (costo RAM osservato trascurabile, ~65MB/worker su questo VPS).
-    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 1800"
+    # --max-requests 300 --max-requests-jitter 60 (Sprint 84): dopo 300–360
+    # richieste ogni worker riparte, perché la memoria dei worker cresce
+    # (generazione PDF, AI: 230–430 MB l'uno dopo un giorno). La ripartenza
+    # avviene solo a richiesta finita (worker sync): una generazione da 30
+    # minuti non viene interrotta; il jitter evita che ripartano insieme.
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 1800 --max-requests 300 --max-requests-jitter 60"
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/mediafiles

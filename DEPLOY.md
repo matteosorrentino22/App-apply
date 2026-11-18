@@ -14,7 +14,7 @@ Un unico VPS Linux (1 vCPU, ~4 GB RAM) con Docker Engine + plugin Compose. Tutto
 |---|---|---|
 | `db` | `postgres:16-alpine` | Database (volume `postgres_data`) |
 | `redis` | `redis:7-alpine` | Broker/result backend Celery (db 0/1) e cache Django condivisa (db 2: throttling, limite login admin, cache autocomplete) |
-| `web` | `./backend` | `migrate` + `collectstatic` all'avvio, poi `gunicorn --workers 4 --timeout 1800` |
+| `web` | `./backend` | `migrate` + `collectstatic` all'avvio, poi `gunicorn --workers 4 --timeout 1800 --max-requests 300 --max-requests-jitter 60` |
 | `worker` | `./backend` (stessa immagine) | `celery worker` — concorrenza = n. CPU (oggi 1) |
 | `beat` | `./backend` (stessa immagine) | `celery beat` con `DatabaseScheduler` (task schedulati salvati nel DB) |
 | `frontend-build` | `./frontend` | One-shot: `npm run build` della PWA nel volume `frontend_dist`, poi termina |
@@ -22,7 +22,7 @@ Un unico VPS Linux (1 vCPU, ~4 GB RAM) con Docker Engine + plugin Compose. Tutto
 
 `web`, `worker` e `beat` girano come utente non privilegiato `app` (**uid 1000**, `backend/Dockerfile`, Sprint 66): codice di root in sola lettura, scrivibili solo `/app/staticfiles`, `/app/mediafiles` e `/app/backups` (volume `local_backups` dei backup locali, montato su `web` e `worker`, Sprint 67). Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 × 10 MB per container).
 
-Perché `--timeout 1800` e 4 worker gunicorn: la **raccolta manuale** ("Collect now") esegue raccolta + scoring in sincrono dentro la richiesta HTTP (fino a ~100 job, scoring in parallelo con `SCORING_CONCURRENCY=5`); con il timeout di default i worker venivano uccisi a metà lasciando job senza punteggio (Sprint 45). Stesso rischio per generazione CV/cover letter (Sprint 44).
+Perché `--timeout 1800` e 4 worker gunicorn: la **raccolta manuale** ("Collect now") esegue raccolta + scoring in sincrono dentro la richiesta HTTP (fino a ~100 job, scoring in parallelo con `SCORING_CONCURRENCY=5`); con il timeout di default i worker venivano uccisi a metà lasciando job senza punteggio (Sprint 45). Stesso rischio per generazione CV/cover letter (Sprint 44). Dallo Sprint 84 `--max-requests 300 --max-requests-jitter 60`: ogni worker riparte dopo 300–360 richieste, perché la sua memoria cresce nel tempo (il 2026-11-17, dopo 25 ore, `web` occupava 1,25 GiB con worker da 230 a 430 MB). Con worker sync la ripartenza avviene solo dopo aver finito la richiesta in corso: le operazioni lunghe non vengono interrotte; il jitter evita che i 4 worker ripartano insieme.
 
 Dipendenze di sistema nell'immagine backend (`backend/Dockerfile`): librerie Pango/Cairo per WeasyPrint, `postgresql-client` (`pg_dump`/`pg_restore` per backup/ripristino), **`fonts-crosextra-caladea`** (font compatibile Cambria usato dal template CV — senza, Pango ricade su DejaVu; Sprint 52).
 

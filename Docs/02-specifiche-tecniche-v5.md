@@ -98,7 +98,7 @@ La PWA React è un progetto separato (`frontend/`) compilato in file statici ser
 
 | Processo | Comando | Cosa fa |
 |---|---|---|
-| `web` | `gunicorn config.wsgi:application --workers 4 --timeout 1800` | Risponde a tutte le richieste della PWA. **Esegue in modo sincrono** anche le operazioni lente richieste dall'utente: generazione di CV, cover letter e messaggi di networking, messaggi delle chat degli editor, import da link e creazione manuale (con scoring), raccolta manuale "Collect now" (raccolta + scoring di tutte le ricerche attive), parsing del CV caricato. |
+| `web` | `gunicorn config.wsgi:application --workers 4 --timeout 1800 --max-requests 300 --max-requests-jitter 60` | Risponde a tutte le richieste della PWA. **Esegue in modo sincrono** anche le operazioni lente richieste dall'utente: generazione di CV, cover letter e messaggi di networking, messaggi delle chat degli editor, import da link e creazione manuale (con scoring), raccolta manuale "Collect now" (raccolta + scoring di tutte le ricerche attive), parsing del CV caricato. |
 | `worker` | `celery -A config worker` | Esegue i task schedulati da Beat (raccolte automatiche Pro, promemoria di inattività, backup) e, dallo Sprint 67, l'invio delle email di servizio accodate dal `web`. Concorrenza = numero di CPU (oggi 1). |
 | `beat` | `celery -A config beat` con `DatabaseScheduler` | Fa partire i task alle ore previste; le pianificazioni stanno nel DB e sono modificabili da Admin (§5.1, §5.5, §8.4). |
 
@@ -993,7 +993,7 @@ In produzione si usa **solo** `docker-compose.prod.yml` (mai mescolato con `dock
 |---|---|---|
 | `db` | `postgres:16-alpine` | Database, volume `postgres_data`, healthcheck `pg_isready` |
 | `redis` | `redis:7-alpine` | Broker Celery (db 0/1) e cache Django (db 2: throttling) |
-| `web` | `./backend` | All'avvio `migrate` + `collectstatic`, poi `gunicorn --workers 4 --timeout 1800`; volumi `static_data`, `media_data`, `local_backups` (Sprint 67, letto da `restore_backup`) |
+| `web` | `./backend` | All'avvio `migrate` + `collectstatic`, poi `gunicorn --workers 4 --timeout 1800 --max-requests 300 --max-requests-jitter 60`; volumi `static_data`, `media_data`, `local_backups` (Sprint 67, letto da `restore_backup`) |
 | `worker` | `./backend` | `celery worker` (task di Beat ed email di servizio); volumi `media_data`, `local_backups` (Sprint 67, scritto dal backup) |
 | `beat` | `./backend` | `celery beat` (`DatabaseScheduler`) |
 | `frontend-build` | `./frontend` | One-shot: `npm run build` nel volume `frontend_dist`, poi termina |
@@ -1001,7 +1001,7 @@ In produzione si usa **solo** `docker-compose.prod.yml` (mai mescolato con `dock
 
 Tutti i servizi hanno la rotazione dei log Docker (`json-file`, 5 file da 10 MB per container, Sprint 66). `web`, `worker` e `beat` girano come utente non privilegiato `app` (uid 1000, `backend/Dockerfile`): il codice è di root e in sola lettura, scrivibili solo `/app/staticfiles`, `/app/mediafiles` e (Sprint 67) `/app/backups` (`0700`; un'eventuale cartella `backups/` locale non entra nell'immagine, esclusa da `.dockerignore`); il volume `local_backups` non è montato da `caddy`, quindi i backup non sono mai serviti; `pg_dump` del backup e WeasyPrint funzionano senza privilegi. I volumi `media_data`/`static_data` creati prima dello Sprint 66 vanno passati a uid 1000 una volta (`DEPLOY.md` §4.5).
 
-`web`, `worker` e `beat` condividono la stessa immagine: dopo una modifica al backend vanno ricostruiti tutti e tre. Il timeout di 1800 s e i 4 worker gunicorn servono alle operazioni sincrone (raccolta manuale con decine di job da scorare, generazioni): con 4 worker al massimo 4 operazioni lunghe possono essere in corso contemporaneamente su tutto il sito.
+`web`, `worker` e `beat` condividono la stessa immagine: dopo una modifica al backend vanno ricostruiti tutti e tre. Il timeout di 1800 s e i 4 worker gunicorn servono alle operazioni sincrone (raccolta manuale con decine di job da scorare, generazioni): con 4 worker al massimo 4 operazioni lunghe possono essere in corso contemporaneamente su tutto il sito. Dallo Sprint 84 ogni worker riparte dopo 300–360 richieste (`--max-requests 300 --max-requests-jitter 60`, nessuna libreria nuova) per contenere la crescita della memoria (1,25 GiB per `web` dopo un giorno, misurato il 2026-11-17): il worker sync finisce la richiesta in corso prima di uscire, quindi una generazione da 30 minuti non viene interrotta, e il master ne avvia subito uno nuovo.
 
 ### 8.3 Caddy per HTTPS
 
