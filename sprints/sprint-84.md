@@ -1,6 +1,6 @@
 # Sprint 84 — Ricerche su più città, modalità di lavoro, lavoro dei desideri, dimensione del testo
 
-> **Periodo:** 2026-11-17 · **Branch:** `sprint-84-ricerche-desiderio` (da `main` al commit 9a4055e, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** **implementato**; test backend ed e2e verdi (vedi Verifica); da provare dal telefono sull'anteprima; **merge e deploy non fatti**.
+> **Periodo:** 2026-11-17 · **Branch:** `sprint-84-ricerche-desiderio` (da `main` al commit 9a4055e, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** **rilasciato in produzione il 2026-11-18** (con l'OK del committente); da provare dal telefono.
 
 ## Input
 Richieste del committente nel tracking: ID 15 (filtro remote/ibrido nella lista), ID 16 (ricerca più ampia di una città), ID 18 (ricerca "a parole" del lavoro desiderato), ID 27 (modalità di lavoro come opzione Pro della ricerca), ID 28 (testo troppo piccolo nell'app aggiunta alla Home dell'iPhone, dove non c'è lo zoom di Safari).
@@ -113,3 +113,6 @@ Domande della scheda, con la risposta data prima di scrivere il codice (2026-11-
 - I costi reali (chiamate Apify per città, token dello scoring con il desiderio) vanno misurati dopo il rilascio.
 - I job raccolti prima dello sprint non hanno la modalità né l'etichetta: nessuna rivalutazione dello storico (una chiamata AI per job).
 - Rilascio: `DEPLOY.md` §4.11 (migrazioni `searches/0004` e `jobs/0024`, informativa 1.2).
+
+## Rilascio (2026-11-18)
+Procedura di `DEPLOY.md` §4.11: backup del database (task di backup, dump del giorno nel volume dei backup), tag `pre-sprint84` delle immagini per un ritorno rapido, fast-forward di `main`, build e `up -d` da `docker-compose.prod.yml`. Migrazioni `jobs/0024` e `searches/0004` applicate: 86 ricerche (60 attive), tutte con città e paese. Informativa 1.2 servita (gli utenti la riaccettano al prossimo accesso). Gunicorn con `--max-requests 300 --max-requests-jitter 60`. Dopo il rilascio: home e API 200, nuovo frontend servito, tutti i container da `docker-compose.prod.yml`, `web` a circa 340 MiB (prima 1,25 GiB dopo un giorno acceso).
