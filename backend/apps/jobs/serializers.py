@@ -7,7 +7,7 @@ from apps.common.files import signed_document_url
 from apps.cv.cover_letter_draft import is_cover_letter_draft_outdated
 from apps.cv.draft import is_cv_draft_outdated
 
-from .list_service import APPLICANTS_RANGES, FILTERABLE_CONTRACT_TYPES, FILTERABLE_STATUSES
+from .list_service import APPLICANTS_RANGES, FILTERABLE_CONTRACT_TYPES, FILTERABLE_STATUSES, FILTERABLE_WORK_MODES
 from .models import Job, JobFilterPreset
 
 # Caratteri non ammessi nei nomi file sui filesystem/browser più comuni:
@@ -141,6 +141,8 @@ class JobSerializer(serializers.ModelSerializer):
             "published_at",
             "salary",
             "contract_type",
+            "work_mode",
+            "is_wish_match",
             "matched_search",
             "applicants_count",
             "applicants_bucket",
@@ -263,6 +265,7 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
             "has_recruiter",
             "contract_types",
             "has_salary",
+            "work_modes",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
@@ -285,7 +288,7 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
 
     def validate_search_ids(self, value):
         if not isinstance(value, list) or not all(
-            item == "none" or (isinstance(item, str) and item.isdigit()) for item in value
+            item in ("none", "wish") or (isinstance(item, str) and item.isdigit()) for item in value
         ):
             raise serializers.ValidationError(_('Deve essere una lista di "none" e/o id (stringa) di ricerche salvate.'))
         return value
@@ -303,6 +306,11 @@ class JobFilterPresetSerializer(serializers.ModelSerializer):
     def validate_contract_types(self, value):
         if not isinstance(value, list) or not set(value) <= set(FILTERABLE_CONTRACT_TYPES):
             raise serializers.ValidationError(_("Valori ammessi: %(values)s.") % {"values": ", ".join(FILTERABLE_CONTRACT_TYPES)})
+        return value
+
+    def validate_work_modes(self, value):
+        if not isinstance(value, list) or not set(value) <= set(FILTERABLE_WORK_MODES):
+            raise serializers.ValidationError(_("Valori ammessi: %(values)s.") % {"values": ", ".join(FILTERABLE_WORK_MODES)})
         return value
 
     def validate_has_salary(self, value):

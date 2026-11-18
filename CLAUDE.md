@@ -87,10 +87,14 @@ Il redesign è documentato in `Docs/design/` (`README.md`, `DESIGN.md`, `SCREENS
   senza segnalarlo esplicitamente
 - Non reintrodurre il download CV in Word (escluso dall'MVP — solo PDF)
 - Non implementare cache offline o sincronizzazione dati sul dispositivo nella PWA ("apertura lista immediata" = reattività dell'API, non cache locale)
-- Non introdurre filtri di ricerca oltre keywords, location e tipo ricerca
-  (Job role keyword / Company — introdotto sprint-39, unica deviazione
-  esplicita accettata da questo vincolo, per poter usare `companyInclude`
-  lato Apify sulle ricerche Company: vedi `sprints/sprint-39.md`)
+- Non introdurre filtri di ricerca oltre keywords, location e tipo ricerca.
+  Deroghe esplicite accettate dal committente: il tipo ricerca (Job role
+  keyword / Company, sprint-39, per usare `companyInclude` lato Apify);
+  dallo Sprint 84 (SPEC-DELTA A17–A19) più città per ricerca con raggio fisso
+  di 25 miglia, la **modalità di lavoro** (Qualsiasi / Remoto / Ibrido / In
+  sede, solo Pro) e la ricerca nascosta del **lavoro dei desideri** (solo
+  Pro, keyword ricavate dall'AI e non mostrate). Ogni altro filtro di ricerca
+  resta escluso
 - Non aggiungere stati del job oltre ai tre stabili (nuovo, CV generato, candidatura fatta) più il transitorio (CV in generazione)
 - Non far scalare due volte lo stesso massimale/credito per la stessa azione (vedi guardia di concorrenza sulla generazione CV, §5.2 tecniche)
 

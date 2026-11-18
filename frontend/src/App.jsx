@@ -15,6 +15,8 @@ import SettingsPage from './pages/settings/SettingsPage'
 import SearchesPage from './pages/settings/SearchesPage'
 import LimitsPage from './pages/settings/LimitsPage'
 import PrivacyPage from './pages/settings/PrivacyPage'
+import WishPage from './pages/settings/WishPage'
+import TextSizePage from './pages/settings/TextSizePage'
 import ProfilePage from './pages/ProfilePage'
 import LegalPage from './pages/LegalPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
@@ -132,6 +134,22 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <PrivacyPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/wish"
+                  element={
+                    <ProtectedRoute>
+                      <WishPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/text-size"
+                  element={
+                    <ProtectedRoute>
+                      <TextSizePage />
                     </ProtectedRoute>
                   }
                 />

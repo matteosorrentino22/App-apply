@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { FileText, Gauge, Globe, ImageIcon, Languages, Lock, Mail, RefreshCw, Search, Shield } from 'lucide-react'
+import { FileText, Gauge, Globe, ImageIcon, Languages, Lock, Mail, RefreshCw, Search, Shield, Star, Type } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useLanguage } from '../../i18n/LanguageContext'
 import { updateMe } from '../../api/auth'
-import { fetchSearches } from '../../api/searches'
+import { fetchJobWish, fetchSearches, fetchSearchLimits } from '../../api/searches'
+import { getTextSize } from '@/lib/textSize'
 import { ApiError } from '../../api/client'
 import { SUPPORTED_LANGUAGES } from '../../i18n/translations'
 import { useToast } from '@/components/ToastProvider'
@@ -79,6 +80,8 @@ export default function SettingsPage() {
   const { user, refreshUser } = useAuth()
   const { showToast } = useToast()
   const [searches, setSearches] = useState(null)
+  const [limits, setLimits] = useState(null)
+  const [wish, setWish] = useState(null)
   const [sheet, setSheet] = useState(null)
   // Stato ottimistico (come prima): il controllo risponde subito al tocco.
   const [cvLanguageMode, setCvLanguageMode] = useState(user?.cv_language_mode)
@@ -91,7 +94,15 @@ export default function SettingsPage() {
     fetchSearches()
       .then(setSearches)
       .catch(() => setSearches([]))
-  }, [])
+    fetchSearchLimits()
+      .then(setLimits)
+      .catch(() => setLimits(null))
+    if (user?.plan === 'pro') {
+      fetchJobWish()
+        .then(setWish)
+        .catch(() => setWish(null))
+    }
+  }, [user?.plan])
 
   async function handleSettingChange(patch) {
     try {
@@ -121,14 +132,22 @@ export default function SettingsPage() {
 
   const isPro = user.plan === 'pro'
   const activeSearches = (searches || []).filter((search) => search.is_active).length
+  // Sprint 84 (A17): per i Pro ogni città attiva conta come una ricerca attiva.
   const searchesSubtitle =
     searches == null
       ? ''
-      : activeSearches === 0
+      : isPro && limits
+        ? t('settings.activeCitiesOf').replace('{used}', limits.active_cities).replace('{max}', limits.max_active_cities)
+        : activeSearches === 0
         ? t('settings.searchesNoneActive')
         : activeSearches === 1
           ? t('settings.searchesOneActive')
           : t('settings.searchesManyActive').replace('{count}', activeSearches)
+  const wishSubtitle = !isPro
+    ? t('settings.wishProOnly')
+    : !wish?.exists
+      ? t('settings.wishNotSet')
+      : `${wish.is_active ? t('settings.wishOn') : t('settings.wishOff')} · ${wish.cities.join(', ')}`
   const autoOn = isPro && user.auto_collection_enabled
   const autoTime = user.auto_collection_time || '07:00'
   const cvLanguageOptions = [
@@ -158,6 +177,23 @@ export default function SettingsPage() {
 
       <SettingsGroup title={t('settings.groupSearch')}>
         <SettingsRow icon={Search} title={t('account.searchesTitle')} subtitle={searchesSubtitle} to="/settings/searches" testId="settings-searches" />
+        <SettingsRow
+          icon={Star}
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              {t('wish.title')}
+              {isPro ? null : (
+                <Badge variant="neutral" className="gap-1 text-xs">
+                  <Lock className="h-3 w-3" aria-hidden="true" />
+                  PRO
+                </Badge>
+              )}
+            </span>
+          }
+          subtitle={wishSubtitle}
+          to="/settings/wish"
+          testId="settings-wish"
+        />
         <SettingsRow
           icon={RefreshCw}
           title={
@@ -244,6 +280,17 @@ export default function SettingsPage() {
 
       <SettingsGroup title={t('settings.groupApp')}>
         <NotificationsRow enabled={notificationsEnabled} onPreferenceChange={handleNotificationsPreference} />
+      </SettingsGroup>
+
+      {/* Sprint 84 (A20): gruppo Aspetto con la dimensione del testo; la lingua è spostata qui. */}
+      <SettingsGroup title={t('settings.groupAppearance')}>
+        <SettingsRow
+          icon={Type}
+          title={t('textSize.title')}
+          subtitle={t(`textSize.option_${getTextSize()}`)}
+          to="/settings/text-size"
+          testId="settings-text-size"
+        />
         <SettingsRow
           icon={Languages}
           title={t('account.interfaceLanguage')}

@@ -10,6 +10,7 @@ const badgeVariants = cva(
         neutral: 'bg-chip text-chip-foreground',
         success: 'bg-success-soft text-success',
         destructive: 'bg-destructive-soft text-destructive-text',
+        wish: 'bg-wish-soft font-bold text-wish',
       },
     },
     defaultVariants: {

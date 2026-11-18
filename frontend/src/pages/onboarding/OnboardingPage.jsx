@@ -14,6 +14,7 @@ import { getLanguageLevelOptions, getLanguageNameOptions } from '../../utils/lan
 import ExperienceGroupEditor from '../../components/ExperienceGroupEditor'
 import EducationListEditor, { emptyEducationRow } from '../../components/EducationListEditor'
 import CityAutocomplete from '../../components/CityAutocomplete'
+import CityChipsField from '../../components/CityChipsField'
 import { AlertTriangle, Info, Upload } from 'lucide-react'
 import { ActionBar } from '@/components/ui/action-bar'
 import { Banner } from '@/components/ui/banner'
@@ -165,7 +166,8 @@ export default function OnboardingPage() {
     languages: [],
   })
 
-  const [search, setSearch] = useState({ search_type: 'job_role', keywords: '', city: '', country: '' })
+  // Sprint 84: paese + città (una sola nell'onboarding, come sul Free).
+  const [search, setSearch] = useState({ search_type: 'job_role', keywords: '', country: '', cities: [] })
 
   async function handlePreferencesSubmit(event) {
     event.preventDefault()
@@ -590,12 +592,14 @@ export default function OnboardingPage() {
               required
             />
           </Field>
-          <CityAutocomplete
-            cityId="search-city"
-            countryId="search-country"
-            city={search.city}
+          <CityChipsField
+            idPrefix="onboarding-search"
             country={search.country}
-            onChange={({ city, country }) => setSearch({ ...search, city, country })}
+            onCountryChange={(country) => setSearch({ ...search, country, cities: [] })}
+            cities={search.cities}
+            onCitiesChange={(cities) => setSearch({ ...search, cities })}
+            maxCities={1}
+            hint={t('searches.citiesHintFree')}
           />
         </form>
       )}

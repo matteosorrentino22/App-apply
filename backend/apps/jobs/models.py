@@ -80,6 +80,21 @@ class Job(models.Model):
 
     contract_type = models.CharField(max_length=20, choices=ContractType.choices, blank=True, default="")
 
+    # Modalità di lavoro (Sprint 84, SPEC-DELTA A18): ricavata dall'AI durante
+    # lo scoring per tutti i job raccolti; se l'AI non la trova vale quella
+    # della ricerca (se impostata). Vuota = non ancora valutata (job raccolti
+    # prima dello Sprint 84, importati, manuali).
+    class WorkMode(models.TextChoices):
+        REMOTE = "remote", "Remoto"
+        HYBRID = "hybrid", "Ibrido"
+        ON_SITE = "on_site", "In sede"
+        NOT_INDICATED = "not_indicated", "Non indicata"
+
+    work_mode = models.CharField(max_length=20, choices=WorkMode.choices, blank=True, default="")
+    # Etichetta "Desiderio" (Sprint 84, A19): giudizio sì/no severo dell'AI
+    # sull'affinità con il lavoro dei desideri, da qualunque ricerca arrivi.
+    is_wish_match = models.BooleanField(default=False)
+
     # Numero di candidati riportato da LinkedIn (solo raccolta via Apify,
     # sprint corrente): quando l'annuncio è troppo recente/troppo popolare
     # per un numero esatto, LinkedIn mostra una fascia testuale ("Be among
@@ -274,6 +289,8 @@ class JobFilterPreset(models.Model):
     # ("", "yes" o "no", come `has_recruiter`).
     contract_types = models.JSONField(default=list, blank=True)
     has_salary = models.CharField(max_length=3, blank=True, default="")
+    # Sprint 84: modalità di lavoro (codici di `Job.WorkMode`).
+    work_modes = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

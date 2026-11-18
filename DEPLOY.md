@@ -224,6 +224,15 @@ Migrazioni: `accounts/0011` e `0012` (campi della raccolta automatica; dallo Spr
 3. **Verifiche:** Django Admin → *Periodic tasks*: presenti "Raccolte automatiche Pro (ogni 15 minuti)", "Promemoria di inattività" e il backup; assenti "Ciclo notturno…" e "Notifica mattutina…". Admin → *Users*: "auto collection enabled" spento per tutti. Quando un Pro la attiva, il giorno dopo all'orario scelto: `RunLog` `collection` (SUCCESS, o SKIPPED se aveva già raccolto a mano).
 4. **Ritorno indietro** (solo se necessario, prima che i Pro cambino le impostazioni): `migrate jobs 0021` e `migrate notifications 0002` ricreano il ciclo delle 02:00 e la notifica delle 10:00 (il codice va riportato alla versione precedente, perché i task vecchi non esistono più nella nuova).
 
+### 4.11 Rilascio dello Sprint 84 (ricerche su più città, modalità, lavoro dei desideri) — passi una tantum, in ordine
+
+Migrazioni: `searches/0004` (aggiunge `cities`, `work_mode`, `is_wish` e la tabella `JobWish`; **copia la città di ogni ricerca in `cities` e rimuove la colonna `city`**; un paese vuoto è ricavato dalle altre ricerche con la stessa città) e `jobs/0024` (`work_mode` e `is_wish_match` sui job, `work_modes` sui filtri salvati; solo campi nuovi con default). Nessuna variabile d'ambiente nuova (la derivazione delle keyword del desiderio usa `BEDROCK_SCORING_MODEL`). L'informativa passa alla versione **1.2**: tutti gli utenti la riaccettano al primo accesso.
+
+1. **Prima:** backup del database (§6) e verifica di coerenza dello stack (§4.3), in un orario senza raccolte automatiche dei Pro in corso. La migrazione è stata provata su una copia del backup di produzione (tutte le ricerche con una città, nessun paese vuoto).
+2. **Build e avvio** di `web`, `worker`, `beat` e `frontend-build` da `docker-compose.prod.yml` (§4.1): le migrazioni partono con il `web`. Riavviare anche `worker` e `beat` (codice di raccolta e scoring nuovo).
+3. **Verifiche:** Impostazioni → Ricerche salvate: ogni ricerca mostra "città · paese" e lo stato di prima; "Città attive n di 50" per i Pro. Alla prima raccolta dopo il rilascio: `RunLog` `collection` con i gruppi "tipo · città, paese" (eventualmente con la modalità) e job con `work_mode` valorizzato.
+4. **Ritorno indietro** (solo se necessario): `migrate searches 0003` rimette `city` (= prima città di `cities`; le città oltre la prima, il desiderio e le modalità si perdono) e `migrate jobs 0023`; poi il codice della versione precedente.
+
 ## 5. Task schedulati (Celery Beat, `DatabaseScheduler`)
 
 Creati da migrazioni dati (modificabili da Django Admin → Periodic tasks):
@@ -361,6 +370,7 @@ Caddy limita inoltre il corpo delle richieste su `/api/*` a 10 MB.
 - Sprint 67 (in container, prima del deploy): backup locale con rotazione e ripristino da file locale coperti dai test con `pg_dump`/`pg_restore` simulati; non ancora verificati in produzione l'invio reale via Gmail, i profili Bedrock `eu.` e un ripristino reale da backup locale.
 - 2026-11-15, rilascio del redesign (sprint 72–81, `Docs/design/RELEASE.md`): backup del database e dei file, fast-forward di `main` (tag `pre-redesign` sul commit precedente), build a bassa priorità, `up -d` da `docker-compose.prod.yml`, migrazioni dello Sprint 77 applicate, Caddy ricreato. Verificati: HTTPS e sito 200, pagine legali con il titolare, accesso di un utente esistente con la riaccettazione dell'informativa 1.1, log senza errori, Beat con le raccolte automatiche ogni 15 minuti e senza ciclo delle 02:00 né notifica delle 10:00, nessuna raccolta automatica preimpostata. Interruzioni: API circa 45 s durante l'avvio di `web`, sito circa 3 s alla ricreazione di Caddy.
 - 2026-11-17, rilascio dello Sprint 82: stessa procedura (backup, fast-forward, build, `up -d`); migrazione `jobs/0023` (solo campi nuovi con default vuoto).
+- 2026-11-18, test e2e dello Sprint 84 sul VPS: `web`, `worker` e `beat` di produzione fermati per circa 22 minuti per lasciare memoria allo stack e2e usa e getta (il `web` acceso da un giorno occupava oltre 1 GB), poi riavviati da `docker-compose.prod.yml` con verifica 200. Con poca memoria libera, non far girare la suite e2e completa insieme alla produzione.
 - 2026-11-17, prova dell'anteprima PDF su telefono (anteprima, pagina di prova temporanea): con gli header della produzione l'iframe da blob resta bianco su iPhone (Safari) e si vede con `frame-ancestors 'self'`; Chrome per Android non ha un visualizzatore PDF incorporato (`navigator.pdfViewerEnabled` falso). Correzioni nello Sprint 83.
 
 ## 10. Istanza di anteprima (dati finti, dal telefono)

@@ -33,6 +33,10 @@ FILTERABLE_STATUSES = (
 # le tre centrali esistono solo come numero esatto.
 APPLICANTS_RANGES = ("under_25", "25_50", "51_100", "101_200", "over_200")
 
+# Sprint 84: modalità di lavoro filtrabili (i job con modalità vuota, cioè
+# non valutata, restano fuori con il filtro attivo).
+FILTERABLE_WORK_MODES = tuple(Job.WorkMode.values)
+
 # Sprint 82: tutti i codici normalizzati sono accettati dall'API; il
 # pannello Filtri ne propone tre (Full-time, Part-time, Temporaneo).
 FILTERABLE_CONTRACT_TYPES = tuple(Job.ContractType.values)
@@ -77,8 +81,11 @@ def _saved_search_label_q(saved_search):
         # l'ha digitato l'utente.
         return Q(matched_search__iexact=saved_search.keywords)
 
-    location = f"{saved_search.city}, {saved_search.country}"
-    return Q(matched_search=f"{saved_search.keywords} - {location}")
+    # Sprint 84: una ricerca può avere più città.
+    combined = Q(pk__in=[])
+    for city in saved_search.cities:
+        combined |= Q(matched_search=f"{saved_search.keywords} - {city}, {saved_search.country}")
+    return combined
 
 
 def _apply_matched_search_filter(queryset, user, search_ids):
@@ -100,7 +107,12 @@ def _apply_matched_search_filter(queryset, user, search_ids):
     if "none" in search_ids:
         combined |= Q(matched_search="", matched_saved_search__isnull=True)
 
-    numeric_ids = [value for value in search_ids if value != "none"]
+    # Sprint 84 (A19): "wish" = job con l'etichetta Desiderio, da qualunque
+    # ricerca arrivino (non i job della ricerca nascosta in quanto tali).
+    if "wish" in search_ids:
+        combined |= Q(is_wish_match=True)
+
+    numeric_ids = [value for value in search_ids if value not in ("none", "wish")]
     if numeric_ids:
         saved_searches = list(SavedSearch.objects.filter(user=user, pk__in=numeric_ids))
         if saved_searches:
@@ -149,6 +161,13 @@ def _apply_applicants_filter(queryset, applicants_ranges):
     return queryset.filter(combined)
 
 
+def _apply_work_mode_filter(queryset, work_modes):
+    """Sprint 84: OR tra le modalità scelte, AND con gli altri gruppi."""
+    if not work_modes:
+        return queryset
+    return queryset.filter(work_mode__in=work_modes)
+
+
 def _apply_contract_filter(queryset, contract_types):
     """Sprint 82: OR tra i tipi scelti; i job senza contratto (raccolti
     prima dello Sprint 82, importati, manuali) restano fuori con il filtro
@@ -192,6 +211,7 @@ def list_jobs(
     has_recruiter=None,
     contract_types=None,
     has_salary=None,
+    work_modes=None,
 ):
     """Restituisce i Job di `user` per la sezione richiesta, ordinati per
     punteggio decrescente (01-specifiche-funzionali-v4.md §4.5).
@@ -217,6 +237,7 @@ def list_jobs(
         queryset = _apply_recruiter_filter(queryset, has_recruiter)
         queryset = _apply_contract_filter(queryset, contract_types)
         queryset = _apply_salary_filter(queryset, has_salary)
+        queryset = _apply_work_mode_filter(queryset, work_modes)
 
     return queryset.order_by(F("score").desc(nulls_last=True), "-date_collected")
 

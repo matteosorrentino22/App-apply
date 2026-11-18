@@ -57,7 +57,7 @@ function PrivacyIt({ info, version, date, minAge }) {
             file del CV caricato viene letto per compilare il profilo e <strong>non viene conservato</strong>.
           </li>
           <li>
-            <strong>Dati di utilizzo del servizio:</strong> ricerche salvate, offerte raccolte o importate con i relativi
+            <strong>Dati di utilizzo del servizio:</strong> ricerche salvate (paese, città e, per il piano Pro, modalità di lavoro), descrizione del <strong>lavoro dei desideri</strong> con paese e città (piano Pro, facoltativa), offerte raccolte o importate con i relativi
             punteggi e motivazioni, documenti generati (CV, cover letter, messaggi), bozze, cronologia delle chat con
             l'assistente AI, istruzioni che fornisci, preferiti, filtri salvati, stato delle candidature.
           </li>
@@ -112,7 +112,7 @@ function PrivacyIt({ info, version, date, minAge }) {
         <p>
           L'app usa modelli di intelligenza artificiale (Claude, tramite il servizio Amazon Bedrock) per: estrarre il
           profilo dal CV caricato, valutare l'affinità delle offerte con il tuo profilo (punteggio, punti di forza e
-          lacune), generare CV, lettere di presentazione e messaggi, e rispondere nella chat degli editor.
+          lacune, modalità di lavoro dell'offerta), ricavare dalla descrizione del lavoro dei desideri le parole chiave della ricerca e segnalare le offerte molto vicine a quel lavoro, generare CV, lettere di presentazione e messaggi, e rispondere nella chat degli editor.
         </p>
         <BulletList>
           <li>
@@ -308,7 +308,7 @@ function PrivacyEn({ info, version, date, minAge }) {
             goal. The uploaded CV file is read to fill in the profile and <strong>is not stored</strong>.
           </li>
           <li>
-            <strong>Service usage data:</strong> saved searches, collected or imported job offers with their scores and
+            <strong>Service usage data:</strong> saved searches (country, cities and, for the Pro plan, work mode), description of your <strong>dream job</strong> with country and cities (Pro plan, optional), collected or imported job offers with their scores and
             explanations, generated documents (CVs, cover letters, messages), drafts, history of chats with the AI
             assistant, instructions you provide, favourites, saved filters, application status.
           </li>
@@ -367,8 +367,7 @@ function PrivacyEn({ info, version, date, minAge }) {
       <Section title="4. Use of artificial intelligence">
         <p>
           The app uses artificial intelligence models (Claude, through the Amazon Bedrock service) to: extract the
-          profile from the uploaded CV, assess how well job offers match your profile (score, strengths and gaps),
-          generate CVs, cover letters and messages, and reply in the editors' chat.
+          profile from the uploaded CV, assess how well job offers match your profile (score, strengths and gaps, the offer's work mode), derive the search keywords from your dream job description and flag the offers that are very close to it, generate CVs, cover letters and messages, and reply in the editors' chat.
         </p>
         <BulletList>
           <li>

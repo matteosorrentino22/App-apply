@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Info, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Info, Lock, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useAuth } from '../../auth/AuthContext'
 import { useLanguage } from '../../i18n/LanguageContext'
-import { activateSearch, createSearch, deactivateSearch, deleteSearch, fetchSearches, updateSearch } from '../../api/searches'
+import { activateSearch, createSearch, deactivateSearch, deleteSearch, fetchSearchLimits, fetchSearches, updateSearch } from '../../api/searches'
+import { countryLabel } from '../../utils/countries'
 import { ApiError } from '../../api/client'
 import { useToast } from '@/components/ToastProvider'
-import CityAutocomplete from '@/components/CityAutocomplete'
+import CityChipsField from '@/components/CityChipsField'
 import { SettingsSubpageHeader } from '@/components/settings/SettingsList'
 import { ActionBar } from '@/components/ui/action-bar'
 import { Badge } from '@/components/ui/badge'
@@ -27,14 +29,18 @@ import { Switch } from '@/components/ui/switch'
 // finestra (prima era immediato). Sul Free, attivare una ricerca può
 // spegnerne un'altra dello stesso tipo: avviso con il nome (Sprint 68).
 
-const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', city: '', country: '' }
+const EMPTY_SEARCH = { search_type: 'job_role', keywords: '', country: '', cities: [], work_mode: '' }
+const WORK_MODES = ['', 'remote', 'hybrid', 'on_site']
 
 function errorText(err, t) {
   return err instanceof ApiError && err.data?.detail ? err.data.detail : t('common.genericError')
 }
 
-function SearchSheet({ open, onOpenChange, title, submitLabel, initial, onSubmit, showInactiveHint }) {
+function SearchSheet({ open, onOpenChange, title, submitLabel, initial, onSubmit, showInactiveHint, limits }) {
   const { t } = useLanguage()
+  const { user } = useAuth()
+  const isPro = user?.plan === 'pro'
+  const maxCities = limits?.max_cities_per_search || (isPro ? 5 : 1)
   const [form, setForm] = useState(initial)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -95,14 +101,44 @@ function SearchSheet({ open, onOpenChange, title, submitLabel, initial, onSubmit
                 onChange={(event) => setForm({ ...form, keywords: event.target.value })}
               />
             </Field>
-            <div className="flex flex-col gap-4 [&>*]:w-full">
-              <CityAutocomplete
-                cityId="search-city"
-                countryId="search-country"
-                city={form.city}
-                country={form.country}
-                onChange={({ city, country }) => setForm({ ...form, city, country })}
-              />
+            {/* Sprint 84 (A17, A18): paese e città (Free 1, Pro 5, raggio ~40 km),
+                modalità di lavoro solo Pro. */}
+            <CityChipsField
+              idPrefix="search"
+              country={form.country}
+              onCountryChange={(country) => setForm({ ...form, country, cities: [] })}
+              cities={form.cities}
+              onCitiesChange={(cities) => setForm({ ...form, cities })}
+              maxCities={maxCities}
+              hint={
+                isPro
+                  ? t('searches.citiesHintPro').replace('{used}', limits?.active_cities ?? 0).replace('{max}', limits?.max_active_cities ?? 50)
+                  : t('searches.citiesHintFree')
+              }
+            />
+            <div className="flex flex-col gap-1.5">
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-label" aria-hidden="true">
+                {t('searches.workMode')}
+                {isPro ? null : (
+                  <Badge variant="primary" className="gap-1 bg-primary text-primary-foreground">
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                    PRO
+                  </Badge>
+                )}
+              </p>
+              <div className={isPro ? '' : 'pointer-events-none'}>
+                <SegmentedControl
+                  name="search-work-mode"
+                  label={t('searches.workMode')}
+                  disabled={!isPro}
+                  value={form.work_mode || ''}
+                  onChange={(work_mode) => isPro && setForm({ ...form, work_mode })}
+                  options={WORK_MODES.map((value) => ({ value, label: t(`searches.workMode_${value || 'any'}`) }))}
+                />
+              </div>
+              <p className="text-[13px] leading-snug text-muted-foreground">
+                {isPro ? t('searches.workModeHint') : t('searches.workModeProOnly')}
+              </p>
             </div>
             {showInactiveHint ? (
               <Banner variant="note" icon={Info}>
@@ -122,17 +158,24 @@ function SearchSheet({ open, onOpenChange, title, submitLabel, initial, onSubmit
 }
 
 function SearchCard({ search, busy, onToggle, onEdit, onDelete }) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   return (
     <article className="flex flex-col gap-3 rounded-card border border-border bg-card p-4 shadow-card" data-testid="search-card">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <Badge variant="neutral" className="text-xs">
-            {t(`account.searchType_${search.search_type}`)}
-          </Badge>
+          <span className="flex flex-wrap gap-1.5">
+            <Badge variant="neutral" className="text-xs">
+              {t(`account.searchType_${search.search_type}`)}
+            </Badge>
+            {search.work_mode ? (
+              <Badge variant="neutral" className="text-xs">
+                {t(`searches.workMode_${search.work_mode}`)}
+              </Badge>
+            ) : null}
+          </span>
           <p className="break-words text-[17px] font-bold leading-tight text-foreground">{search.keywords}</p>
-          <p className="text-[15px] text-muted-foreground">
-            {search.city}, {search.country}
+          <p className="break-words text-[15px] text-muted-foreground">
+            {(search.cities || []).join(', ')} · {countryLabel(search.country, lang)}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -170,8 +213,14 @@ export default function SearchesPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [limits, setLimits] = useState(null)
+
+  function refreshLimits() {
+    fetchSearchLimits().then(setLimits).catch(() => {})
+  }
 
   useEffect(() => {
+    refreshLimits()
     fetchSearches()
       .then(setSearches)
       .catch(() => {
@@ -208,6 +257,7 @@ export default function SearchesPage() {
       setError(errorText(err, t))
     } finally {
       setBusyId(null)
+      refreshLimits()
     }
   }
 
@@ -215,10 +265,12 @@ export default function SearchesPage() {
     const created = await createSearch(form)
     setSearches((current) => [...current, created])
     showToast(t('settings.searchCreatedToast'))
+    refreshLimits()
   }
 
   async function handleUpdate(form) {
     applySearchUpdate(await updateSearch(editing.id, form))
+    refreshLimits()
   }
 
   async function handleDelete() {
@@ -228,6 +280,7 @@ export default function SearchesPage() {
       await deleteSearch(search.id)
       setSearches((current) => current.filter((s) => s.id !== search.id))
       setDeleting(null)
+      refreshLimits()
     } catch {
       showToast(t('common.genericError'))
     } finally {
@@ -237,7 +290,20 @@ export default function SearchesPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 pb-6 pt-3 lg:pt-6">
-      <SettingsSubpageHeader title={t('account.searchesTitle')} description={t('account.searchesHint')} />
+      <SettingsSubpageHeader title={t('account.searchesTitle')} description={t('searches.pageHint')} />
+      {limits?.max_active_cities ? (
+        <div className="flex flex-col gap-1.5" data-testid="active-cities">
+          <div className="flex items-baseline justify-between text-[15px]">
+            <span className="font-semibold text-foreground">{t('searches.activeCities')}</span>
+            <span className="tabular-nums text-muted-foreground">
+              {t('searches.activeCitiesCount').replace('{used}', limits.active_cities).replace('{max}', limits.max_active_cities)}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, (100 * limits.active_cities) / limits.max_active_cities)}%` }} />
+          </div>
+        </div>
+      ) : null}
       {error ? <Banner variant="error">{error}</Banner> : null}
       {searches == null ? (
         <div className="flex justify-center py-10">
@@ -273,6 +339,7 @@ export default function SearchesPage() {
         submitLabel={t('account.addSearch')}
         initial={EMPTY_SEARCH}
         onSubmit={handleCreate}
+        limits={limits}
         showInactiveHint
       />
       <SearchSheet
@@ -282,10 +349,17 @@ export default function SearchesPage() {
         submitLabel={t('account.save')}
         initial={
           editing
-            ? { search_type: editing.search_type, keywords: editing.keywords, city: editing.city, country: editing.country }
+            ? {
+                search_type: editing.search_type,
+                keywords: editing.keywords,
+                country: editing.country,
+                cities: editing.cities || [],
+                work_mode: editing.work_mode || '',
+              }
             : EMPTY_SEARCH
         }
         onSubmit={handleUpdate}
+        limits={limits}
       />
       <Modal open={deleting != null} onOpenChange={(open) => !open && setDeleting(null)}>
         <ModalContent>

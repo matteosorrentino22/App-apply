@@ -35,7 +35,7 @@ from django.core.files.base import ContentFile
 from apps.jobs.models import Job
 from apps.cv.models import CVDocument, CoverLetterDocument
 from apps.profiles.models import Profile, Experience, Education, Skill, Certification, Language
-from apps.searches.models import SavedSearch
+from apps.searches.models import JobWish, SavedSearch
 u = get_user_model().objects.get(email="__EMAIL__")
 u.first_name = "Maria Alessandra"; u.last_name = "Bianchi-Fontanarossa"; u.plan = "pro"; u.extra_credit = Decimal("7.50")
 u.save()
@@ -58,8 +58,10 @@ for name in ["Negoziazione", "Gestione di team internazionali e distribuiti", "A
 Certification.objects.create(profile=p, name="Project Management Professional (PMP) — Project Management Institute")
 Language.objects.create(profile=p, language="en", level="fluent")
 Language.objects.create(profile=p, language="de", level="intermediate")
-SavedSearch.objects.create(user=u, search_type="job_role", keywords="Responsabile sviluppo commerciale internazionale", city="Castelnuovo di Garfagnana", country="Italia", is_active=True)
-job = Job.objects.create(user=u, external_id="layout-long", title="Responsabile Senior dello Sviluppo Commerciale Internazionale per l'Europa", company="Società Internazionale di Consulenza Strategica S.p.A.", location="Castelnuovo di Garfagnana, Toscana", description="Descrizione " * 200, score=7, score_match=[{"label": "Esperienza pluriennale nella gestione di clienti internazionali", "reason": "Quindici anni"}], score_gaps=[{"label": "Conoscenza approfondita del mercato asiatico e della lingua cinese", "reason": "Non presente"}], score_reasoning="Buona corrispondenza complessiva. " * 10, status="cv_generated", origin="collected")
+SavedSearch.objects.create(user=u, search_type="job_role", keywords="Responsabile sviluppo commerciale internazionale", cities=["Castelnuovo di Garfagnana", "Reggio nell'Emilia", "Montecatini Terme"], country="Italy", work_mode="hybrid", is_active=True)
+JobWish.objects.create(user=u, description="Responsabile commerciale internazionale " * 20, country="Italy", cities=["Castelnuovo di Garfagnana", "Reggio nell'Emilia"], is_active=True, keywords=["Keyword"])
+Job.objects.filter(user=u, external_id="e2e-1").update(work_mode="hybrid", is_wish_match=True)
+job = Job.objects.create(user=u, external_id="layout-long", title="Responsabile Senior dello Sviluppo Commerciale Internazionale per l'Europa", company="Società Internazionale di Consulenza Strategica S.p.A.", location="Castelnuovo di Garfagnana, Toscana", description="Descrizione " * 200, score=7, score_match=[{"label": "Esperienza pluriennale nella gestione di clienti internazionali", "reason": "Quindici anni"}], score_gaps=[{"label": "Conoscenza approfondita del mercato asiatico e della lingua cinese", "reason": "Non presente"}], score_reasoning="Buona corrispondenza complessiva. " * 10, status="cv_generated", origin="collected", work_mode="on_site", is_wish_match=True)
 cv = {"summary": p.summary, "qualification": "Responsabile Senior dello Sviluppo Commerciale", "translated_city": "Milano", "content_language": "it", "areas_of_expertise": ["Sviluppo commerciale internazionale", "Negoziazione"],
   "experiences": [{"profile_experience_id": 9001, "company": "Società Internazionale di Consulenza Strategica e Trasformazione Digitale S.p.A.", "role": "Responsabile Senior dello Sviluppo Commerciale Internazionale B2B", "location": "Castelnuovo di Garfagnana", "dates": "2015 - Presente", "technologies": [], "shown": True, "bullets": [{"id": f"b{i}", "text": b, "shown": True} for i, b in enumerate(bullets)]}],
   "educations": [{"institution": "Università degli Studi di Milano-Bicocca", "title": "Laurea magistrale", "location": "Milano", "dates": "2008 - 2011", "notes": ""}], "skills": ["Negoziazione"], "certifications": [], "languages": [{"language": "en", "level": "fluent"}]}
@@ -193,6 +195,8 @@ test('impaginazione: Impostazioni e sottopagine', async ({ page, request }, test
       ['searches', '/settings/searches'],
       ['limits', '/settings/limits'],
       ['privacy-settings', '/settings/privacy'],
+      ['wish', '/settings/wish'],
+      ['text-size', '/settings/text-size'],
     ]) {
       await page.goto(url)
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20000 })
@@ -222,4 +226,50 @@ test('impaginazione: onboarding con esperienza e date', async ({ page, request }
     await page.getByLabel('Data fine').last().fill('2024-06-30')
     await check(page, testInfo, 'onboarding2', all)
   })
+})
+
+// Sprint 84 (A20): testo "Grande" (zoom 1,2 su tutta l'app) a 360/390 px e
+// sugli iPhone emulati: nessuna pagina più larga dello schermo, niente fuori
+// dalle card.
+test('impaginazione: dimensione del testo Grande', async ({ page, request }, testInfo) => {
+  await page.addInitScript(() => window.localStorage.setItem('appapply.textSize', 'large'))
+  const jobId = await longDataUser(page, request)
+  const all = []
+  const widths = testInfo.project.name === 'chromium' ? [360, 390] : [null]
+  for (const width of widths) {
+    if (width) await page.setViewportSize({ width, height: 800 })
+    await page.goto('/list')
+    await expect(page.locator('[data-testid="swipe-row"]').first()).toBeVisible({ timeout: 20000 })
+    // 1,2; sui telefoni più stretti di 360 px ridotto (larghezza utile ≥ 300 px).
+    const zoom = Number(await page.evaluate(() => document.documentElement.style.zoom))
+    expect(zoom).toBeGreaterThan(1)
+    expect(zoom).toBeLessThanOrEqual(1.2)
+    await check(page, testInfo, 'large-list', all)
+    await page.getByRole('button', { name: /^Filtri/ }).click()
+    await expect(page.getByRole('dialog', { name: 'Filtri' })).toBeVisible({ timeout: 20000 })
+    await check(page, testInfo, 'large-filters', all)
+    await page.keyboard.press('Escape')
+    await page.goto(`/jobs/${jobId}`)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20000 })
+    await openAllSections(page)
+    await check(page, testInfo, 'large-detail', all)
+    for (const [name, url] of [
+      ['large-settings', '/settings'],
+      ['large-searches', '/settings/searches'],
+      ['large-wish', '/settings/wish'],
+      ['large-text-size', '/settings/text-size'],
+      ['large-profile', '/profile'],
+    ]) {
+      await page.goto(url)
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20000 })
+      await page.waitForTimeout(500)
+      await check(page, testInfo, name, all)
+    }
+    await page.goto('/settings/searches')
+    await page.getByRole('button', { name: 'Nuova ricerca' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 })
+    await check(page, testInfo, 'large-new-search', all)
+    await page.keyboard.press('Escape')
+  }
+  expect(all, all.join('\n')).toEqual([])
 })

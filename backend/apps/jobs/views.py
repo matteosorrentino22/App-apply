@@ -83,6 +83,7 @@ from .manual_job_service import ManualJobFailed, ManualJobRejected, create_manua
 from .list_service import (
     APPLICANTS_RANGES,
     FILTERABLE_CONTRACT_TYPES,
+    FILTERABLE_WORK_MODES,
     FILTERABLE_STATUSES,
     SECTION_FILTERS,
     archive_job,
@@ -706,7 +707,7 @@ class JobListView(APIView):
         raw_search = request.query_params.get("search")
         if raw_search:
             search_ids = [value for value in raw_search.split(",") if value]
-            if not all(value == "none" or value.isdigit() for value in search_ids):
+            if not all(value in ("none", "wish") or value.isdigit() for value in search_ids):
                 return Response(
                     {"detail": _('Il filtro ricerca deve essere una lista di "none" e/o id di ricerche salvate separati da virgola.')},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -744,6 +745,16 @@ class JobListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        work_modes = None
+        raw_mode = request.query_params.get("mode")
+        if raw_mode:
+            work_modes = [value for value in raw_mode.split(",") if value]
+            if not set(work_modes) <= set(FILTERABLE_WORK_MODES):
+                return Response(
+                    {"detail": _("Il filtro modalità ammette solo: %(values)s.") % {"values": ", ".join(FILTERABLE_WORK_MODES)}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         has_salary = None
         raw_salary = request.query_params.get("salary")
         if raw_salary == "yes":
@@ -770,6 +781,7 @@ class JobListView(APIView):
             has_recruiter=has_recruiter,
             contract_types=contract_types,
             has_salary=has_salary,
+            work_modes=work_modes,
         )
         return Response(JobSerializer(jobs, many=True).data)
 

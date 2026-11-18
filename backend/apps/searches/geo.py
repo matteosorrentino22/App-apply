@@ -12,7 +12,7 @@ USER_AGENT = "AppApply/1.0 (assistente di ricerca lavoro)"
 CACHE_TTL_SECONDS = 60 * 60
 
 
-def search_cities(query):
+def search_cities(query, country_code=""):
     """Suggerimenti città per l'autocomplete (ricerche salvate e città del
     profilo, quest'ultima per l'intestazione del CV — Sprint 33).
 
@@ -25,7 +25,10 @@ def search_cities(query):
     if len(query) < 2:
         return []
 
-    cache_key = f"geo:cities:{query.lower()}"
+    country_code = (country_code or "").strip().lower()
+    if country_code and not (len(country_code) == 2 and country_code.isalpha()):
+        country_code = ""
+    cache_key = f"geo:cities:{country_code}:{query.lower()}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -38,6 +41,7 @@ def search_cities(query):
             "addressdetails": 1,
             "limit": 8,
             "accept-language": "en",
+            **({"countrycodes": country_code} if country_code else {}),
         },
         headers={"User-Agent": USER_AGENT},
         timeout=10,

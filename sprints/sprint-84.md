@@ -1,6 +1,6 @@
 # Sprint 84 — Ricerche su più città, modalità di lavoro, lavoro dei desideri, dimensione del testo
 
-> **Periodo:** 2026-11-17 · **Branch:** `sprint-84-ricerche-desiderio` (da `main` al commit 9a4055e, mai su `main`) · **Stato:** **progettato e approvato (mockup), da implementare**; merge e deploy non fatti.
+> **Periodo:** 2026-11-17 · **Branch:** `sprint-84-ricerche-desiderio` (da `main` al commit 9a4055e, mai su `main`) · **Copia di lavoro:** `/root/App-apply-dev` · **Stato:** **implementato**; test backend ed e2e verdi (vedi Verifica); da provare dal telefono sull'anteprima; **merge e deploy non fatti**.
 
 ## Input
 Richieste del committente nel tracking: ID 15 (filtro remote/ibrido nella lista), ID 16 (ricerca più ampia di una città), ID 18 (ricerca "a parole" del lavoro desiderato), ID 27 (modalità di lavoro come opzione Pro della ricerca), ID 28 (testo troppo piccolo nell'app aggiunta alla Home dell'iPhone, dove non c'è lo zoom di Safari).
@@ -66,11 +66,48 @@ Decisioni prese col committente il 2026-11-17: `Docs/design/SPEC-DELTA.md` **A17
 `CLAUDE.md` (vincolo sui filtri di ricerca), specifiche 01 (§4.2, §4.4, §4.5, §4.6, §4.22) e 02 (modello dati, raccolta, scoring, API §12, test §13), questa scheda, `CHANGELOG.md`, test backend e e2e (`job-list.spec.js`, `account.spec.js`, `layout.spec.js`). Nessuna dipendenza nuova. Nessun dato personale nei file (repository pubblico).
 
 ## Punti da verificare in revisione
-1. **Costi Apify e AI:** un Pro al massimo (50 città, modalità diverse, desiderio) può fare molte chiamate al giorno; misurare il costo reale dopo il rilascio.
-2. **Raggio:** 25 miglia (~40 km) fisso; valutare se renderlo configurabile.
-3. **Elenco dei paesi:** quali paesi offrire e con che nomi inglesi verso la fonte.
-4. **Modalità dalla fonte:** con il motore "AI" di LinkedIn il filtro `workType` non è garantito; l'etichetta del job viene comunque dall'AI.
-5. **Severità del "Desiderio":** se le etichette sono troppo poche o troppe, il prompt va tarato.
-6. **Desiderio spento:** se i job già etichettati mantengono l'etichetta (proposta: sì).
-7. **Dimensione del testo:** se salvarla per utente (su più dispositivi) o solo sul dispositivo.
-8. **Filtri salvati:** se includono Modalità e il chip Desiderio (da decidere insieme alla domanda aperta dello Sprint 82).
+Domande della scheda, con la risposta data prima di scrivere il codice (2026-11-17; le scelte su cui non c'erano dubbi sono andate avanti, le due domande aperte le ha decise il committente):
+1. **Costi Apify e AI:** nessun tetto nuovo oltre le 50 città attive; da misurare dopo il rilascio (RunLog `collection` per gruppo, credito Apify, token Bedrock).
+2. **Raggio:** 25 miglia fisse (`SEARCH_RADIUS_MILES`), non configurabile per ora.
+3. **Elenco dei paesi:** tutti i codici ISO 3166 con i nomi di `Intl.DisplayNames` (nessuna dipendenza): mostrati nella lingua dell'interfaccia, salvati e inviati alla fonte in inglese. Suggerimenti delle città solo del paese scelto (`countrycodes` di Nominatim).
+4. **Modalità dalla fonte:** passata come `workType`, ma la modalità del job viene sempre dall'AI; una chiamata alla fonte per (tipo, città, paese, modalità).
+5. **Severità del "Desiderio":** prompt severo (regola 10); da tarare dopo l'uso reale.
+6. **Desiderio spento:** le etichette già date restano; i job già valutati non vengono rivalutati.
+7. **Dimensione del testo:** salvata solo sul dispositivo (`localStorage`), applicata con `zoom`; "Come il telefono" dal font di sistema su iOS.
+8. **Filtri salvati:** includono Modalità e il chip Desiderio. I job raccolti prima dello sprint (senza modalità) restano fuori dai filtri Modalità.
+- **Migrazione delle ricerche esistenti:** `city` → `cities = [city]`; paese vuoto ricavato dalle altre ricerche con la stessa città. Sulla copia dei dati di produzione: 85 ricerche, tutte con 1 città, nessun paese vuoto (anche i paesi erano già in inglese), 59 attive, al massimo 27 città attive per utente (sotto il nuovo limite di 50).
+- **Decisioni del committente:** informativa **1.2** con riaccettazione da parte di tutti; descrizione del desiderio modificabile **5 volte al giorno** (giorno Europe/Rome, senza costo a credito).
+
+## Implementazione
+**Backend**
+- `searches/models.py`: `SavedSearch.cities` (JSON, al posto di `city`, con la property `city` di compatibilità), `work_mode`, `is_wish`; nuovo `JobWish` (descrizione max 1000, paese, città max 5, attivo, keyword nascoste, contatore delle modifiche del giorno). Migrazione `searches/0004` (copia e rimozione di `city`, reversibile).
+- `searches/services.py`: città per ricerca (Free 1, Pro 5), conteggio delle città attive (`active_city_count`, desiderio contato una volta) nell'attivazione e nella modifica di una ricerca attiva; `sync_wish_searches` crea le ricerche nascoste (una per keyword). `searches/wish.py`: `save_wish` (solo Pro, validazione, 5 modifiche al giorno, limite città, AI solo se cambia la descrizione e fuori dalla transazione), `derive_wish_keywords` (1–2 keyword, `BEDROCK_SCORING_MODEL`). Downgrade: spegne anche il desiderio.
+- API: `/api/searches/` con `country`, `cities`, `work_mode` (nascoste escluse; `city` ancora accettato in scrittura); `/api/search-limits/`; `/api/job-wish/` GET/PUT (mai le keyword; 502 se l'AI non risponde); autocomplete con `country_code`; `/api/jobs/?mode=` e `search=wish`; `work_mode`/`is_wish_match` nel `JobSerializer`; `work_modes` e `"wish"` nei filtri salvati; `wish_filter_available` in `/me`.
+- Raccolta (`apify_linkedin.py`): gruppi per tipo × città × paese × modalità, `distance: "25"`, `workType`; etichetta `matched_search` vuota per le offerte della ricerca nascosta.
+- Scoring: `work_mode` obbligatorio nello schema (regola 9) con ripiego sulla modalità della ricerca; con il desiderio attivo descrizione e regola 10 nel prompt e `wish_match` nello schema (`is_wish_match`). `Job.work_mode`, `Job.is_wish_match`, `JobFilterPreset.work_modes`: migrazione `jobs/0024`.
+- Privacy: informativa 1.2 (it/en, app e `Docs/legal/`): ricerche con paese, città e modalità, descrizione del lavoro dei desideri, uso dell'AI per modalità, keyword ed etichetta. Export con `job_wish` (keyword comprese, diritto di accesso) e README aggiornato; cancellazione in cascata con l'account. 14 messaggi nuovi tradotti in inglese.
+- `CLAUDE.md`: vincolo sui filtri di ricerca aggiornato con le deroghe approvate.
+
+**Frontend**
+- `components/CityChipsField.jsx` (paese da elenco, città come chip o campo singolo, suggerimenti del paese) e `utils/countries.js`; usati in Ricerche salvate (con la modalità a segmenti, bloccata per i Free, "Città attive n di 50", città · paese e modalità sulla card), onboarding (1 città) e Lavoro dei desideri.
+- Lista: gruppo **Modalità** nei filtri (conteggio, Azzera, filtri salvati), chip **"Lavoro dei desideri"** primo del gruppo Ricerca, badge **Desiderio** sulla card; dettaglio con il chip della modalità e "Lavoro dei desideri". Colori `--wish`/`--wish-soft` (anche scuri), variante `wish` del badge.
+- Impostazioni: "N città attive su 50", riga **Lavoro dei desideri**, gruppo **Aspetto** con **Dimensione del testo** e Lingua. Pagine nuove `/settings/wish` (`WishPage`, Pro con interruttore che salva subito, descrizione con contatore, modifiche rimaste oggi, "Salva"; Free bloccata con "Scopri Pro", che porta alla pagina dei limiti e del piano `/settings/limits`, decisione del committente del 2026-11-18; non c'è un acquisto self-service) e `/settings/text-size` (`TextSizePage`, con anteprima).
+- `lib/textSize.js`: scelta in `localStorage`, `zoom` su `<html>` (Grande 1,2; "Come il telefono" su iOS dal font `-apple-system-body`, limitato a 0,85–1,4), all'avvio, al ritorno nell'app e al ridimensionamento. Con lo zoom la larghezza utile resta di almeno 300 px: su un telefono da 320 px (iPhone SE) Grande vale circa 1,07, perché a 1,2 la barra di tab e le righe dei documenti uscivano dallo schermo (trovato da `layout.spec.js`).
+- `ui/action-bar.jsx`: l'altezza della barra si misura con `offsetHeight` (unità CSS) invece che con il rettangolo sullo schermo, già ingrandito dallo zoom.
+- **Correzione trovata dai test:** la lista non scarta più le risposte arrivate fuori ordine (con filtri cambiati in fretta una risposta lenta poteva sovrascrivere quella più recente: il test dei filtri salvati falliva a volte).
+
+## Verifica
+- Backend: suite completa **528 test OK** (con `DJANGO_DEBUG=true`, `REGISTRATION_INVITE_CODE=` vuoto), di cui 21 nuovi in `apps/searches/test_sprint84.py`; `makemigrations --check` senza differenze; catalogo inglese senza voci vuote o `fuzzy`.
+- Migrazione `searches/0004` provata su una copia usa e getta del backup di produzione (vedi sopra), poi cancellata.
+- Frontend: `npm run build` OK, `oxlint` 0 errori (9 warning, gli stessi di prima), tutte le 672 chiavi usate presenti in it ed en.
+- E2e sullo stack usa e getta (un worker, runner con memoria limitata): `auth-onboarding`, `account` (nuovi: Pro con più città e modalità; Free con città unica, modalità e desiderio bloccati; Pro con desiderio senza keyword visibili; dimensione del testo) e `job-list` (nuovo: filtro Modalità, chip "Lavoro dei desideri", etichette su card e dettaglio) verdi; `layout.spec.js` con il nuovo giro in **Grande** a 360/390 px, iPhone 13 e iPhone SE verde, dopo le correzioni sopra. **Suite e2e completa il 2026-11-18: 95/95** in 18,4 minuti (Chromium più `layout.spec.js` su iPhone 13 e iPhone SE), poi di nuovo i test backend: 528 OK.
+- **Memoria:** il primo tentativo della suite completa (2026-11-17) è stato fermato per memoria scarsa dopo 3 test verdi. Il `web` di produzione, acceso da 25 ore, occupava 1,25 GiB (4 worker gunicorn cresciuti a 230–430 MB l'uno); insieme allo stack e2e completo il VPS (3,9 GB, senza swap) era al limite. L'anteprima era spenta. Per il secondo giro, con il consenso del committente, `web`, `worker` e `beat` di produzione sono stati fermati dalle 07:43:20 alle 08:05:53 UTC (sito non raggiungibile per circa 22 minuti; nessun task Celery in corso; le raccolte automatiche saltate ripartono al giro successivo del dispatcher). Al riavvio home e `/api/legal/` rispondono 200 e lo stack è tutto da `docker-compose.prod.yml`. Picchi misurati durante la suite: runner 1,19 GiB, `e2e-fe` 260 MiB, `e2e-web` 254 MiB, `e2e-preview` 92 MiB, `e2e-db` 53 MiB; memoria usata al massimo 2,2 GB su 3,9.
+
+## Da provare (anteprima, poi produzione dopo il rilascio)
+- iPhone (app dalla Home): Impostazioni → Aspetto → Dimensione del testo, con le tre scelte e con la dimensione del testo di sistema cambiata.
+- Ricerca Pro con più città e una modalità; alla raccolta successiva i job con la modalità e, con il desiderio attivo, qualche etichetta Desiderio (taratura della severità).
+
+## Cosa manca / note
+- I costi reali (chiamate Apify per città, token dello scoring con il desiderio) vanno misurati dopo il rilascio.
+- I job raccolti prima dello sprint non hanno la modalità né l'etichetta: nessuna rivalutazione dello storico (una chiamata AI per job).
+- Rilascio: `DEPLOY.md` §4.11 (migrazioni `searches/0004` e `jobs/0024`, informativa 1.2).

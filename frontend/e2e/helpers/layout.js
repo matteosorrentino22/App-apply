@@ -116,7 +116,10 @@ export async function findLayoutIssues(page) {
     const bars = [...document.querySelectorAll('[data-testid="action-bar"], nav.app-tabbar')].filter(visible)
     if (bars.length) {
       const top = Math.min(...bars.map((bar) => bar.getBoundingClientRect().top))
-      const pad = parseFloat(style(document.querySelector('#root > div') || document.body).paddingBottom) || 0
+      // Sprint 84: con lo zoom della dimensione del testo i rettangoli sono in
+      // px dello schermo, gli stili calcolati in px CSS: stessa unità.
+      const scale = document.body.offsetWidth ? document.body.getBoundingClientRect().width / document.body.offsetWidth : 1
+      const pad = (parseFloat(style(document.querySelector('#root > div') || document.body).paddingBottom) || 0) * scale
       const barsHeight = window.innerHeight - top
       if (pad + 1 < barsHeight) issues.push(`spazio in fondo (${Math.round(pad)} px) minore delle barre fisse (${Math.round(barsHeight)} px)`)
     }

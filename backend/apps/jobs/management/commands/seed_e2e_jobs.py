@@ -13,6 +13,9 @@ from apps.jobs.models import Job
 SEED_JOBS = [
     dict(
         external_id="e2e-1",
+        # Sprint 84: modalità dallo scoring ed etichetta Desiderio.
+        work_mode="hybrid",
+        is_wish_match=True,
         title="Project Manager",
         company="Acme Srl",
         location="Milano",
@@ -45,6 +48,7 @@ SEED_JOBS = [
     ),
     dict(
         external_id="e2e-2",
+        work_mode="remote",
         title="Backend Developer",
         company="Beta SpA",
         location="Remoto",
@@ -63,6 +67,7 @@ SEED_JOBS = [
     ),
     dict(
         external_id="e2e-3",
+        work_mode="not_indicated",
         title="Head of Operations",
         company="Gamma Group",
         location="Torino",

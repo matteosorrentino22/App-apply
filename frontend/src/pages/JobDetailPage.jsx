@@ -10,10 +10,12 @@ import {
   ChevronLeft,
   FileText,
   Heart,
+  Laptop,
   MessageSquare,
   MoreHorizontal,
   Send,
   Sparkles,
+  Star,
   X,
 } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
@@ -474,6 +476,14 @@ export default function JobDetailPage() {
           <p className="min-w-0 text-base text-muted-foreground">
             {job.company}
             {job.location ? <> · {job.location}</> : null}
+            {/* Sprint 84 (A18): modalità ricavata dall'AI; con "Non indicata" nessun chip. */}
+            {job.work_mode && job.work_mode !== 'not_indicated' ? (
+              <Badge variant="neutral" className="ml-1.5 gap-1 align-middle text-xs" data-testid="job-work-mode">
+                <Laptop className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="sr-only">{t('jobs.workModeFilterLabel')}: </span>
+                {t(`jobs.workMode_${job.work_mode}`)}
+              </Badge>
+            ) : null}
             <RecruiterIcon job={job} />
           </p>
           {job.apply_url ? (
@@ -510,8 +520,14 @@ export default function JobDetailPage() {
             ) : null}
           </div>
         ) : null}
-        {applicantsText || job.matched_search || job.is_archived || job.date_collected ? (
+        {job.is_wish_match || applicantsText || job.matched_search || job.is_archived || job.date_collected ? (
           <div className="flex flex-wrap items-center gap-2">
+            {job.is_wish_match ? (
+              <Badge variant="wish" className="gap-1" data-testid="job-wish-badge">
+                <Star className="h-3 w-3 fill-current" aria-hidden="true" />
+                {t('jobs.wishBadgeLong')}
+              </Badge>
+            ) : null}
             {applicantsText ? <Badge variant={isLowApplicants(job) ? 'success' : 'neutral'}>{applicantsText}</Badge> : null}
             {job.matched_search ? (
               <Badge variant="neutral" className="whitespace-normal break-words">

@@ -1,5 +1,5 @@
 import { DateRangeFields } from '@/components/ui/date-range'
-import { MapPin, Save, X } from 'lucide-react'
+import { MapPin, Save, Star, X } from 'lucide-react'
 import { useLanguage } from '../i18n/LanguageContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,7 +7,7 @@ import { FilterPill } from '@/components/ui/pill'
 import { SegmentedControl } from '@/components/ui/segmented'
 import { Sheet, SheetBody, SheetClose, SheetContent, SheetFooter, SheetHeader } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { APPLICANTS_RANGES, CONTRACT_TYPES, SCORES, STATUSES } from '../utils/jobFilters'
+import { APPLICANTS_RANGES, CONTRACT_TYPES, SCORES, STATUSES, WORK_MODES } from '../utils/jobFilters'
 
 // Pannello dei filtri della lista (Sprint 74, mockup `jobs-filtri`; da
 // 1024 px finestra centrale). Stessi filtri e stessa logica di prima: i
@@ -47,9 +47,10 @@ export default function JobFiltersSheet({
   onDeletePreset,
   onSavePreset,
   onReset,
+  wishAvailable = false,
 }) {
   const { t } = useLanguage()
-  const { dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter, contractTypes, salaryFilter } = filters
+  const { dateFrom, dateTo, statuses, searchFilters, scores, applicantsRanges, recruiterFilter, contractTypes, salaryFilter, workModes } = filters
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -131,15 +132,23 @@ export default function JobFiltersSheet({
           {section !== 'imported' && (
             <Group title={t('jobs.searchGroupTitle')}>
               <div className="flex flex-wrap gap-2">
+                {/* Sprint 84 (A19): primo chip, job con l'etichetta Desiderio. */}
+                {wishAvailable ? (
+                  <FilterPill pressed={searchFilters.includes('wish')} onClick={() => onChange({ search: toggle('wish') })} className="gap-1.5">
+                    <Star className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t('jobs.wishFilter')}
+                  </FilterPill>
+                ) : null}
                 {savedSearches.map((search) => (
                   <FilterPill
                     key={search.id}
                     pressed={searchFilters.includes(String(search.id))}
                     onClick={() => onChange({ search: toggle(String(search.id)) })}
                     className="h-auto whitespace-normal py-2 text-left leading-snug"
-                    title={`${t(`account.searchType_${search.search_type}`)}: ${search.keywords} — ${search.city}, ${search.country}`}
+                    title={`${t(`account.searchType_${search.search_type}`)}: ${search.keywords} — ${(search.cities || []).join(', ')}, ${search.country}`}
                   >
                     {search.keywords} · {search.city}
+                    {(search.cities || []).length > 1 ? ` +${search.cities.length - 1}` : ''}
                   </FilterPill>
                 ))}
                 <FilterPill pressed={searchFilters.includes('none')} onClick={() => onChange({ search: toggle('none') })}>
@@ -217,6 +226,16 @@ export default function JobFiltersSheet({
                 { value: 'no', label: t('jobs.salaryFilter_no') },
               ]}
             />
+          </Group>
+
+          <Group title={t('jobs.workModeFilterLabel')}>
+            <div className="flex flex-wrap gap-2">
+              {WORK_MODES.map((value) => (
+                <FilterPill key={value} pressed={workModes.includes(value)} onClick={() => onChange({ mode: toggle(value) })}>
+                  {t(`jobs.workMode_${value}`)}
+                </FilterPill>
+              ))}
+            </div>
           </Group>
         </SheetBody>
         <SheetFooter>

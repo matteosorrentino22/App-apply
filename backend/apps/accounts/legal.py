@@ -7,8 +7,8 @@ from django.conf import settings
 
 from .models import LegalAcceptance
 
-PRIVACY_VERSION = "1.1"
-PRIVACY_DATE = "2026-11-15"
+PRIVACY_VERSION = "1.2"
+PRIVACY_DATE = "2026-11-17"
 TERMS_VERSION = "1.0"
 TERMS_DATE = "2026-11-14"
 MIN_AGE = 16

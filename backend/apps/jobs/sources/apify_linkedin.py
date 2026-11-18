@@ -39,6 +39,11 @@ MAX_ATTEMPTS = 2
 # usato su ogni chiamata per limitare la spesa (sprint-39).
 MAX_ITEMS_PER_CALL = 150
 
+# Sprint 84: raggio intorno a ogni città (valori ammessi dalla fonte: 5, 10,
+# 15, 25, 50 miglia) e modalità di lavoro nel formato della fonte.
+SEARCH_RADIUS_MILES = "25"
+WORK_MODE_TO_SOURCE = {"remote": "remote", "hybrid": "hybrid", "on_site": "on-site"}
+
 # Sprint 82: stipendio da `salaryInfo` ("$91000.00", "€45,000", "$16.75").
 SALARY_VALUE_PATTERN = re.compile(r"^([^\d]*)(\d[\d,]*(?:\.\d+)?)(.*)$")
 CONTRACT_TYPE_MAP = {
@@ -85,7 +90,7 @@ class ApifyLinkedInSource:
         return offers
 
     def fetch_groups(self, searches, window_hours):
-        """Una chiamata per gruppo (tipo × città × paese). Un errore su un
+        """Una chiamata per gruppo (tipo × città × paese × modalità, Sprint 84). Un errore su un
         gruppo non fa perdere gli altri (Sprint 68): ogni elemento del
         risultato è `{"label", "offers", "error"}`, con `error` = eccezione
         del gruppo fallito (dopo i retry) e `offers` vuota in quel caso.
@@ -93,7 +98,9 @@ class ApifyLinkedInSource:
         prodotta quando è individuabile (None altrimenti)."""
         results = []
         for group in self._group_by_type_and_location(searches):
-            label = f"{group['search_type']} · {group['city']}, {group['country']}"
+            label = f"{group['search_type']} · {group['city']}, {group['country']}" + (
+                f" · {group['work_mode']}" if group["work_mode"] else ""
+            )
             try:
                 offers = self._fetch_group(group, window_hours)
             except Exception as exc:
@@ -108,12 +115,19 @@ class ApifyLinkedInSource:
         payload = {
             "keyword": COMPANY_SEARCH_KEYWORDS if is_company else company_names,
             "location": f"{group['city']}, {group['country']}",
+            # Sprint 84 (A17): raggio di 25 miglia (~40 km) intorno a ogni città.
+            "distance": SEARCH_RADIUS_MILES,
             "publishedAt": self._published_at_filter(window_hours),
             "maxItems": MAX_ITEMS_PER_CALL,
             "saveOnlyUniqueItems": True,
         }
         if is_company:
             payload["companyInclude"] = company_names
+        if group["work_mode"]:
+            # Sprint 84 (A18, solo Pro): filtro della fonte, non garantito con
+            # il motore di ricerca "AI" di LinkedIn (la modalità del job la
+            # ricava comunque l'AI nello scoring).
+            payload["workType"] = [WORK_MODE_TO_SOURCE[group["work_mode"]]]
         response = self._post_with_retry(payload)
         raw_items = response.json()
         if is_company:
@@ -126,7 +140,12 @@ class ApifyLinkedInSource:
         offers = []
         for item in raw_items:
             offer = self._normalize_item(item)
-            offer["saved_search_id"] = self._attribute_to_search(group, offer["matched_search"])
+            search = self._attribute_to_search(group, offer["matched_search"])
+            offer["saved_search_id"] = search.pk if search else None
+            if search is not None and search.is_wish:
+                # Ricerca nascosta del lavoro dei desideri (Sprint 84): le
+                # keyword non devono comparire ("Trovato con: …").
+                offer["matched_search"] = ""
             offers.append(offer)
         return offers
 
@@ -141,11 +160,11 @@ class ApifyLinkedInSource:
             if group["search_type"] == "company":
                 expected = search.keywords
             else:
-                expected = f"{search.keywords} - {search.city}, {search.country}"
+                expected = f"{search.keywords} - {group['city']}, {group['country']}"
             if expected.casefold() == label:
-                return search.pk
+                return search
         if len(searches) == 1:
-            return searches[0].pk
+            return searches[0]
         return None
 
     def _group_by_type_and_location(self, searches):
@@ -153,17 +172,22 @@ class ApifyLinkedInSource:
         gruppo invece di una per ricerca, per risparmiare sul costo Apify
         (sprint-39). Le ricerche con città/paese diversi restano in gruppi
         (quindi chiamate) separati anche se dello stesso tipo."""
+        # Sprint 84: una ricerca con più città compare in un gruppo per città;
+        # la modalità di lavoro (filtro della fonte) separa i gruppi.
         groups = {}
         for search in searches:
-            key = (search.search_type, search.city, search.country)
-            if key not in groups:
-                groups[key] = {
-                    "search_type": search.search_type,
-                    "city": search.city,
-                    "country": search.country,
-                    "searches": [],
-                }
-            groups[key]["searches"].append(search)
+            for city in search.cities:
+                key = (search.search_type, city.casefold(), search.country.casefold(), search.work_mode)
+                if key not in groups:
+                    groups[key] = {
+                        "search_type": search.search_type,
+                        "city": city,
+                        "country": search.country,
+                        "work_mode": search.work_mode,
+                        "searches": [],
+                    }
+                if search not in groups[key]["searches"]:
+                    groups[key]["searches"].append(search)
         return list(groups.values())
 
     def fetch_by_url(self, url):

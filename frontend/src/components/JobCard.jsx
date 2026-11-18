@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Heart } from 'lucide-react'
+import { Heart, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScoreChip } from '@/components/ui/score-chip'
 import SwipeToArchive from '@/components/SwipeToArchive'
@@ -30,6 +30,12 @@ export default function JobCard({ job, onSwipe, swipeLabel, onToggleFavorite }) 
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={job.status === 'new' ? 'neutral' : 'primary'}>{t(`jobs.status_${job.status}`)}</Badge>
+            {job.is_wish_match ? (
+              <Badge variant="wish" className="gap-1" data-testid="job-wish-badge">
+                <Star className="h-3 w-3 fill-current" aria-hidden="true" />
+                {t('jobs.wishBadge')}
+              </Badge>
+            ) : null}
             {applicantsText && <Badge variant={isLowApplicants(job) ? 'success' : 'neutral'}>{applicantsText}</Badge>}
           </div>
           <h3 className="text-base leading-snug font-[650] text-foreground">

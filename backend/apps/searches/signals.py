@@ -3,7 +3,7 @@ from django.dispatch import receiver
 
 from apps.accounts.models import User
 
-from .models import SavedSearch
+from .models import JobWish, SavedSearch
 
 
 @receiver(pre_save, sender=User)
@@ -26,3 +26,5 @@ def _deactivate_searches_on_pro_to_free_downgrade(sender, instance, created, **k
     previous_plan = getattr(instance, "_previous_plan", None)
     if previous_plan == User.Plan.PRO and instance.plan == User.Plan.FREE:
         SavedSearch.objects.filter(user=instance, is_active=True).update(is_active=False)
+        # Sprint 84: anche il lavoro dei desideri si spegne (le etichette restano).
+        JobWish.objects.filter(user=instance, is_active=True).update(is_active=False)

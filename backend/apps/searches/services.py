@@ -2,12 +2,15 @@ from django.utils.translation import gettext as _
 
 from apps.accounts.models import User
 
-from .models import SavedSearch
+from .models import MAX_CITIES_PER_SEARCH, JobWish, SavedSearch
 
 # Limiti di piano (01-specifiche-funzionali-v4.md §4.2, aggiornato sprint-39):
 # ricerche salvate totali sempre come pool unico; ricerche attive invece
 # separate per tipo su Free (1 job-role + 1 company) e come pool unico
 # condiviso tra i due tipi su Pro (50 in totale, divisibili liberamente).
+# Sprint 84 (A17): sul Pro il pool conta le **città** delle ricerche in uso
+# (ogni città è una ricerca attiva), comprese quelle del lavoro dei desideri;
+# sul Free una ricerca ha una sola città.
 PLAN_LIMITS = {
     User.Plan.FREE: {
         "max_saved": 10,
@@ -45,6 +48,9 @@ def activate_search(search):
     Ritorna la ricerca disattivata automaticamente, o None.
     """
     limits = get_limits(search.user)
+    if len(search.cities) > MAX_CITIES_PER_SEARCH[search.user.plan]:
+        # Ricerca con più città rimasta da un periodo Pro (Sprint 84).
+        raise PlanLimitExceeded(_("Sul piano Free una ricerca può avere una sola città: togli le altre per attivarla."))
 
     deactivated = None
     if "max_active_per_type" in limits:
@@ -61,12 +67,10 @@ def activate_search(search):
                 _("Hai raggiunto il numero massimo di ricerche attive per il tuo piano.")
             )
     else:
-        active_qs = SavedSearch.objects.filter(user=search.user, is_active=True).exclude(
-            pk=search.pk
-        )
-        if active_qs.count() >= limits["max_active_total"]:
+        if active_city_count(search.user, exclude_pk=search.pk) + len(search.cities) > limits["max_active_total"]:
             raise PlanLimitExceeded(
-                _("Hai raggiunto il numero massimo di ricerche attive per il tuo piano.")
+                _("Hai raggiunto il numero massimo di città attive per il tuo piano (%(max)s).")
+                % {"max": limits["max_active_total"]}
             )
 
     search.is_active = True
@@ -82,3 +86,38 @@ def deactivate_search(search):
 def get_active_searches(user):
     """Ricerche attive di un utente, consumato dal modulo di raccolta (Sprint 07)."""
     return SavedSearch.objects.filter(user=user, is_active=True)
+
+
+def active_city_count(user, exclude_pk=None):
+    """Città attive di un utente (Sprint 84): somma delle città delle ricerche
+    in uso, più quelle del lavoro dei desideri se attivo (contate una volta,
+    anche se le keyword ricavate sono due)."""
+    qs = SavedSearch.objects.filter(user=user, is_active=True, is_wish=False)
+    if exclude_pk is not None:
+        qs = qs.exclude(pk=exclude_pk)
+    total = sum(len(cities or []) for cities in qs.values_list("cities", flat=True))
+    wish = JobWish.objects.filter(user=user, is_active=True).first()
+    if wish is not None:
+        total += len(wish.cities)
+    return total
+
+
+def max_active_cities(user):
+    return get_limits(user).get("max_active_total")
+
+
+def sync_wish_searches(wish):
+    """Ricerche nascoste del lavoro dei desideri (Sprint 84, A19): una per
+    keyword ricavata dall'AI, con paese e città del desiderio, attive solo se
+    il desiderio è attivo. Le keyword non escono mai dal backend."""
+    SavedSearch.objects.filter(user=wish.user, is_wish=True).delete()
+    for keyword in wish.keywords:
+        SavedSearch.objects.create(
+            user=wish.user,
+            search_type=SavedSearch.SearchType.JOB_ROLE,
+            keywords=keyword[:255],
+            country=wish.country,
+            cities=list(wish.cities),
+            is_wish=True,
+            is_active=wish.is_active,
+        )

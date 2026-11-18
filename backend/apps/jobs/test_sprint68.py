@@ -278,7 +278,7 @@ class MatchedSavedSearchTests(TestCase):
 
     def test_filter_keeps_jobs_after_the_search_is_edited(self):
         job = _job(self.user, "a", matched_search="PM - Roma, Italia", matched_saved_search=self.search)
-        SavedSearch.objects.filter(pk=self.search.pk).update(keywords="Product Manager", city="Milano")
+        SavedSearch.objects.filter(pk=self.search.pk).update(keywords="Product Manager", cities=["Milano"])
 
         result = list(list_jobs(self.user, "main", search_ids=[str(self.search.pk)]))
         self.assertEqual(result, [job])

@@ -42,9 +42,19 @@ SCORE_JSON_SCHEMA = {
         "score_gaps": {"type": "array", "items": _SCORE_ITEM_SCHEMA},
         "score_reasoning": {"type": "string"},
         "language_check": _LANGUAGE_CHECK_SCHEMA,
+        # Sprint 84 (A18): modalità di lavoro ricavata dalla descrizione.
+        "work_mode": {"type": "string", "enum": ["remote", "hybrid", "on_site", "not_indicated"]},
     },
-    "required": ["score", "score_match", "score_gaps", "score_reasoning", "language_check"],
+    "required": ["score", "score_match", "score_gaps", "score_reasoning", "language_check", "work_mode"],
     "additionalProperties": False,
+}
+
+# Sprint 84 (A19): con il lavoro dei desideri attivo lo schema chiede anche
+# il giudizio sì/no sull'affinità con la descrizione.
+SCORE_WITH_WISH_JSON_SCHEMA = {
+    **SCORE_JSON_SCHEMA,
+    "properties": {**SCORE_JSON_SCHEMA["properties"], "wish_match": {"type": "boolean"}},
+    "required": [*SCORE_JSON_SCHEMA["required"], "wish_match"],
 }
 
 SCORING_SYSTEM_PROMPT = (
@@ -128,7 +138,21 @@ SCORING_SYSTEM_PROMPT = (
     "`language` (nome della lingua individuata, stringa vuota se required è "
     "false), `international_exception` (true se hai trovato un'esplicita "
     "dichiarazione di ambiente internazionale/inglese che esclude il "
-    "vincolo)."
+    "vincolo).\n"
+    "9. Compila sempre work_mode, la modalità di lavoro indicata dall'offerta: "
+    "\"remote\" (da remoto, full remote, telelavoro), \"hybrid\" (ibrido, "
+    "alcuni giorni in sede), \"on_site\" (in sede, on-site, presenza "
+    "richiesta), \"not_indicated\" se l'offerta non lo dice in modo chiaro. "
+    "Non dedurla dalla sola località."
+)
+
+WISH_PROMPT_RULE = (
+    "\n10. Ricevi anche il LAVORO DEI DESIDERI del candidato, descritto a "
+    "parole. Compila wish_match: true SOLO se l'offerta è molto vicina a quel "
+    "lavoro (ruolo, settore e tipo di attività corrispondono in modo "
+    "evidente), false in tutti gli altri casi, anche se il punteggio è alto o "
+    "l'offerta è solo in parte vicina. Sii severo: meglio pochi job segnati ma "
+    "davvero affini."
 )
 
 
@@ -163,7 +187,7 @@ def _build_profile_summary(profile):
     )
 
 
-def score_job_with_claude(job, profile):
+def score_job_with_claude(job, profile, wish_description=None):
     """Chiama Claude per lo scoring di un singolo Job. Solleva l'eccezione a
     chi chiama in caso di errore/timeout — la gestione del fallimento (Job
     scartato per la notte, traccia in RunLog) è responsabilità di
@@ -176,10 +200,13 @@ def score_job_with_claude(job, profile):
         f"Località: {job.location or 'non indicata'}\nDescrizione: {job.description}"
     )
 
+    user_content = f"PROFILO CANDIDATO:\n{profile_summary}\n\nOFFERTA:\n{job_summary}"
+    if wish_description:
+        user_content += f"\n\nLAVORO DEI DESIDERI DEL CANDIDATO:\n{wish_description}"
     return call_claude_structured(
         model=settings.BEDROCK_SCORING_MODEL,
-        system=SCORING_SYSTEM_PROMPT,
-        user_content=f"PROFILO CANDIDATO:\n{profile_summary}\n\nOFFERTA:\n{job_summary}",
-        schema=SCORE_JSON_SCHEMA,
+        system=SCORING_SYSTEM_PROMPT + (WISH_PROMPT_RULE if wish_description else ""),
+        user_content=user_content,
+        schema=SCORE_WITH_WISH_JSON_SCHEMA if wish_description else SCORE_JSON_SCHEMA,
         max_tokens=2000,
     )

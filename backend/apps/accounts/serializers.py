@@ -139,6 +139,7 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
             "legal_missing",
             "legal_acceptances",
             "profile_status",
+            "wish_filter_available",
         ]
         # extra_credit è gestito solo da amministratore (Django Admin, §3
         # funzionali "Gestione account": nessun checkout/pagamento in UI) —
@@ -153,6 +154,15 @@ class UserOnboardingSerializer(serializers.ModelSerializer):
     legal_missing = serializers.SerializerMethodField()
     legal_acceptances = serializers.SerializerMethodField()
     profile_status = serializers.SerializerMethodField()
+    wish_filter_available = serializers.SerializerMethodField()
+
+    def get_wish_filter_available(self, user):
+        # Sprint 84 (A19): il chip "Lavoro dei desideri" dei filtri compare se
+        # l'utente ha un desiderio (anche spento) o job con l'etichetta.
+        from apps.jobs.models import Job
+        from apps.searches.models import JobWish
+
+        return JobWish.objects.filter(user=user).exists() or Job.objects.filter(user=user, is_wish_match=True).exists()
 
     def get_profile_status(self, user):
         # Sprint 70: "complete" con la stessa regola della generazione CV

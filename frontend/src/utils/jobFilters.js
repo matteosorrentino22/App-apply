@@ -8,3 +8,5 @@ export const APPLICANTS_RANGES = ['under_25', '25_50', '51_100', '101_200', 'ove
 // vedono nel dettaglio ma non si filtrano). Stipendio: tutti / con / senza.
 export const CONTRACT_TYPES = ['full_time', 'part_time', 'temporary']
 export const SALARY_VALUES = ['yes', 'no']
+// Sprint 84 (A18): modalità di lavoro del job, ricavata dall'AI.
+export const WORK_MODES = ['remote', 'hybrid', 'on_site', 'not_indicated']

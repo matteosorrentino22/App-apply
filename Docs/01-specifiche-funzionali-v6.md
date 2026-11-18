@@ -1,7 +1,7 @@
 # Specifiche Funzionali — App di ricerca lavoro e generazione CV
 
 > **Documento:** 01 — Specifiche funzionali
-> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone e Sprint 82 attività come chip, stipendio e contratto e Sprint 83 anteprima PDF su iPhone e Android del redesign UI, Sprint 77 raccolta automatica Pro)
+> **Versione:** 6 — descrive l'as-is al 2026-11-14 (Sprint 66 sicurezza, Sprint 67 privacy e GDPR, Sprint 68 lista job, scoring e raccolta, Sprint 69 generazione, editor e chat, Sprint 70 account, profilo, notifiche e frontend, Sprint 71 testi del server in italiano e inglese, Sprint 73 navigazione a 3 voci, Sprint 74 lista Jobs, Sprint 75 dettaglio job e Sprint 76 editor, Sprint 78 profilo e impostazioni e Sprint 79 accesso, onboarding e pagine legali e Sprint 80 rifinitura e Sprint 81 correzioni dopo la prova su iPhone e Sprint 82 attività come chip, stipendio e contratto e Sprint 83 anteprima PDF su iPhone e Android del redesign UI, Sprint 84 ricerche su più città, modalità di lavoro, lavoro dei desideri e dimensione del testo, Sprint 77 raccolta automatica Pro)
 > **Stato:** corrente. Documento vivo: va aggiornato nello stesso commit dello sprint che cambia il comportamento dell'app (regola in `CLAUDE.md` → "Workflow sprint").
 > **Ambito:** descrive *cosa fa oggi* l'applicazione (non *come* è costruita).
 > **Riferimenti incrociati:**
@@ -254,17 +254,20 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 
 ### 4.2 Ricerche
 
-- Ogni ricerca salvata ha quattro campi: **tipo** (*Job role keyword* o *Company*), **keywords**, **città** e **paese**. Città e paese si scelgono con un autocompletamento geografico.
-  - Esempi: *Job role — "IT Project Manager" — Rome, Italy*; *Company — "Nome Azienda" — Milan, Italy*.
-  - Per le ricerche **Company** la fonte filtra davvero per azienda, non per corrispondenza testuale sulle keywords (sprint-39). È l'unica deviazione accettata dal vincolo "solo keywords e località" (§5.10).
+- Ogni ricerca salvata ha: **tipo** (*Job role keyword* o *Company*), **keywords**, **paese** e **città** e, solo per i Pro, la **modalità di lavoro** (Sprint 84).
+  - **Paese e città** (Sprint 84, SPEC-DELTA A17): prima si sceglie il **paese** da un elenco (nomi nella lingua dell'interfaccia, salvati in inglese), poi le **città**, come chip: **Free 1, Pro fino a 5** per ricerca. I suggerimenti delle città sono solo quelli del paese scelto e i nomi sono salvati in inglese (verso la fonte la località è sempre "City, Country" in inglese: prima una località scritta in italiano poteva finire negli USA). Ogni città è cercata in un **raggio fisso di circa 40 km** (25 miglia).
+  - Esempi: *Job role — "IT Project Manager" — Rome, Milan · Italy*; *Company — "Nome Azienda" — Milan · Italy*.
+  - **Modalità di lavoro** (Sprint 84, A18, solo Pro): Qualsiasi (predefinita) / Remoto / Ibrido / In sede; la fonte cerca solo annunci con quella modalità (filtro non garantito dalla fonte: la modalità mostrata sul job viene comunque dall'AI, §4.4). Per i Free il controllo è visibile ma bloccato con il badge PRO e "Scegliere remoto, ibrido o in sede è incluso nel piano Pro.".
+  - Per le ricerche **Company** la fonte filtra davvero per azienda, non per corrispondenza testuale sulle keywords (sprint-39). Tipo, più città, modalità di lavoro e la ricerca nascosta del lavoro dei desideri sono le sole deviazioni accettate dal vincolo "solo keywords e località" (§5.10).
 - Le ricerche si gestiscono da **Impostazioni → Ricerche salvate** (dallo Sprint 78 una sottopagina, §4.22): si creano, si modificano, si eliminano (con conferma), si attivano e si disattivano. La prima si crea in onboarding.
 - Una ricerca nuova creata da Impostazioni **nasce disattivata**. Solo le ricerche **attive** producono job, sia nella raccolta automatica sia in quella manuale.
 - **Limiti per piano:**
   - **Free:** fino a **10 ricerche salvate**, di cui al massimo **1 attiva per tipo** (quindi fino a 2 in totale: 1 Job role e 1 Company). Se si attiva una ricerca di un tipo che ne ha già una attiva, la precedente viene **disattivata automaticamente**; la ricerca dell'altro tipo non cambia. Un avviso indica il nome della ricerca disattivata (Sprint 68). Lo stesso vale se si **cambia il tipo** di una ricerca attiva (Job role ↔ Company): conta come un'attivazione nel nuovo tipo e spegne l'eventuale altra ricerca attiva di quel tipo, con lo stesso avviso.
-  - **Pro:** fino a **100 ricerche salvate**, di cui fino a **50 attive** in totale, divisibili liberamente tra i due tipi. Oltre i limiti l'operazione è rifiutata con un messaggio.
+  - **Pro:** fino a **100 ricerche salvate** e fino a **50 città attive** in totale (Sprint 84: **ogni città di una ricerca in uso conta come una ricerca attiva**, comprese quelle del lavoro dei desideri, contate una volta sola), divisibili liberamente tra i due tipi. Oltre i limiti l'operazione è rifiutata con un messaggio ("Hai raggiunto il numero massimo di città attive per il tuo piano (50)."), anche aggiungendo città a una ricerca già attiva; togliere città è sempre possibile. Il pannello della ricerca mostra "Ogni città conta come una ricerca attiva: ne usi n di 50" e la pagina Ricerche salvate "Città attive n di 50".
 - **Downgrade Pro→Free:** tutte le ricerche vengono **disattivate** e nessuna viene riattivata in automatico.
   - Le ricerche salvate restano tutte, anche se sono più di 10. In questo caso non se ne possono creare di nuove finché, eliminandone, non si scende sotto le 10.
-  - Le ricerche esistenti restano attivabili entro il limite Free.
+  - Le ricerche esistenti restano attivabili entro il limite Free; una ricerca con più di una città non si può attivare finché non resta una sola città. Anche il lavoro dei desideri viene spento (§4.23).
+- **Ricerche di prima dello Sprint 84:** migrate a "paese + 1 città" senza perderne nessuna; un paese vuoto è stato ricavato dalle altre ricerche con la stessa città.
 
 ### 4.3 Fonte delle offerte
 
@@ -290,7 +293,7 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
 
 - **Una raccolta al giorno per utente** (Sprint 77, al posto della raccolta notturna delle 02:00 per tutti): **automatica** per i Pro che la attivano, all'orario scelto (§4.14), oppure **manuale** con "Raccogli ora" (tutti i piani). Il giorno è quello di Europe/Rome (azzeramento a mezzanotte, come gli altri massimali); senza ricerche attive non si raccoglie e il giorno non viene consumato.
   - Riguarda le offerte pubblicate nelle **24 ore precedenti**; il vincolo è applicato alla fonte.
-  - Le ricerche attive dell'utente sono raggruppate per tipo e località: una richiesta alla fonte per gruppo, con al massimo **150 risultati per richiesta** (`MAX_ITEMS_PER_CALL`).
+  - Le ricerche attive dell'utente sono raggruppate per tipo, **città** e (Sprint 84) **modalità di lavoro**: una richiesta alla fonte per gruppo (una ricerca con 3 città fa 3 richieste), con raggio di 25 miglia e al massimo **150 risultati per richiesta** (`MAX_ITEMS_PER_CALL`). I doppioni tra città vicine sono eliminati dalla deduplica. Le ricerche nascoste del lavoro dei desideri (§4.23) si raccolgono come le altre.
   - **Non esiste più alcun tetto per piano o per notte**, né un cap di intake: tutte le offerte valide raccolte vengono valutate e mostrate (Sprint 46). Il piano non influisce sul volume raccolto.
 - **Scoring** di ogni offerta raccolta:
   - **punteggio di affinità da 1 a 10** rispetto al profilo master (Sprint 47), con una **breve motivazione** (al massimo circa 2 frasi);
@@ -303,6 +306,8 @@ La sezione "risultati chiave" **non esiste**. "Areas of Expertise" è un contenu
     - 1–2: profilo non pertinente.
   - Con una descrizione vuota o non valutabile, match e gap sono vuoti e il punteggio non supera 6.
   - Lo scoring non inventa competenze e non segnala come gap ciò che è già nel profilo. Al modello arrivano titolo, azienda, **località** (dallo Sprint 68) e descrizione dell'offerta.
+  - **Modalità di lavoro** (Sprint 84, A18, tutti i piani): nella stessa valutazione (nessuna chiamata AI in più) l'AI ricava dalla descrizione **Remoto, Ibrido, In sede o Non indicata**. Se non la trova e il job viene da una ricerca con modalità, vale quella della ricerca. I job raccolti prima dello Sprint 84 non hanno la modalità.
+  - **Lavoro dei desideri** (Sprint 84, A19, solo con il desiderio attivo, §4.23): la descrizione del desiderio va nel prompt e l'AI dà un giudizio sì/no **severo**: l'etichetta **Desiderio** solo se il job è **molto affine** alla descrizione (non una soglia di punteggio), da qualunque ricerca arrivi; un job della ricerca nascosta non è "desiderio" per il solo fatto di provenire da lì. Le etichette restano anche se il desiderio viene spento o cambiato; i job già valutati non vengono rivalutati.
 - **Limite per lingua richiesta** (Sprint 48). Se l'offerta richiede una lingua (dichiarata necessaria, oppure annuncio scritto interamente in una lingua diversa dall'inglese) che **non è nel profilo a nessun livello**, il punteggio è limitato a **3** (`LANGUAGE_MISMATCH_SCORE_CAP`).
   - La motivazione si apre con "Punteggio limitato a 3/10: lingua richiesta (…) assente dal profilo." oppure, per chi ha l'interfaccia in inglese, "Score capped at 3/10: required language (…) missing from the profile." (Sprint 71): vale la lingua dell'interfaccia del momento in cui l'offerta viene valutata, e la frase non cambia se poi l'utente cambia lingua. Il resto della motivazione è scritto dall'AI e non dipende dalla lingua dell'interfaccia.
   - Fanno eccezione le offerte che dichiarano un ambiente internazionale o di lavoro in inglese.
@@ -343,15 +348,16 @@ Nella sezione **Importati** c'è un riquadro "Importa un job" con:
   - Il link "Tutte le date" toglie il limite e mostra tutto lo storico.
   - Sostituisce i vecchi periodi preimpostati (Sprint 46).
 - **Location:** testo libero, cercato come sottostringa nella località del job.
-- **Ricerca** (di provenienza): scelta multipla tra tutte le ricerche salvate, attive e non, più "Nessuna ricerca" (Sprint 40, multi-selezione dallo Sprint 63). È **nascosto e ignorato nella sezione Importati**. Dallo Sprint 68 un job resta associato alla sua ricerca anche se questa viene modificata; per i job raccolti prima e non attribuibili con certezza vale ancora il confronto con i valori attuali della ricerca.
+- **Ricerca** (di provenienza): scelta multipla tra tutte le ricerche salvate, attive e non, più "Nessuna ricerca" (Sprint 40, multi-selezione dallo Sprint 63). È **nascosto e ignorato nella sezione Importati**. Resta per ricerca, non per città (una ricerca con più città è una pillola "parole chiave · prima città +N"). Dallo Sprint 84 il **primo chip** è **"Lavoro dei desideri"** (con stellina), se l'utente ha il desiderio (anche spento) o job con l'etichetta: filtra i job con l'etichetta Desiderio, non quelli arrivati dalla ricerca nascosta; vale in OR con le altre pillole del gruppo. Dallo Sprint 68 un job resta associato alla sua ricerca anche se questa viene modificata; per i job raccolti prima e non attribuibili con certezza vale ancora il confronto con i valori attuali della ricerca.
 - **Punteggio:** scelta multipla sui valori **1–10** (pillole).
 - **Stato:** scelta multipla tra **nuovo**, **CV generato**, **candidatura fatta**. Lo stato transitorio non è selezionabile.
 - **Candidati:** scelta multipla tra le fasce **<25**, **25–50**, **51–100**, **101–200**, **>200**. I job senza questo dato (importati, manuali) non rientrano in nessuna fascia.
 - **Recruiter:** tutti / con recruiter / senza recruiter (controllo a segmenti).
 - **Contratto** (Sprint 82): scelta multipla tra **Full-time**, **Part-time**, **Temporaneo** (gli altri tipi si vedono nel dettaglio ma non si filtrano). I job senza il dato restano fuori con il filtro attivo.
 - **Stipendio** (Sprint 82): tutti / con stipendio / senza stipendio (controllo a segmenti). Non c'è un filtro per importo (valuta e periodo non noti).
+- **Modalità** (Sprint 84, A18): scelta multipla tra **Remoto**, **Ibrido**, **In sede**, **Non indicata** (dallo scoring, §4.4). I job senza il dato (raccolti prima dello sprint, importati o manuali non ancora valutati) restano fuori con il filtro attivo.
 
-In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la ✕ per eliminarli, e il pulsante "Salva filtri attuali", che apre una finestra con il nome (§4.21). Ogni ricerca di provenienza è una pillola "parole chiave · città".
+In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la ✕ per eliminarli, e il pulsante "Salva filtri attuali", che apre una finestra con il nome (§4.21); dallo Sprint 84 salvano anche Modalità e il chip "Lavoro dei desideri". Ogni ricerca di provenienza è una pillola "parole chiave · città".
 
 **Ricerca testuale.**
 - Cerca per keyword in **titolo, azienda e località** (non nella descrizione), su tutto lo storico **della sezione corrente**, senza attraversare le altre.
@@ -359,7 +365,7 @@ In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la
 
 **Scheda del job nella lista** (ridotta dallo Sprint 74, SPEC-DELTA A2/A7).
 - **Tutta la scheda è cliccabile** e apre il dettaglio (il link è sul titolo); il cuoricino e il profilo del recruiter restano controlli separati.
-- **Badge:** stato e numero di candidati (in verde se sotto i 25). La ricerca di provenienza è nel dettaglio.
+- **Badge:** stato, **"Desiderio"** con stellina (Sprint 84, solo per i job con l'etichetta, §4.4) e numero di candidati (in verde se sotto i 25). La ricerca di provenienza e la modalità di lavoro sono nel dettaglio.
 - **Dati:** titolo; azienda · località con l'**icona del recruiter** in un cerchietto (con link al profilo se disponibile); data di raccolta ("Importato: …").
 - **Punteggio:** riquadro del punteggio in alto a destra, colorato per fasce di 2 valori.
 - **"Da colmare":** i **primi 2 gap**, solo l'etichetta, più "+N altri · vedi nel dettaglio".
@@ -374,10 +380,10 @@ In cima al pannello ci sono i **filtri salvati**, come pillole cliccabili con la
 - **Intestazione:**
   - **chip dello stato**, solo indicativo (non selezionabile): "Nuovo", "✓ CV generato", "✓ Candidatura fatta" o, durante la generazione del CV, "CV in generazione" con indicatore (§4.6);
   - titolo e **punteggio** a fasce di colore (§4.4);
-  - azienda · località con l'**icona del recruiter** (link al profilo se disponibile);
+  - azienda · località con l'**icona del recruiter** (link al profilo se disponibile) e, dallo Sprint 84, il chip della **modalità di lavoro** (Remoto / Ibrido / In sede; con "Non indicata" o senza dato il chip non c'è);
   - dallo Sprint 82, sotto, una riga con lo **stipendio** (evidenziato) e il **tipo di contratto**: solo i dati presenti, senza dati la riga non c'è;
   - pulsante **"Annuncio ↗"** ("Vai all'annuncio"), solo se il job ha un link di candidatura;
-  - etichette dei **candidati**, della **ricerca di provenienza** ("Trovato con: …") e la data di raccolta.
+  - etichette **"Lavoro dei desideri"** con stellina (Sprint 84, prima delle altre, solo con l'etichetta), dei **candidati**, della **ricerca di provenienza** ("Trovato con: …"; mai per la ricerca nascosta del desiderio, le cui keyword non si mostrano) e la data di raccolta.
 - **Documenti** (se esiste almeno un documento, se una generazione è in corso o se la candidatura è fatta): una riga per **CV**, **Cover letter** e **Messaggio**, con stato ("Pronto · N pagine", "Non ancora generato", "CV in generazione") e azioni: matita **Modifica** (solo documenti modificabili, §4.16, §4.19), **Scarica** (link firmato, §4.18), menu ⋯ con **Rigenera**; senza documento, **"Genera"**. Sotto la riga del documento gli avvisi "occupa N pagine invece di 1" e "generato prima dell'editor, rigeneralo per modificarlo" (Sprint 69). Sotto "Messaggio" i messaggi già generati (§4.20), con il testo lungo troncato e "Leggi tutto".
 - **"Perché questo punteggio":** la motivazione troncata a 3 righe con **"Leggi tutto"**; sotto, i contatori **"N corrispondenze"** e **"N gap"**: toccandone uno si apre l'elenco delle voci con la motivazione di ognuna (uno aperto per volta).
 - **"Descrizione annuncio"** a fisarmonica, chiusa all'apertura (Mostra / Nascondi).
@@ -406,6 +412,7 @@ Stato e sezione sono dimensioni **indipendenti**. Preferito e archiviazione sono
 **Archiviazione e preferito.**
 - Archiviare non cambia lo stato. Rimuovendo un job dall'archivio, questo torna alla sezione d'origine con lo stato che non ha mai perso.
 - Il **preferito** è un attributo separato: un job preferito e poi archiviato resta preferito, ma compare solo in Archiviati.
+- Anche l'etichetta **Desiderio** e la **modalità di lavoro** (Sprint 84, §4.4) sono attributi dati dallo scoring, non stati.
 
 ### 4.7 Generazione del CV
 
@@ -860,7 +867,8 @@ Si salva con **"Salva modifiche"**, che salva tutte le sezioni: dallo Sprint 81 
 
 **Impostazioni** (voce di menu "Impostazioni", `/settings`; dallo Sprint 78 mockup `impostazioni`: un **elenco a gruppi** al posto della pagina unica con sette riquadri). In cima la card del **piano** (Free/Pro) con il **saldo del credito extra**, in sola lettura (§4.11). Poi:
 1. **Ricerca job**
-   - **Ricerche salvate** ("N attive") → sottopagina `/settings/searches` (§4.2): una card per ricerca con tipo, parole chiave, città e paese, interruttore "In uso" / "Disattivata", "Modifica" (pannello) ed "Elimina" (conferma in una finestra; prima era immediato). "Nuova ricerca" nella barra in basso (dallo Sprint 81 sopra la barra di tab, che resta visibile) apre un pannello con tipo (Ruolo / Azienda), parole chiave, città e paese e l'avviso che la ricerca **nasce disattivata**. Sul Free, attivarne una spegne quella dello stesso tipo, con l'avviso che dice quale (Sprint 68). Errori del server (es. limite del piano) nel pannello o in cima alla pagina.
+   - **Ricerche salvate** ("N attive"; per i Pro dallo Sprint 84 "N città attive su 50") → sottopagina `/settings/searches` (§4.2): in alto "Città attive n di 50" con una barra; una card per ricerca con tipo, modalità (se scelta), parole chiave, città · paese, interruttore "In uso" / "Disattivata", "Modifica" (pannello) ed "Elimina" (conferma in una finestra; prima era immediato). "Nuova ricerca" nella barra in basso (dallo Sprint 81 sopra la barra di tab, che resta visibile) apre un pannello con tipo (Ruolo / Azienda), parole chiave, paese (elenco), città (chip, Free 1 / Pro 5, con il raggio e il conteggio delle città attive), modalità di lavoro (Pro; bloccata per i Free) e l'avviso che la ricerca **nasce disattivata**. Sul Free, attivarne una spegne quella dello stesso tipo, con l'avviso che dice quale (Sprint 68). Errori del server (es. limite del piano) nel pannello o in cima alla pagina.
+   - **Lavoro dei desideri** (Sprint 84, §4.23) → sottopagina `/settings/wish`: sottotitolo "Attivo · città" / "Spento · città" / "Non impostato"; per i Free badge PRO e "Solo piano Pro".
    - **Raccolta automatica** (Sprint 77): interruttore nell'elenco e, se attiva, orario di avvio a quarti d'ora ("Ogni giorno alle HH:MM · Ora italiana"); per i Free bloccata (badge PRO, "Solo piano Pro") con l'invito al Pro. Stesse regole del pannello di raccolta (§4.14).
 2. **Documenti**: **Lingua del CV generato** (pannello: lingua dell'offerta o sempre in inglese) e **Includi la foto nel CV** (interruttore).
 3. **Account**
@@ -870,12 +878,14 @@ Si salva con **"Salva modifiche"**, che salva tutte le sezioni: dallo Sprint 81 
    - **Privacy e sicurezza** (Sprint 67) → sottopagina `/settings/privacy`:
      - **Cambia password** (pannello): password attuale, nuova password (almeno 8 caratteri) ripetuta due volte. Dopo il cambio gli **altri dispositivi vengono disconnessi**, quello in uso resta collegato ("Password cambiata. Gli altri dispositivi sono stati disconnessi."). Password attuale errata, password diverse o nuova password troppo debole producono un messaggio d'errore;
      - **Documenti legali:** informativa privacy e termini di servizio, ciascuno con la versione accettata e la data ("versione 1.1 accettata il …"), e la dichiarazione di età minima con la data;
-     - **Esporta i miei dati:** scarica subito un **archivio ZIP** con tutti i dati dell'account in formato JSON (account, accettazioni, profilo, ricerche, offerte con punteggi e motivazioni, documenti generati, bozze e chat, messaggi di networking, filtri salvati, quote giornaliere, sessioni, dispositivi registrati per le notifiche, registri delle elaborazioni), i PDF di CV e cover letter, la foto e un file di istruzioni in italiano e inglese. La password non è inclusa. **Al massimo 3 export al giorno**; oltre: "Hai già esportato i dati 3 volte oggi: riprova domani.";
-     - **Zona pericolosa:** **"Elimina account"**. Una finestra chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
+     - **Esporta i miei dati:** scarica subito un **archivio ZIP** con tutti i dati dell'account in formato JSON (account, accettazioni, profilo, ricerche, lavoro dei desideri con la descrizione e le keyword ricavate, offerte con punteggi e motivazioni, documenti generati, bozze e chat, messaggi di networking, filtri salvati, quote giornaliere, sessioni, dispositivi registrati per le notifiche, registri delle elaborazioni), i PDF di CV e cover letter, la foto e un file di istruzioni in italiano e inglese. La password non è inclusa. **Al massimo 3 export al giorno**; oltre: "Hai già esportato i dati 3 volte oggi: riprova domani.";
+     - **Zona pericolosa:** **"Elimina account"**. Una finestra chiede la **password** e una **conferma esplicita** ("Ho capito che tutti i miei dati verranno eliminati e non potranno essere recuperati"); senza entrambe il pulsante "Elimina definitivamente" resta disabilitato. L'eliminazione è **immediata e non annullabile**: account, profilo, ricerche, lavoro dei desideri, offerte, documenti, bozze, chat, messaggi, filtri, sessioni di tutti i dispositivi, notifiche, accettazioni e file (PDF e foto). L'utente torna alla pagina di login e riceve un'**email di conferma** (se l'invio di email è configurato); le copie di backup che contengono i suoi dati vengono cancellate automaticamente **entro 7 giorni**. I registri tecnici delle elaborazioni restano solo in forma anonima.
 4. **App**
    - **Notifiche push** (§4.12): interruttore = preferenza "Ricevi notifiche push" dell'account (Sprint 67); sotto, lo stato di questo dispositivo ("Attiva notifiche", "Notifiche attive su questo dispositivo.", permesso negato, non supportate). Su iPhone/iPad fuori dalla schermata Home, le istruzioni per aggiungerla e "Come fare" (pannello in tre passi).
-   - **Lingua interfaccia** (pannello: Italiano / English).
-5. **Esci** in fondo, con conferma (Sprint 73).
+5. **Aspetto** (Sprint 84, A20)
+   - **Dimensione del testo** → sottopagina `/settings/text-size`: **Come il telefono** (predefinita: segue la dimensione del testo impostata nel sistema; su iPhone e iPad anche nell'app aggiunta alla Home, dove non c'è lo zoom di Safari), **Normale**, **Grande** (circa +20 %), con un'anteprima. Ingrandisce **tutta l'app** (testo, pulsanti, icone, spazi) e la pagina si ridispone sulla larghezza dello schermo, senza scorrimento laterale. La scelta vale **per il dispositivo** (non è salvata sull'account) e si applica subito.
+   - **Lingua interfaccia** (pannello: Italiano / English; dallo Sprint 84 in questo gruppo, prima in App).
+6. **Esci** in fondo, con conferma (Sprint 73).
 
 Le sottopagine hanno un indirizzo proprio (si aprono anche da un link diretto) e "‹ Impostazioni" in alto; l'indietro del browser torna all'elenco. I collegamenti legali restano anche nel piè di pagina.
 
@@ -885,6 +895,16 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 - Disponibile in italiano e inglese.
 - Si cambia in Impostazioni → Lingua interfaccia, dal selettore nella barra in alto su schermi da 1024 px e, prima del login, da quello in alto nelle pagine di accesso. La scelta viene salvata sull'account e al login successivo prevale.
 - Al primo accesso il default è la lingua del dispositivo: italiano se è italiano, altrimenti inglese.
+
+### 4.23 Lavoro dei desideri (Sprint 84, SPEC-DELTA A19)
+
+- **Solo Pro**, uno per utente, in **Impostazioni → Ricerca job → Lavoro dei desideri** (mockup `desiderio-pro`), con l'interruttore **Attivo** (salva subito).
+- L'utente scrive una **descrizione** del lavoro che vorrebbe (fino a **1000 caratteri**, con contatore) e sceglie **paese** e **fino a 5 città**, come nelle ricerche (§4.2); le città contano come ricerche attive (contate una volta sola, anche se le keyword sono due). Si salva con "Salva".
+- Al salvataggio l'AI ricava dalla descrizione **1–2 keyword molto mirate** (meglio pochi job ma pertinenti), che diventano una ricerca **nascosta**: le keyword **non vengono mai mostrate** all'utente (né nella pagina né nelle ricerche salvate né come "Trovato con"), si ricavano di nuovo solo quando cambia la descrizione, e sono incluse solo nell'export dei dati (diritto di accesso). La descrizione si può cambiare al massimo **5 volte al giorno** (giorno Europe/Rome, nessun costo a credito); la pagina mostra quante modifiche restano. Se l'AI non risponde il desiderio non cambia e compare un messaggio.
+- Durante lo scoring ogni job può ricevere l'etichetta **Desiderio** (§4.4); card, dettaglio e filtro "Lavoro dei desideri" in §4.5.
+- Testo della pagina: "Ogni giorno cerchiamo lavori in linea con la tua descrizione. Durante la valutazione l'AI segna con ★ Desiderio i job, da qualunque ricerca arrivino, molto vicini a ciò che hai descritto. Le città contano come ricerche attive."
+- **Free:** pagina bloccata (mockup `desiderio-free`) con la spiegazione e "Scopri Pro", che porta alla pagina "I tuoi limiti di oggi" (`/settings/limits`, piano, credito e massimali; non esiste un acquisto self-service, §5.4). Al **downgrade** il desiderio viene spento, come le ricerche; resta salvato.
+- La descrizione è un dato personale: è nell'informativa (versione 1.2), nell'export e viene cancellata con l'account.
 
 ---
 
@@ -899,7 +919,7 @@ Export ed eliminazione sono disponibili anche dalla schermata di accettazione de
 7. **Scelta della lunghezza del CV.** L'obiettivo è sempre 1 pagina.
 8. **Ricalcolo dello score** dopo "colma i gap", dopo una modifica del profilo o dopo modifiche nell'editor. Non c'è nemmeno la rivalutazione dello storico dopo un cambio delle regole di scoring.
 9. **Generazione automatica di CV** (o di cover letter e messaggi) per qualunque job. Rimossa nello Sprint 45: tutto è su richiesta.
-10. **Filtri delle ricerche salvate oltre tipo, keywords e località**: tipo di contratto, modalità di lavoro e altri criteri non sono disponibili. Il tipo (Job role/Company) è l'unica deviazione accettata (sprint-39).
+10. **Filtri delle ricerche salvate oltre tipo, keywords e località**: tipo di contratto, raggio e altri criteri non sono disponibili. Deviazioni accettate: il tipo (Job role/Company, sprint-39) e, dallo Sprint 84, più città per ricerca con raggio fisso, la modalità di lavoro (solo Pro) e la ricerca nascosta del lavoro dei desideri (solo Pro).
 11. **Notifiche diverse** da quella di fine raccolta automatica (Pro) e da quella di inattività, come avvisi al cambio stato o riepiloghi via email. Le uniche email inviate sono quelle di servizio dello Sprint 67 (verifica dell'indirizzo, tentativo di registrazione, recupero password, conferma di cancellazione, §4.1).
 12. *(Voce rimossa in v6: l'editor in-app del CV esiste dallo Sprint 51, §4.16.)*
 13. **Più profili master per utente.** Il profilo è uno solo (vedi §8).
@@ -1008,9 +1028,10 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Una modifica al profilo vale per i documenti generati in seguito, non per quelli già prodotti.
 
 ### Ricerche
-- ☐ Una ricerca è definita da tipo (Job role/Company), keywords, città e paese.
+- ☐ Una ricerca è definita da tipo (Job role/Company), keywords, paese (elenco) e città (Free 1, Pro fino a 5) e, per i Pro, modalità di lavoro (Sprint 84).
 - ☐ Free: fino a 10 ricerche salvate e 1 attiva per tipo. Attivandone una seconda dello stesso tipo, la precedente si disattiva e quella dell'altro tipo resta attiva.
-- ☐ Pro: fino a 100 ricerche salvate e 50 attive in totale.
+- ☐ Pro: fino a 100 ricerche salvate e 50 città attive in totale: ogni città di una ricerca in uso, e del lavoro dei desideri attivo, conta come una ricerca attiva (Sprint 84).
+- ☐ Le ricerche di prima dello Sprint 84 risultano "paese + 1 città" e restano attive come prima.
 - ☐ Una ricerca si disattiva e si riattiva senza perdere i suoi dati. Solo le ricerche attive producono job.
 - ☐ Al downgrade Pro→Free tutte le ricerche risultano disattivate. Con più di 10 ricerche salvate non se ne possono creare di nuove finché non si scende sotto 10.
 
@@ -1023,6 +1044,8 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Se l'offerta richiede una lingua assente dal profilo, senza eccezione internazionale, il punteggio non supera 3 e la motivazione lo dichiara.
 - ☐ La raccolta (automatica o manuale) non genera alcun CV.
 - ☐ Se lo scoring di un job fallisce, il job resta visibile senza punteggio, in fondo alla lista.
+- ☐ Sprint 84: ogni città di una ricerca è cercata a parte, con raggio di 25 miglia e località "City, Country" in inglese; una ricerca con modalità la passa alla fonte. Ogni job valutato ha la modalità (Remoto, Ibrido, In sede, Non indicata), con quella della ricerca se l'AI non la trova.
+- ☐ Sprint 84: con il lavoro dei desideri attivo l'etichetta Desiderio compare solo sui job molto affini alla descrizione, da qualunque ricerca arrivino.
 
 ### Statistiche e raccolta manuale
 - ☐ Nella sezione Raccolti il riepilogo mostra i job trovati oggi e in settimana; aperto mostra job trovati (con "di cui manuali"), CV generati e candidature fatte, per oggi, settimana e totali (Sprint 74).
@@ -1038,6 +1061,9 @@ Formato: checklist di condizioni verificabili sull'as-is.
 - ☐ Sprint 82: nel dettaglio stipendio e contratto compaiono solo se presenti; i filtri Contratto (multi, OR) e Stipendio si combinano in AND con gli altri, entrano nel conteggio, in "Azzera filtri" e nei filtri salvati; la scheda della lista non cambia. In Profilo le attività sono chip modificabili con i limiti di 15 e 400 caratteri.
 - ☐ I filtri location, ricerca (multi), punteggio (1–10, multi), stato (multi), candidati (fasce, multi) e recruiter, nel pannello "Filtri", si combinano in AND, con OR dentro ciascun filtro multiplo, e si applicano subito; il pulsante Filtri mostra quanti gruppi sono attivi e "Cancella" / "Azzera filtri" li riportano ai valori di default (Sprint 74).
 - ☐ Il filtro Ricerca non compare nella sezione Importati.
+- ☐ Sprint 84: il filtro Modalità (multi, OR) si combina in AND con gli altri, entra nel conteggio, in "Azzera filtri" e nei filtri salvati; "Lavoro dei desideri" è il primo chip del gruppo Ricerca e mostra i job con l'etichetta; card ("Desiderio") e dettaglio ("Lavoro dei desideri", chip della modalità) mostrano le etichette.
+- ☐ Sprint 84: il lavoro dei desideri è solo Pro (Free: pagina bloccata), le sue keyword non compaiono mai, la descrizione cambia al massimo 5 volte al giorno; al downgrade viene spento.
+- ☐ Sprint 84: "Dimensione del testo" (Come il telefono / Normale / Grande) ingrandisce tutta l'app senza scorrimento laterale e resta sul dispositivo.
 - ☐ La ricerca testuale trova job per titolo, azienda o località nella sola sezione corrente e, quando è attiva, ignora tutti gli altri filtri.
 - ☐ La scheda mostra stato, candidati, titolo, azienda, località, icona del recruiter, data di raccolta, preferito, punteggio e i primi 2 gap con "+N altri"; tutta la scheda apre il dettaglio e non ha pulsanti di dettaglio, archiviazione o generazione (Sprint 74).
 - ☐ Il dettaglio mostra stato (solo indicativo), punteggio, motivazione troncata con "Leggi tutto", contatori di corrispondenze e gap che aprono le voci con la motivazione, descrizione a fisarmonica; la barra in basso sostituisce la barra di tab con "Genera CV ▾", "Segna candidatura fatta" o "Annulla candidatura" secondo lo stato (Sprint 75).

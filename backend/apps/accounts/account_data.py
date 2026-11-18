@@ -14,7 +14,7 @@ from apps.cv.models import CoverLetterDocument, CoverLetterDraft, CVDocument, CV
 from apps.jobs.models import DailyQuota, Job, JobFilterPreset, RunLog
 from apps.notifications.models import PushSubscription
 from apps.profiles.models import Certification, Education, Experience, Language, Profile, Skill
-from apps.searches.models import SavedSearch
+from apps.searches.models import JobWish, SavedSearch
 
 from .models import AuthToken, LegalAcceptance
 
@@ -39,7 +39,7 @@ README = """App-apply — esportazione dei tuoi dati / your data export
 
 IT
 - dati.json: tutti i dati del tuo account in formato JSON (account, accettazioni
-  di informativa e termini, profilo e sezioni, ricerche salvate, offerte con
+  di informativa e termini, profilo e sezioni, ricerche salvate, lavoro dei desideri, offerte con
   punteggi e motivazioni, documenti generati con il loro contenuto, bozze e
   cronologie delle chat, messaggi di networking, filtri salvati, quote
   giornaliere, sessioni attive, sottoscrizioni alle notifiche, registri delle
@@ -49,7 +49,7 @@ IT
 
 EN
 - dati.json: all your account data in JSON format (account, privacy policy and
-  terms acceptances, profile and sections, saved searches, jobs with scores and
+  terms acceptances, profile and sections, saved searches, dream job, jobs with scores and
   reasons, generated documents with their content, drafts and chat histories,
   networking messages, saved filters, daily quotas, active sessions, push
   subscriptions, processing logs). The password is not included (it is only
@@ -116,6 +116,10 @@ def build_export(user):
         "legal_acceptances": _rows(LegalAcceptance.objects.filter(user=user), exclude=("user_id",)),
         "profile": profile_data,
         "saved_searches": _rows(SavedSearch.objects.filter(user=user).order_by("id"), exclude=("user_id",)),
+        # Sprint 84: lavoro dei desideri (descrizione, paese, città e le
+        # keyword ricavate dall'AI, che l'app non mostra ma sono dati
+        # dell'utente: diritto di accesso).
+        "job_wish": _rows(JobWish.objects.filter(user=user), exclude=("user_id",)),
         "jobs": _rows(Job.objects.filter(user=user).order_by("id"), exclude=("user_id",)),
         "cv_documents": cv_documents,
         "cv_drafts": _rows(CVDraft.objects.filter(user=user).order_by("id"), exclude=("user_id",)),

@@ -49,8 +49,9 @@ test('registrazione, onboarding manuale e arrivo alla lista senza errori console
 
   // Step 3: prima ricerca
   await page.getByLabel('Parole chiave').fill('developer')
-  await page.getByLabel('Città', { exact: true }).fill('Milano')
-  await page.getByLabel('Paese', { exact: true }).fill('Italia')
+  // Sprint 84 (A17): prima il paese (elenco), poi la città (una sola per i Free).
+  await page.getByLabel('Paese', { exact: true }).selectOption({ label: 'Italia' })
+  await page.getByLabel('Città', { exact: true }).fill('Milan')
   await page.getByRole('button', { name: 'Vai alla lista' }).click()
 
   await expect(page).toHaveURL(/\/list$/)

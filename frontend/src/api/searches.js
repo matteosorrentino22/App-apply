@@ -4,23 +4,28 @@ export function fetchSearches() {
   return apiFetch('/api/searches/')
 }
 
-export function createSearch({ search_type, keywords, city, country }) {
-  return apiFetch('/api/searches/', { method: 'POST', body: { search_type, keywords, city, country } })
+// Sprint 84 (A17, A18): paese + città (lista) e modalità di lavoro (Pro).
+function searchBody({ search_type, keywords, country, cities, work_mode }) {
+  return { search_type, keywords, country, cities, work_mode: work_mode || '' }
 }
 
-export function updateSearch(id, { search_type, keywords, city, country }) {
-  return apiFetch(`/api/searches/${id}/`, {
-    method: 'PATCH',
-    body: { search_type, keywords, city, country },
-  })
+export function createSearch(search) {
+  return apiFetch('/api/searches/', { method: 'POST', body: searchBody(search) })
+}
+
+export function updateSearch(id, search) {
+  return apiFetch(`/api/searches/${id}/`, { method: 'PATCH', body: searchBody(search) })
 }
 
 export function deleteSearch(id) {
   return apiFetch(`/api/searches/${id}/`, { method: 'DELETE' })
 }
 
-export function autocompleteCity(query) {
-  return apiFetch(`/api/searches-city-autocomplete/?q=${encodeURIComponent(query)}`)
+// `countryCode` (ISO, facoltativo): solo città di quel paese (Sprint 84).
+export function autocompleteCity(query, countryCode = '') {
+  const params = new URLSearchParams({ q: query })
+  if (countryCode) params.set('country_code', countryCode)
+  return apiFetch(`/api/searches-city-autocomplete/?${params.toString()}`)
 }
 
 export function activateSearch(id) {
@@ -29,4 +34,18 @@ export function activateSearch(id) {
 
 export function deactivateSearch(id) {
   return apiFetch(`/api/searches/${id}/deactivate/`, { method: 'POST' })
+}
+
+// Città attive e massimali (Sprint 84): "Città attive n di 50".
+export function fetchSearchLimits() {
+  return apiFetch('/api/search-limits/')
+}
+
+// Lavoro dei desideri (Sprint 84, A19): le keyword ricavate non arrivano mai.
+export function fetchJobWish() {
+  return apiFetch('/api/job-wish/')
+}
+
+export function saveJobWish({ description, country, cities, is_active }) {
+  return apiFetch('/api/job-wish/', { method: 'PUT', body: { description, country, cities, is_active } })
 }

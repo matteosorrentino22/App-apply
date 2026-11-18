@@ -62,13 +62,15 @@ test('la schermata account mostra piano e saldo credito impostati da amministrat
 // Sprint 78: le ricerche sono nella sottopagina /settings/searches; la nuova
 // ricerca si crea in un pannello, attivazione con l'interruttore della card,
 // eliminazione con conferma.
+// Sprint 84 (A17): prima il paese (elenco, nomi nella lingua dell'interfaccia),
+// poi la città; per i Free un solo campo città.
 async function addSearchFromSheet(page, keywords, city, country) {
   await page.getByRole('button', { name: 'Nuova ricerca' }).click()
   const sheet = page.getByRole('dialog', { name: 'Nuova ricerca' })
   await expect(sheet.getByText('La nuova ricerca nasce disattivata')).toBeVisible()
   await sheet.getByLabel('Parole chiave').fill(keywords)
+  await sheet.getByLabel('Paese', { exact: true }).selectOption({ label: country })
   await sheet.getByLabel('Città', { exact: true }).fill(city)
-  await sheet.getByLabel('Paese', { exact: true }).fill(country)
   await sheet.getByRole('button', { name: 'Aggiungi ricerca' }).click()
   return sheet
 }
@@ -83,7 +85,7 @@ test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, re
   await expect(sheet).not.toBeVisible()
   const card = page.getByTestId('search-card')
   await expect(card.getByText('project manager', { exact: true })).toBeVisible()
-  await expect(card.getByText('Milano, Italia')).toBeVisible()
+  await expect(card.getByText('Milano · Italia')).toBeVisible()
   await expect(card.getByText('Disattivata')).toBeVisible()
 
   const toggle = card.getByRole('switch', { name: 'Usa la ricerca «project manager»' })
@@ -98,7 +100,7 @@ test('crea, attiva, disattiva ed elimina una ricerca salvata', async ({ page, re
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: 'Elimina', exact: true }).click()
   await modal.getByRole('button', { name: 'Elimina', exact: true }).click()
-  await expect(page.getByText('Milano, Italia')).not.toBeVisible()
+  await expect(page.getByText('Milano · Italia')).not.toBeVisible()
   await expect(page.getByText('Nessuna ricerca salvata.')).toBeVisible()
 
   // Indietro del browser: si torna all'elenco delle Impostazioni.
@@ -118,7 +120,7 @@ test('mostra il messaggio del limite di piano oltre le ricerche salvate consenti
   for (let i = 0; i < 10; i += 1) {
     await request.post(`${baseURL}/api/searches/`, {
       headers: { Authorization: `Token ${token}` },
-      data: { keywords: `developer ${i}`, city: 'Roma', country: 'Italia' },
+      data: { keywords: `developer ${i}`, cities: ['Roma'], country: 'Italy' },
     })
   }
 
@@ -371,4 +373,128 @@ test('profilo: attività come chip, modifica con contatore, limiti di 400 caratt
   await expect(input).toHaveAttribute('placeholder', 'Hai raggiunto il massimo di 15 attività')
   await expect(page.getByText('Elimina un’attività per poterne aggiungere un’altra.')).toBeVisible()
   await expect(page.getByText('15 / 15')).toBeVisible()
+})
+
+// --- Sprint 84 (SPEC-DELTA A17–A20) ---
+
+function seedWish(email) {
+  execFileSync('.venv/bin/python', ['manage.py', 'shell'], {
+    cwd: BACKEND_DIR,
+    env: BACKEND_ENV,
+    input: `
+from django.contrib.auth import get_user_model
+from apps.searches.models import JobWish
+from apps.searches.services import sync_wish_searches
+u = get_user_model().objects.get(email="${email}")
+w = JobWish.objects.create(user=u, description="Product manager in una fintech", country="Italy", cities=["Milan", "Turin"], is_active=True, keywords=["Keyword Segreta E2E"])
+sync_wish_searches(w)
+`,
+  })
+}
+
+test('Pro: ricerca su più città con modalità; le città contano come ricerche attive', async ({ page, request, baseURL }) => {
+  test.setTimeout(60000)
+  const { email, password } = await registerUser(request, baseURL)
+  setAccount(email, { plan: 'pro', credit: '0' })
+  await login(page, email, password)
+  await page.goto('/settings/searches')
+  await expect(page.getByTestId('active-cities')).toContainText('0 di 50')
+
+  await page.getByRole('button', { name: 'Nuova ricerca' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nuova ricerca' })
+  await sheet.getByLabel('Parole chiave').fill('product manager')
+  await sheet.getByLabel('Paese', { exact: true }).selectOption({ label: 'Italia' })
+  const adder = sheet.getByRole('textbox', { name: 'Città', exact: true })
+  for (const city of ['Milan', 'Turin', 'Bologna']) {
+    await adder.fill(city)
+    await adder.press('Enter')
+  }
+  await expect(sheet.getByText('3 / 5')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Rimuovi Bologna' }).click()
+  await sheet.getByRole('radiogroup', { name: 'Modalità di lavoro' }).getByText('Ibrido', { exact: true }).click()
+  await expect(sheet.getByRole('radio', { name: 'Ibrido' })).toBeChecked()
+  await sheet.getByRole('button', { name: 'Aggiungi ricerca' }).click()
+  await expect(sheet).not.toBeVisible()
+
+  const card = page.getByTestId('search-card')
+  await expect(card.getByText('Milan, Turin · Italia')).toBeVisible()
+  await expect(card.getByText('Ibrido')).toBeVisible()
+  await card.getByRole('switch', { name: 'Usa la ricerca «product manager»' }).click()
+  await expect(card.getByText('In uso')).toBeVisible()
+  await expect(page.getByTestId('active-cities')).toContainText('2 di 50')
+  await page.goto('/settings')
+  await expect(page.getByTestId('settings-searches')).toContainText('2 città attive su 50')
+})
+
+test('Free: una città per ricerca e modalità bloccata; lavoro dei desideri bloccato', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+  await page.goto('/settings/searches')
+  await page.getByRole('button', { name: 'Nuova ricerca' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Nuova ricerca' })
+  await expect(sheet.getByText('Con Pro puoi cercare in 5 città per ricerca.', { exact: false })).toBeVisible()
+  await expect(sheet.getByText('Scegliere remoto, ibrido o in sede è incluso nel piano Pro.')).toBeVisible()
+  await expect(sheet.getByRole('radio', { name: 'Remoto' })).toBeDisabled()
+  await page.keyboard.press('Escape')
+
+  await page.goto('/settings')
+  await expect(page.getByTestId('settings-wish')).toContainText('Solo piano Pro')
+  await page.getByTestId('settings-wish').click()
+  await expect(page).toHaveURL(/\/settings\/wish$/)
+  await expect(page.getByTestId('wish-locked')).toContainText('Incluso nel piano Pro')
+  await expect(page.getByLabel('Descrivi il lavoro che vorresti')).toHaveCount(0)
+  // "Scopri Pro" porta alla pagina dei limiti e del piano.
+  await page.getByRole('link', { name: 'Scopri Pro' }).click()
+  await expect(page).toHaveURL(/\/settings\/limits$/)
+})
+
+test('Pro: lavoro dei desideri senza keyword visibili, interruttore e ricerca nascosta', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  setAccount(email, { plan: 'pro', credit: '0' })
+  seedWish(email)
+  await login(page, email, password)
+  await page.goto('/settings')
+  await expect(page.getByTestId('settings-wish')).toContainText('Attivo · Milan, Turin')
+  await page.getByTestId('settings-wish').click()
+
+  await expect(page.getByLabel('Descrivi il lavoro che vorresti')).toHaveValue('Product manager in una fintech')
+  await expect(page.getByText('30 / 1000')).toBeVisible()
+  await expect(page.getByText('2 / 5')).toBeVisible()
+  await expect(page.getByTestId('wish-changes-left')).toContainText('5 di 5')
+  await expect(page.locator('body')).not.toContainText('Keyword Segreta E2E')
+  // Nessuna modifica: "Salva" non serve.
+  await expect(page.getByRole('button', { name: 'Salva', exact: true })).toBeDisabled()
+
+  const toggle = page.getByRole('switch', { name: 'Attivo' })
+  await toggle.click()
+  await expect(page.getByText('Lavoro dei desideri spento')).toBeVisible()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+
+  // La ricerca nascosta non compare tra le ricerche salvate.
+  await page.goto('/settings/searches')
+  await expect(page.getByText('Nessuna ricerca salvata.')).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Keyword Segreta E2E')
+  await page.goto('/settings')
+  await expect(page.getByTestId('settings-wish')).toContainText('Spento')
+})
+
+test('dimensione del testo: Grande ingrandisce tutta l\'app e resta sul dispositivo', async ({ page, request, baseURL }) => {
+  const { email, password } = await registerUser(request, baseURL)
+  await login(page, email, password)
+  await page.goto('/settings')
+  await expect(page.getByRole('region', { name: 'Aspetto' }).getByTestId('settings-language')).toBeVisible()
+  await expect(page.getByTestId('settings-text-size')).toContainText('Come il telefono')
+  await page.getByTestId('settings-text-size').click()
+  await expect(page.getByRole('radio', { name: 'Come il telefono' })).toHaveAttribute('aria-checked', 'true')
+
+  await page.getByRole('radio', { name: 'Grande' }).click()
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.2')
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.2')
+  await expect(page.getByRole('radio', { name: 'Grande' })).toHaveAttribute('aria-checked', 'true')
+  // Nessuno scorrimento laterale.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+
+  await page.getByRole('radio', { name: 'Normale' }).click()
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('')
 })

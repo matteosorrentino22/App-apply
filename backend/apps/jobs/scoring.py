@@ -7,6 +7,7 @@ from django.utils.translation import gettext as _
 
 from apps.profiles.language_options import LANGUAGE_NAME_LABELS
 from apps.profiles.models import Profile
+from apps.searches.wish import active_wish_description
 
 from .ai_scoring import score_job_with_claude
 from .models import Job, RunLog
@@ -110,7 +111,20 @@ def _apply_score_result(job, result, profile):
     job.score_gaps = result["score_gaps"]
     job.score_reasoning = reasoning
     job.date_scored = timezone.now()
-    job.save(update_fields=["score", "score_match", "score_gaps", "score_reasoning", "date_scored"])
+    # Sprint 84 (A18): modalità dall'AI; se non indicata vale quella della
+    # ricerca che ha trovato il job, se impostata.
+    work_mode = result.get("work_mode") or Job.WorkMode.NOT_INDICATED
+    search = job.matched_saved_search
+    if work_mode == Job.WorkMode.NOT_INDICATED and search is not None and search.work_mode:
+        work_mode = search.work_mode
+    job.work_mode = work_mode
+    # Sprint 84 (A19): l'etichetta Desiderio solo se l'AI l'ha valutata
+    # (desiderio attivo); senza desiderio resta quella che c'era.
+    if "wish_match" in result:
+        job.is_wish_match = bool(result["wish_match"])
+    job.save(
+        update_fields=["score", "score_match", "score_gaps", "score_reasoning", "date_scored", "work_mode", "is_wish_match"]
+    )
 
 
 def _log_scoring_failure(job, exc, started_at):
@@ -126,6 +140,13 @@ def _log_scoring_failure(job, exc, started_at):
     )
 
 
+def _call_scoring(job, profile, wish):
+    # La descrizione del desiderio va nel prompt solo se attivo (Sprint 84).
+    if wish:
+        return score_job_with_claude(job, profile, wish_description=wish)
+    return score_job_with_claude(job, profile)
+
+
 def score_job(job):
     """Assegna punteggio/motivazione a un Job chiamando Claude.
 
@@ -135,8 +156,9 @@ def score_job(job):
     """
     started_at = timezone.now()
     profile = _get_profile(job.user)
+    wish = active_wish_description(job.user)
     try:
-        result = score_job_with_claude(job, profile)
+        result = _call_scoring(job, profile, wish)
     except Exception as exc:
         _log_scoring_failure(job, exc, started_at)
         return False
@@ -149,10 +171,10 @@ def _score_call(item):
     """Solo la chiamata Bedrock (nessun accesso ORM): eseguita nel pool di
     thread da `score_jobs`. Il profilo è già stato caricato (con prefetch)
     sul thread principale prima della dispatch."""
-    job, profile = item
+    job, profile, wish = item
     started_at = timezone.now()
     try:
-        result = score_job_with_claude(job, profile)
+        result = _call_scoring(job, profile, wish)
     except Exception as exc:
         return job, profile, None, exc, started_at
     return job, profile, result, None, started_at
@@ -176,7 +198,14 @@ def score_jobs(jobs):
             profile_cache[job.user_id] = _get_profile(job.user)
         return profile_cache[job.user_id]
 
-    prepared = [(job, profile_for(job)) for job in jobs]
+    wish_cache = {}
+
+    def wish_for(job):
+        if job.user_id not in wish_cache:
+            wish_cache[job.user_id] = active_wish_description(job.user)
+        return wish_cache[job.user_id]
+
+    prepared = [(job, profile_for(job), wish_for(job)) for job in jobs]
 
     scored = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=SCORING_CONCURRENCY) as pool:

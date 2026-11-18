@@ -14,6 +14,7 @@ export function fetchJobs({
   hasRecruiter,
   contractTypes,
   hasSalary,
+  workModes,
 }) {
   const params = new URLSearchParams({ section })
   if (q) {
@@ -29,6 +30,7 @@ export function fetchJobs({
     if (hasRecruiter) params.set('recruiter', hasRecruiter)
     if (contractTypes && contractTypes.length) params.set('contract', contractTypes.join(','))
     if (hasSalary) params.set('salary', hasSalary)
+    if (workModes && workModes.length) params.set('mode', workModes.join(','))
   }
   return apiFetch(`/api/jobs/?${params.toString()}`)
 }

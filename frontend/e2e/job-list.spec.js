@@ -692,3 +692,45 @@ test('dettaglio: stipendio e contratto solo quando presenti', async ({ page, req
   await expect(page.getByRole('heading', { name: 'Consulente HR', level: 1 })).toBeVisible()
   await expect(page.getByTestId('job-pay-contract')).toHaveCount(0)
 })
+
+// --- Sprint 84 (SPEC-DELTA A18–A19): modalità di lavoro dallo scoring ed
+// etichetta Desiderio. Nel seed: Project Manager ibrido e "Desiderio",
+// Backend Developer remoto, Head of Operations "Non indicata", gli altri
+// senza modalità (job di prima dello sprint).
+
+test('filtro Modalità e chip "Lavoro dei desideri"; etichette su card e dettaglio', async ({ page, request, baseURL }) => {
+  await loginAsSeededUser(page, request, baseURL)
+
+  await expect(cardFor(page, 'Project Manager').getByTestId('job-wish-badge')).toHaveText('Desiderio')
+  await expect(cardFor(page, 'Backend Developer').getByTestId('job-wish-badge')).toHaveCount(0)
+
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Remoto', exact: true }).click())
+  await expect(page).toHaveURL(/mode=remote/)
+  await expect(cardFor(page, 'Backend Developer')).toBeVisible()
+  await expect(cardFor(page, 'Project Manager')).not.toBeVisible()
+  // OR nel gruppo; i job senza modalità (raccolti prima) restano fuori.
+  await inFilters(page, (sheet) => sheet.getByRole('button', { name: 'Non indicata', exact: true }).click())
+  await expect(cardFor(page, 'Head of Operations')).toBeVisible()
+  await expect(cardFor(page, 'Data Analyst')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: /^Filtri \(1\)/ })).toBeVisible()
+
+  // "Lavoro dei desideri" è il primo chip del gruppo Ricerca.
+  await inFilters(page, async (sheet) => {
+    await sheet.getByRole('button', { name: 'Azzera filtri' }).click()
+    const searchGroup = sheet.getByRole('group', { name: 'Ricerca di provenienza' })
+    await expect(searchGroup.getByRole('button').first()).toHaveText('Lavoro dei desideri')
+    await sheet.getByRole('button', { name: 'Lavoro dei desideri', exact: true }).click()
+  })
+  await expect(page).toHaveURL(/search=wish/)
+  await expect(cardFor(page, 'Project Manager')).toBeVisible()
+  await expect(cardFor(page, 'Backend Developer')).not.toBeVisible()
+
+  await openCard(page, 'Project Manager')
+  await expect(page.getByTestId('job-wish-badge')).toHaveText('Lavoro dei desideri')
+  await expect(page.getByTestId('job-work-mode')).toContainText('Ibrido')
+  await page.goBack()
+  await page.goto('/list')
+  await openCard(page, 'Head of Operations')
+  await expect(page.getByRole('heading', { name: 'Head of Operations', level: 1 })).toBeVisible()
+  await expect(page.getByTestId('job-work-mode')).toHaveCount(0)
+})

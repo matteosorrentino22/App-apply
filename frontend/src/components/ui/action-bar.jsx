@@ -19,7 +19,10 @@ function ActionBar({ className, children, stacked = false }) {
     // Sprint 81: l'altezza reale (i pulsanti possono andare a capo a 320 px)
     // finisce in --app-actionbar-h, usata da index.css per lo spazio in fondo.
     const update = () => {
-      if (ref.current) root.style.setProperty('--app-actionbar-h', `${Math.ceil(ref.current.getBoundingClientRect().height)}px`)
+      // Sprint 84: altezza nelle unità CSS della pagina (offsetHeight), non nel
+      // rettangolo sullo schermo, che con la dimensione del testo Grande
+      // (zoom sul documento) è già ingrandito; +1 per l'arrotondamento.
+      if (ref.current) root.style.setProperty('--app-actionbar-h', `${ref.current.offsetHeight + 1}px`)
     }
     update()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)

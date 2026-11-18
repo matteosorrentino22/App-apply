@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: App-apply\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-17 00:22+0100\n"
+"POT-Creation-Date: 2026-11-17 22:25+0100\n"
 "PO-Revision-Date: 2026-11-14 17:00+0100\n"
 "Last-Translator: App-apply\n"
 "Language-Team: English\n"
@@ -610,6 +610,11 @@ msgid "Il filtro contratto ammette solo: %(values)s."
 msgstr "The contract filter only allows: %(values)s."
 
 #: apps/jobs/views.py
+#, python-format
+msgid "Il filtro modalità ammette solo: %(values)s."
+msgstr "The work mode filter only allows: %(values)s."
+
+#: apps/jobs/views.py
 msgid "Il filtro stipendio deve essere \"yes\", \"no\" o \"all\"."
 msgstr "The salary filter must be \"yes\", \"no\" or \"all\"."
 
@@ -699,10 +704,74 @@ msgid ""
 msgstr ""
 "The CV reading service is not available right now: please try again later."
 
+#: apps/searches/serializers.py
+msgid "Scegli almeno una città."
+msgstr "Choose at least one city."
+
+#: apps/searches/serializers.py
+#, python-format
+msgid "Con il tuo piano una ricerca può avere al massimo %(max)s città."
+msgstr "With your plan a search can have at most %(max)s cities."
+
+#: apps/searches/serializers.py
+msgid "Scegliere remoto, ibrido o in sede è incluso nel piano Pro."
+msgstr "Choosing remote, hybrid or on-site is included in the Pro plan."
+
 #: apps/searches/services.py
 msgid "Hai raggiunto il numero massimo di ricerche salvate per il tuo piano."
 msgstr "You have reached the maximum number of saved searches for your plan."
 
 #: apps/searches/services.py
+msgid ""
+"Sul piano Free una ricerca può avere una sola città: togli le altre per "
+"attivarla."
+msgstr "On the Free plan a search can have only one city: remove the others to activate it."
+
+#: apps/searches/services.py
 msgid "Hai raggiunto il numero massimo di ricerche attive per il tuo piano."
 msgstr "You have reached the maximum number of active searches for your plan."
+
+#: apps/searches/services.py apps/searches/wish.py
+#, python-format
+msgid ""
+"Hai raggiunto il numero massimo di città attive per il tuo piano (%(max)s)."
+msgstr "You have reached the maximum number of active cities for your plan (%(max)s)."
+
+#: apps/searches/views.py
+msgid ""
+"Non siamo riusciti a ricavare la ricerca dalla descrizione: riprova più "
+"tardi."
+msgstr "We couldn't derive the search from the description: please try again later."
+
+#: apps/searches/wish.py
+msgid "Il lavoro dei desideri è incluso nel piano Pro."
+msgstr "The dream job is included in the Pro plan."
+
+#: apps/searches/wish.py
+msgid "Descrivi il lavoro che vorresti."
+msgstr "Describe the job you would like."
+
+#: apps/searches/wish.py
+#, python-format
+msgid "La descrizione può avere al massimo %(max)s caratteri."
+msgstr "The description can be at most %(max)s characters long."
+
+#: apps/searches/wish.py
+msgid "Scegli il paese."
+msgstr "Choose the country."
+
+#: apps/searches/wish.py
+#, python-format
+#, python-format
+msgid "Scegli da 1 a %(max)s città."
+msgstr "Choose from 1 to %(max)s cities."
+
+#: apps/searches/wish.py
+msgid "Hai raggiunto il limite di modifiche della descrizione per oggi."
+msgstr "You have reached today's limit of description changes."
+
+#: apps/searches/wish.py
+msgid ""
+"Non siamo riusciti a ricavare la ricerca dalla descrizione: riprova "
+"riformulandola."
+msgstr "We couldn't derive the search from the description: try rephrasing it."

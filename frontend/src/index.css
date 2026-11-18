@@ -30,6 +30,8 @@
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-success-border: var(--success-border);
+  --color-wish: var(--wish);
+  --color-wish-soft: var(--wish-soft);
   --color-tint: var(--tint);
   --color-note: var(--note);
   --color-note-border: var(--note-border);
@@ -99,6 +101,9 @@
   --success: #2f6a45;
   --success-soft: #e7f1e9;
   --success-border: #cfe3d4;
+  /* Etichetta Desiderio (Sprint 84, mockup `jobs-card-desiderio`). */
+  --wish: #7a4f10;
+  --wish-soft: #fbf0d9;
 
   --tint: #f8f3e9;
   --note: #f7efe0;
@@ -151,6 +156,8 @@
     --success: #6fae84;
     --success-soft: #1e3226;
     --success-border: #2f4a38;
+    --wish: #e2b56a;
+    --wish-soft: #3a2c16;
 
     --tint: #241d14;
     --note: #2a2116;
