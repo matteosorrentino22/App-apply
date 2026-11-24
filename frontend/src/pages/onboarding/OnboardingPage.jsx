@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useLanguage } from '../../i18n/LanguageContext'
 import { updateMe } from '../../api/auth'
 import { updateProfile, importCv, createSectionItem } from '../../api/profile'
-import { createSearch, activateSearch } from '../../api/searches'
+import { createSearch, activateSearch, fetchSearchLimits } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import { formatApiErrorDetail } from '../../utils/apiErrors'
 import ListSectionEditor, { emptyRow } from '../../components/ListSectionEditor'
@@ -168,6 +168,11 @@ export default function OnboardingPage() {
 
   // Sprint 84: paese + città (una sola nell'onboarding, come sul Free).
   const [search, setSearch] = useState({ search_type: 'job_role', keywords: '', country: '', cities: [] })
+  // Sprint 86: massimali dal server (configurabili dal `.env`).
+  const [searchLimits, setSearchLimits] = useState(null)
+  useEffect(() => {
+    fetchSearchLimits().then(setSearchLimits).catch(() => {})
+  }, [])
 
   async function handlePreferencesSubmit(event) {
     event.preventDefault()
@@ -598,8 +603,8 @@ export default function OnboardingPage() {
             onCountryChange={(country) => setSearch({ ...search, country, cities: [] })}
             cities={search.cities}
             onCitiesChange={(cities) => setSearch({ ...search, cities })}
-            maxCities={1}
-            hint={t('searches.citiesHintFree')}
+            maxCities={searchLimits?.max_cities_per_search || 1}
+            hint={t('searches.citiesHintFree').replace('{max}', searchLimits?.pro_max_cities_per_search ?? 5)}
           />
         </form>
       )}

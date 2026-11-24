@@ -59,8 +59,12 @@ class SavedSearch(models.Model):
         return f"{self.keywords} — {', '.join(self.cities)}, {self.country}"
 
 
-# Città per ricerca secondo il piano (Sprint 84).
-MAX_CITIES_PER_SEARCH = {"free": 1, "pro": 5}
+def max_cities_per_search(plan):
+    """Città per ricerca secondo il piano (Sprint 84; dallo Sprint 86 da
+    `settings.SEARCH_LIMITS`, configurabile dal `.env`)."""
+    return settings.SEARCH_LIMITS[plan]["max_cities_per_search"]
+
+
 MAX_WISH_DESCRIPTION_LENGTH = 1000
 MAX_WISH_CHANGES_PER_DAY = 5
 

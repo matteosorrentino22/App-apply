@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.utils.translation import gettext as _
 
 from apps.accounts.models import User
 
-from .models import MAX_CITIES_PER_SEARCH, JobWish, SavedSearch
+from .models import JobWish, SavedSearch, max_cities_per_search
 
 # Limiti di piano (01-specifiche-funzionali-v4.md §4.2, aggiornato sprint-39):
 # ricerche salvate totali sempre come pool unico; ricerche attive invece
@@ -11,16 +12,9 @@ from .models import MAX_CITIES_PER_SEARCH, JobWish, SavedSearch
 # Sprint 84 (A17): sul Pro il pool conta le **città** delle ricerche in uso
 # (ogni città è una ricerca attiva), comprese quelle del lavoro dei desideri;
 # sul Free una ricerca ha una sola città.
-PLAN_LIMITS = {
-    User.Plan.FREE: {
-        "max_saved": 10,
-        "max_active_per_type": {
-            SavedSearch.SearchType.JOB_ROLE: 1,
-            SavedSearch.SearchType.COMPANY: 1,
-        },
-    },
-    User.Plan.PRO: {"max_saved": 100, "max_active_total": 50},
-}
+# Sprint 86: i valori sono in `settings.SEARCH_LIMITS` (dal `.env`, con i
+# predefiniti 10 / 1 per tipo / 1 città per il Free e 100 / 50 città attive /
+# 5 città per il Pro), letti a ogni chiamata.
 
 
 class PlanLimitExceeded(Exception):
@@ -28,7 +22,14 @@ class PlanLimitExceeded(Exception):
 
 
 def get_limits(user):
-    return PLAN_LIMITS[user.plan]
+    config = settings.SEARCH_LIMITS[user.plan]
+    if user.plan == User.Plan.FREE:
+        per_type = config["max_active_per_type"]
+        return {
+            "max_saved": config["max_saved"],
+            "max_active_per_type": {search_type: per_type for search_type in SavedSearch.SearchType.values},
+        }
+    return {"max_saved": config["max_saved"], "max_active_total": config["max_active_cities"]}
 
 
 def check_can_create(user):
@@ -48,9 +49,13 @@ def activate_search(search):
     Ritorna la ricerca disattivata automaticamente, o None.
     """
     limits = get_limits(search.user)
-    if len(search.cities) > MAX_CITIES_PER_SEARCH[search.user.plan]:
+    limit = max_cities_per_search(search.user.plan)
+    if len(search.cities) > limit:
         # Ricerca con più città rimasta da un periodo Pro (Sprint 84).
-        raise PlanLimitExceeded(_("Sul piano Free una ricerca può avere una sola città: togli le altre per attivarla."))
+        raise PlanLimitExceeded(
+            _("Con il tuo piano una ricerca può avere al massimo %(max)s città: togli le altre per attivarla.")
+            % {"max": limit}
+        )
 
     deactivated = None
     if "max_active_per_type" in limits:

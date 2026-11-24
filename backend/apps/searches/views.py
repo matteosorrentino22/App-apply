@@ -8,7 +8,9 @@ from rest_framework.response import Response
 
 from . import services, wish as wish_service
 from .geo import search_cities
-from .models import JobWish, SavedSearch
+from apps.accounts.models import User
+
+from .models import JobWish, SavedSearch, max_cities_per_search
 from .serializers import JobWishSerializer, SavedSearchSerializer
 
 
@@ -74,12 +76,15 @@ class SavedSearchViewSet(viewsets.ModelViewSet):
 
 @api_view(["GET"])
 def search_limits(request):
-    """Città attive e massimale (Sprint 84): "Città attive n di 50"."""
+    """Città attive e massimali (Sprint 84): "Città attive n di 50". Dallo
+    Sprint 86 i valori vengono dal `.env` (`settings.SEARCH_LIMITS`), quindi
+    il frontend non li ha scritti nel codice."""
     return Response(
         {
             "active_cities": services.active_city_count(request.user),
             "max_active_cities": services.max_active_cities(request.user),
-            "max_cities_per_search": services.MAX_CITIES_PER_SEARCH[request.user.plan],
+            "max_cities_per_search": max_cities_per_search(request.user.plan),
+            "pro_max_cities_per_search": max_cities_per_search(User.Plan.PRO),
         }
     )
 

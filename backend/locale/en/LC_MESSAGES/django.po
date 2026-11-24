@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: App-apply\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-17 22:25+0100\n"
+"POT-Creation-Date: 2026-11-24 21:03+0100\n"
 "PO-Revision-Date: 2026-11-14 17:00+0100\n"
 "Last-Translator: App-apply\n"
 "Language-Team: English\n"
@@ -722,10 +722,13 @@ msgid "Hai raggiunto il numero massimo di ricerche salvate per il tuo piano."
 msgstr "You have reached the maximum number of saved searches for your plan."
 
 #: apps/searches/services.py
+#, python-format
 msgid ""
-"Sul piano Free una ricerca può avere una sola città: togli le altre per "
-"attivarla."
-msgstr "On the Free plan a search can have only one city: remove the others to activate it."
+"Con il tuo piano una ricerca può avere al massimo %(max)s città: togli le "
+"altre per attivarla."
+msgstr ""
+"On your plan a search can have at most %(max)s cities: remove the others to "
+"activate it."
 
 #: apps/searches/services.py
 msgid "Hai raggiunto il numero massimo di ricerche attive per il tuo piano."
@@ -735,13 +738,15 @@ msgstr "You have reached the maximum number of active searches for your plan."
 #, python-format
 msgid ""
 "Hai raggiunto il numero massimo di città attive per il tuo piano (%(max)s)."
-msgstr "You have reached the maximum number of active cities for your plan (%(max)s)."
+msgstr ""
+"You have reached the maximum number of active cities for your plan (%(max)s)."
 
 #: apps/searches/views.py
 msgid ""
 "Non siamo riusciti a ricavare la ricerca dalla descrizione: riprova più "
 "tardi."
-msgstr "We couldn't derive the search from the description: please try again later."
+msgstr ""
+"We couldn't derive the search from the description: please try again later."
 
 #: apps/searches/wish.py
 msgid "Il lavoro dei desideri è incluso nel piano Pro."
@@ -761,7 +766,6 @@ msgid "Scegli il paese."
 msgstr "Choose the country."
 
 #: apps/searches/wish.py
-#, python-format
 #, python-format
 msgid "Scegli da 1 a %(max)s città."
 msgstr "Choose from 1 to %(max)s cities."

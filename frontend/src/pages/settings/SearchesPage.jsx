@@ -113,7 +113,7 @@ function SearchSheet({ open, onOpenChange, title, submitLabel, initial, onSubmit
               hint={
                 isPro
                   ? t('searches.citiesHintPro').replace('{used}', limits?.active_cities ?? 0).replace('{max}', limits?.max_active_cities ?? 50)
-                  : t('searches.citiesHintFree')
+                  : t('searches.citiesHintFree').replace('{max}', limits?.pro_max_cities_per_search ?? 5)
               }
             />
             <div className="flex flex-col gap-1.5">

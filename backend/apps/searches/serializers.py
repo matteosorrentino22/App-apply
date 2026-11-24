@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 
-from .models import MAX_CITIES_PER_SEARCH, SavedSearch
+from .models import SavedSearch, max_cities_per_search
 
 
 class SavedSearchSerializer(serializers.ModelSerializer):
@@ -42,7 +42,7 @@ class SavedSearchSerializer(serializers.ModelSerializer):
                 city = city.strip()
                 if city and city.casefold() not in {c.casefold() for c in cities}:
                     cities.append(city)
-            limit = MAX_CITIES_PER_SEARCH[plan]
+            limit = max_cities_per_search(plan)
             if not cities:
                 raise serializers.ValidationError({"cities": [_("Scegli almeno una città.")]})
             if len(cities) > limit:
@@ -61,5 +61,6 @@ class JobWishSerializer(serializers.Serializer):
 
     description = serializers.CharField(max_length=1000, allow_blank=True)
     country = serializers.CharField(max_length=255, allow_blank=True)
-    cities = serializers.ListField(child=serializers.CharField(max_length=255, allow_blank=True), max_length=5)
+    # Numero di città controllato in wish.save_wish (massimale Pro per ricerca).
+    cities = serializers.ListField(child=serializers.CharField(max_length=255, allow_blank=True), max_length=50)
     is_active = serializers.BooleanField()

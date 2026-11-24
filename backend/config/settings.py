@@ -377,6 +377,44 @@ BEDROCK_CV_GENERATION_MODEL = os.environ.get(
 # configurazione sicura, mai cablato nell'URL come nel prototipo.
 APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN", "")
 
+# Massimali delle ricerche salvate per piano (Sprint 86, prima costanti nel
+# codice; valori predefiniti = quelli di prima). Si cambiano dal `.env` e si
+# applicano ricreando web, worker e beat (DEPLOY.md §4.2). Interi ≥ 1: un
+# valore non valido blocca l'avvio con un messaggio chiaro, invece di
+# applicare in silenzio un limite sbagliato.
+def _search_limit(name, default):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise ImproperlyConfigured(f"{name} deve essere un numero intero maggiore o uguale a 1.")
+    return value
+
+
+SEARCH_LIMITS = {
+    "free": {
+        # Ricerche salvate in totale.
+        "max_saved": _search_limit("SEARCH_FREE_MAX_SAVED", 10),
+        # Ricerche attive per tipo (Ruolo e Azienda contano a parte). Con 1,
+        # attivarne un'altra dello stesso tipo spegne la precedente; con più
+        # di 1, oltre il massimale l'attivazione è rifiutata.
+        "max_active_per_type": _search_limit("SEARCH_FREE_MAX_ACTIVE_PER_TYPE", 1),
+        "max_cities_per_search": _search_limit("SEARCH_FREE_MAX_CITIES_PER_SEARCH", 1),
+    },
+    "pro": {
+        "max_saved": _search_limit("SEARCH_PRO_MAX_SAVED", 100),
+        # Città attive in totale (ogni città di una ricerca in uso conta come
+        # una ricerca attiva, comprese quelle del lavoro dei desideri).
+        "max_active_cities": _search_limit("SEARCH_PRO_MAX_ACTIVE_CITIES", 50),
+        # Vale anche per le città del lavoro dei desideri.
+        "max_cities_per_search": _search_limit("SEARCH_PRO_MAX_CITIES_PER_SEARCH", 5),
+    },
+}
+
 # Listino prezzi unitari per le azioni oltre massimale, scalate da
 # User.extra_credit (02-specifiche-tecniche-v3.md §4.6, §11: "valori da
 # definire" — placeholder di configurazione, da fissare prima del rilascio).

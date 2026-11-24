@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Lock, Star } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useLanguage } from '../../i18n/LanguageContext'
-import { fetchJobWish, saveJobWish } from '../../api/searches'
+import { fetchJobWish, fetchSearchLimits, saveJobWish } from '../../api/searches'
 import { ApiError } from '../../api/client'
 import CityChipsField from '@/components/CityChipsField'
 import { useToast } from '@/components/ToastProvider'
@@ -24,7 +24,8 @@ import { cn } from '@/lib/utils'
 // salva subito; le modifiche del modulo con "Salva".
 
 const MAX_WISH_DESCRIPTION = 1000
-const MAX_WISH_CITIES = 5
+// Massimale delle città: quello del Pro per ricerca (dal server, Sprint 86).
+const DEFAULT_WISH_CITIES = 5
 
 function errorText(err, t) {
   if (!(err instanceof ApiError)) return t('common.genericError')
@@ -89,6 +90,13 @@ function WishForm() {
   const [saved, setSaved] = useState(null)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [maxCities, setMaxCities] = useState(DEFAULT_WISH_CITIES)
+
+  useEffect(() => {
+    fetchSearchLimits()
+      .then((data) => setMaxCities(data.max_cities_per_search || DEFAULT_WISH_CITIES))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetchJobWish()
@@ -180,7 +188,7 @@ function WishForm() {
           onCountryChange={(country) => setDraft({ ...draft, country, cities: country === draft.country ? draft.cities : [] })}
           cities={draft.cities}
           onCitiesChange={(cities) => setDraft({ ...draft, cities })}
-          maxCities={MAX_WISH_CITIES}
+          maxCities={maxCities}
         />
         <p className="text-sm leading-normal text-muted-foreground">
           {t('wish.explainBefore')} <WishLabel /> {t('wish.explainAfter')}

@@ -9,7 +9,7 @@ from apps.accounts.models import User
 from apps.common.ai import call_claude_structured
 
 from . import services
-from .models import MAX_CITIES_PER_SEARCH, MAX_WISH_CHANGES_PER_DAY, MAX_WISH_DESCRIPTION_LENGTH, JobWish, SavedSearch
+from .models import MAX_WISH_CHANGES_PER_DAY, MAX_WISH_DESCRIPTION_LENGTH, JobWish, SavedSearch, max_cities_per_search
 
 # Lavoro dei desideri (Sprint 84, SPEC-DELTA A19). Il giorno del massimale
 # delle modifiche è quello di Europe/Rome, come gli altri massimali.
@@ -75,8 +75,9 @@ def save_wish(user, description, country, cities, is_active):
         raise WishError(_("La descrizione può avere al massimo %(max)s caratteri.") % {"max": MAX_WISH_DESCRIPTION_LENGTH})
     if not country:
         raise WishError(_("Scegli il paese."))
-    if not cities or len(cities) > MAX_CITIES_PER_SEARCH["pro"]:
-        raise WishError(_("Scegli da 1 a %(max)s città.") % {"max": MAX_CITIES_PER_SEARCH["pro"]})
+    max_cities = max_cities_per_search(User.Plan.PRO)
+    if not cities or len(cities) > max_cities:
+        raise WishError(_("Scegli da 1 a %(max)s città.") % {"max": max_cities})
 
     wish = JobWish.objects.filter(user=user).first()
     description_changed = wish is None or wish.description != description
