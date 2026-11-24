@@ -1,6 +1,6 @@
 # Sprint 86 — Massimali delle ricerche configurabili dal `.env`
 
-> **Periodo:** 2026-11-24 · **Branch:** `sprint-86-limiti-ricerche-env` (da `main` al commit 5d24bfa) · **Stato:** implementato e verificato (test backend, build e lint); **merge e deploy non fatti**.
+> **Periodo:** 2026-11-24 · **Branch:** `sprint-86-limiti-ricerche-env` (da `main` al commit 5d24bfa) · **Stato:** **rilasciato in produzione il 2026-11-24** (con l'OK del committente).
 
 ## Input
 Il committente vuole poter cambiare i massimali delle ricerche dei piani Free e Pro. Erano costanti nel codice (`PLAN_LIMITS` in `apps/searches/services.py`, `MAX_CITIES_PER_SEARCH` in `apps/searches/models.py`) e un testo dell'app conteneva il numero "5" scritto a mano.
@@ -25,3 +25,6 @@ Strada B: massimali configurabili dal `.env`, con i valori di oggi come predefin
 
 ## Rilascio
 Ricostruzione e riavvio di `web`, `worker` e `beat` (nessuna migrazione, nessuna variabile obbligatoria nuova). Per cambiare i massimali dopo: aggiungere o modificare le variabili nel `.env` e `docker compose -f docker-compose.prod.yml up -d --force-recreate web worker beat`.
+
+## Rilascio fatto (2026-11-24)
+Tag `pre-sprint86` delle immagini per un ritorno rapido, fast-forward di `main`, build di `web`, `worker`, `beat` e `frontend-build`, `up -d` alle 20:13 UTC senza task Celery né raccolte in corso. Nessuna migrazione. Nel `.env` nessuna variabile `SEARCH_*`: valgono i predefiniti (Free 10 / 1 per tipo / 1 città, Pro 100 / 50 città attive / 5 città). Home e API 200, nuovo frontend servito, tutti i container da `docker-compose.prod.yml`.
